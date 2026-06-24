@@ -1,0 +1,28 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: drai-backend
+  datasource:
+    url: ${DRAI_DATASOURCE_URL:jdbc:mysql://localhost:3306/drai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DRAI_DATASOURCE_USERNAME:root}
+    password: ${DRAI_DATASOURCE_PASSWORD:}
+    driver-class-name: ${DRAI_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 50MB
+
+drai:
+  llm:
+    base-url: ${OPENAI_API_BASE:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
+    fast-model: ${DRAI_LLM_FAST_MODEL:qwen3-max}
+    smart-model: ${DRAI_LLM_SMART_MODEL:deepseek-r1}
+  tavily:
+    api-key: ${TAVILY_API_KEY:}

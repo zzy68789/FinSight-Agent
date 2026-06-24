@@ -1,0 +1,22 @@
+# Local private notes
+.ztemp/
+
+# Local env files
+.env
+*.env
+backend/.env
+
+# Java build/runtime files
+backend/target/
+
+# Frontend generated files
+frontend/node_modules/
+frontend/dist/
+
+# Python legacy runtime files
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
