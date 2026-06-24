@@ -80,7 +80,7 @@ DRAI/
 │       │   └── service/           # 任务、报告、SSE 服务
 │       └── resources/
 │           ├── application.yml
-│           └── db/schema.sql
+│           └── db/schema.sql      # Spring Boot 自动执行的数据库初始化脚本
 ├── frontend/                      # Vue 3 前端
 ├── docs/                          # 演示截图或项目文档
 ├── .gitignore
@@ -106,6 +106,14 @@ $env:DRAI_DATASOURCE_URL="jdbc:mysql://localhost:3306/drai?useUnicode=true&chara
 $env:DRAI_DATASOURCE_USERNAME="root"
 $env:DRAI_DATASOURCE_PASSWORD="your_password"
 ```
+
+建表脚本位于：
+
+```text
+backend/src/main/resources/db/schema.sql
+```
+
+这是 Spring Boot 推荐的 classpath 资源目录写法。应用启动时会根据 `application.yml` 中的 `spring.sql.init.schema-locations` 自动执行该脚本，因此不需要额外在 `backend/` 下维护一份重复的 `sql/` 目录。首次启动前只需要确保 MySQL 中已经存在 `drai` 数据库。
 
 ### 2. 启动后端
 

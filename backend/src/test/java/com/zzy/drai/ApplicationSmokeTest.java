@@ -1,6 +1,11 @@
 package com.zzy.drai;
 
 import com.zzy.drai.dto.ClearResponse;
+import com.zzy.drai.repository.AgentStepLogRepository;
+import com.zzy.drai.repository.CheckpointRepository;
+import com.zzy.drai.repository.ReportRepository;
+import com.zzy.drai.repository.ResearchTaskRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,12 +15,19 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.sql.init.SqlInitializationAutoConfiguration"
+)
 class ApplicationSmokeTest {
 
     @LocalServerPort
@@ -23,6 +35,24 @@ class ApplicationSmokeTest {
 
     @Autowired
     TestRestTemplate restTemplate;
+
+    @MockitoBean
+    ResearchTaskRepository taskRepository;
+
+    @MockitoBean
+    AgentStepLogRepository stepLogRepository;
+
+    @MockitoBean
+    CheckpointRepository checkpointRepository;
+
+    @MockitoBean
+    ReportRepository reportRepository;
+
+    @BeforeEach
+    void setUp() {
+        when(taskRepository.create(anyString(), anyString(), anyString())).thenReturn(1L);
+        when(reportRepository.findLatestByThread(anyString())).thenReturn(Optional.empty());
+    }
 
     @Test
     void healthEndpointReportsJavaBackend() {
