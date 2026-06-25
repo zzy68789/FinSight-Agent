@@ -11,6 +11,23 @@ function generateUUID() {
 
 // 会话级 ID：页面一刷新就重置，满足"单次会话记忆"需求
 const SESSION_THREAD_ID = generateUUID();
+
+export const currentThreadId = SESSION_THREAD_ID;
+
+async function requestJson(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, options);
+  if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  if (payload && typeof payload === 'object' && 'code' in payload) {
+      if (payload.code !== 0) {
+          throw new Error(payload.message || 'Request failed');
+      }
+      return payload.data;
+  }
+  return payload;
+}
 /**
  * 批量上传文件
  * @param {Array<File>} files - 文件对象数组
@@ -43,6 +60,32 @@ export async function clearContext() {
   return await response.json();
 }
 
+export async function listTasks({ page = 1, size = 10, status = '', keyword = '' } = {}) {
+  const params = new URLSearchParams({
+      page: String(page),
+      size: String(size)
+  });
+  if (status) params.set('status', status);
+  if (keyword) params.set('keyword', keyword);
+  return requestJson(`/tasks?${params.toString()}`);
+}
+
+export async function getTask(taskId) {
+  return requestJson(`/tasks/${taskId}`);
+}
+
+export async function getTaskLogs(taskId) {
+  return requestJson(`/tasks/${taskId}/logs`);
+}
+
+export async function getThreadReports(threadId = SESSION_THREAD_ID) {
+  return requestJson(`/threads/${encodeURIComponent(threadId)}/reports`);
+}
+
+export async function getReport(reportId) {
+  return requestJson(`/reports/${reportId}`);
+}
+
 /**
  * 流式聊天
  * @param {string} query - 问题
@@ -51,7 +94,7 @@ export async function clearContext() {
  * @param {function} onDone - 完成回调
  * @param {function} onError - 错误回调
  */
-export async function streamChat(query, search_mode, onData, onDone, onError) {
+export async function streamChat(query, search_mode, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
   try {
       const response = await fetch(`${API_BASE}/chat`, {
           method: 'POST',
@@ -59,7 +102,7 @@ export async function streamChat(query, search_mode, onData, onDone, onError) {
           body: JSON.stringify({ 
               query: query, 
               search_mode: search_mode,  // 严格使用 search_mode
-              thread_id: SESSION_THREAD_ID 
+              thread_id: threadId
           }),
       });
       

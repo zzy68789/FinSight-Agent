@@ -36,15 +36,31 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-          <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Java Backend</span>
-          <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Multi-Agent Flow</span>
-          <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Live Stream</span>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <nav class="flex rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Workspace">
+            <button
+              v-for="tab in workspaceTabs"
+              :key="tab.id"
+              type="button"
+              class="flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+              :class="activeWorkspace === tab.id ? 'bg-white text-blue-800 shadow-sm' : 'text-slate-600 hover:bg-white/70 hover:text-slate-950'"
+              @click="activeWorkspace = tab.id"
+            >
+              <component :is="tab.icon" class="h-4 w-4" aria-hidden="true" />
+              <span>{{ tab.label }}</span>
+            </button>
+          </nav>
+
+          <div class="hidden flex-wrap gap-2 text-xs font-medium text-slate-600 xl:flex">
+            <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Java Backend</span>
+            <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Multi-Agent Flow</span>
+            <span class="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1">Live Stream</span>
+          </div>
         </div>
       </div>
     </header>
 
-    <main class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+    <main v-if="activeWorkspace === 'run'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <aside class="space-y-5 lg:col-span-4">
         <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div class="border-b border-slate-100 px-5 py-4">
@@ -237,26 +253,262 @@
         </div>
       </section>
     </main>
+
+    <main v-else-if="activeWorkspace === 'tasks'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+      <section class="lg:col-span-5">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-base font-semibold text-slate-950">Task History</h2>
+                <p class="mt-1 text-sm text-slate-500">Recent research tasks from MySQL</p>
+              </div>
+              <button
+                type="button"
+                class="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+                @click="loadTasks"
+              >
+                <RefreshCwIcon class="h-4 w-4" :class="isLoadingTasks ? 'animate-spin' : ''" aria-hidden="true" />
+                Refresh
+              </button>
+            </div>
+            <div class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_10rem]">
+              <input
+                v-model="taskKeyword"
+                type="search"
+                class="min-h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                placeholder="Search query..."
+                @keyup.enter="loadTasks"
+              />
+              <select
+                v-model="taskStatus"
+                class="min-h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                @change="loadTasks"
+              >
+                <option value="">All status</option>
+                <option value="RUNNING">RUNNING</option>
+                <option value="COMPLETED">COMPLETED</option>
+                <option value="FAILED">FAILED</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <div v-if="taskError" class="px-5 py-4 text-sm text-rose-700">{{ taskError }}</div>
+            <div v-else-if="isLoadingTasks" class="px-5 py-8 text-sm text-slate-500">Loading tasks...</div>
+            <button
+              v-for="task in tasks"
+              :key="task.id"
+              type="button"
+              class="block w-full px-5 py-4 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-600"
+              :class="selectedTask?.id === task.id ? 'bg-blue-50/70' : 'bg-white'"
+              @click="selectTask(task)"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-semibold text-slate-950">{{ task.query }}</p>
+                  <p class="mt-1 text-xs text-slate-500">{{ task.threadId }}</p>
+                </div>
+                <span class="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold ring-1" :class="statusStyles(task.status)">
+                  {{ task.status }}
+                </span>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                <span>{{ task.searchMode }}</span>
+                <span>revision {{ task.revisionNumber }}</span>
+                <span>{{ formatDate(task.updatedAt || task.createdAt) }}</span>
+              </div>
+            </button>
+            <div v-if="!isLoadingTasks && tasks.length === 0" class="px-5 py-8 text-sm text-slate-500">
+              No task records found.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-6 lg:col-span-7">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <h2 class="text-base font-semibold text-slate-950">Task Detail</h2>
+            <p class="mt-1 text-sm text-slate-500">Selected task metadata and execution timeline</p>
+          </div>
+          <div v-if="selectedTask" class="p-5">
+            <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Task ID</dt>
+                <dd class="mt-1 text-sm font-semibold text-slate-950">#{{ selectedTask.id }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Status</dt>
+                <dd class="mt-1"><span class="rounded-md px-2 py-1 text-xs font-semibold ring-1" :class="statusStyles(selectedTask.status)">{{ selectedTask.status }}</span></dd>
+              </div>
+              <div class="sm:col-span-2">
+                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Query</dt>
+                <dd class="mt-1 text-sm leading-6 text-slate-700">{{ selectedTask.query }}</dd>
+              </div>
+            </dl>
+          </div>
+          <div v-else class="p-5 text-sm text-slate-500">Select a task to inspect details.</div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div class="border-b border-slate-100 px-5 py-4">
+            <h2 class="text-base font-semibold text-slate-950">Agent Timeline</h2>
+            <p class="mt-1 text-sm text-slate-500">What each node wrote into the step log</p>
+          </div>
+          <ol class="divide-y divide-slate-100">
+            <li v-for="log in taskLogs" :key="log.id" class="px-5 py-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-slate-950">{{ log.stepName }}</p>
+                  <p class="mt-1 text-xs text-slate-500">{{ formatDate(log.createdAt) }}</p>
+                </div>
+                <span class="rounded-md px-2 py-1 text-[11px] font-semibold ring-1" :class="statusStyles(log.status)">
+                  {{ log.status }}
+                </span>
+              </div>
+              <pre class="mt-3 max-h-40 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-200">{{ log.errorMessage || log.outputSnapshot }}</pre>
+            </li>
+            <li v-if="taskLogs.length === 0" class="px-5 py-8 text-sm text-slate-500">
+              No logs for the selected task.
+            </li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <main v-else-if="activeWorkspace === 'reports'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+      <section class="lg:col-span-4">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 class="text-base font-semibold text-slate-950">Report Versions</h2>
+              <p class="mt-1 text-sm text-slate-500">Current thread: {{ activeThreadId }}</p>
+            </div>
+            <button type="button" class="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50" @click="loadReports(activeThreadId)" aria-label="Refresh reports">
+              <RefreshCwIcon class="h-4 w-4" :class="isLoadingReports ? 'animate-spin' : ''" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div class="divide-y divide-slate-100">
+            <div v-if="reportError" class="px-5 py-4 text-sm text-rose-700">{{ reportError }}</div>
+            <button
+              v-for="report in reports"
+              :key="report.id"
+              type="button"
+              class="block w-full px-5 py-4 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-600"
+              :class="selectedReport?.id === report.id ? 'bg-blue-50/70' : 'bg-white'"
+              @click="selectReport(report)"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-sm font-semibold text-slate-950">Version {{ report.version }}</span>
+                <span class="rounded-md px-2 py-1 text-[11px] font-semibold ring-1" :class="statusStyles(report.reviewStatus)">
+                  {{ report.reviewStatus }}
+                </span>
+              </div>
+              <p class="mt-2 text-xs text-slate-500">{{ formatDate(report.createdAt) }}</p>
+            </button>
+            <div v-if="!isLoadingReports && reports.length === 0" class="px-5 py-8 text-sm text-slate-500">
+              No report versions for this thread.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="lg:col-span-8">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div class="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 class="text-base font-semibold text-slate-950">Report Preview</h2>
+              <p class="mt-1 text-sm text-slate-500">Review, export, or start a revision from this version</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-45" :disabled="!selectedReport" @click="copySelectedReport">
+                <CopyIcon class="h-4 w-4" aria-hidden="true" />
+                Copy
+              </button>
+              <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-45" :disabled="!selectedReport" @click="downloadSelectedReport">
+                <DownloadIcon class="h-4 w-4" aria-hidden="true" />
+                Export
+              </button>
+              <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:bg-slate-300" :disabled="!selectedReport" @click="reviseSelectedReport">
+                <EyeIcon class="h-4 w-4" aria-hidden="true" />
+                Revise
+              </button>
+            </div>
+          </div>
+          <div class="p-5 sm:p-6">
+            <article v-if="selectedReport" class="report-content prose prose-slate max-w-none">
+              <div v-html="md.render(selectedReport.content || '')"></div>
+            </article>
+            <div v-else class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center text-sm text-slate-500">
+              Select a report version to preview.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <main v-else class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-5 py-4">
+          <h2 class="text-base font-semibold text-slate-950">System Configuration</h2>
+          <p class="mt-1 text-sm text-slate-500">Frontend visibility for backend dependencies and fallback behavior</p>
+        </div>
+        <div class="grid grid-cols-1 divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+          <div v-for="item in configItems" :key="item.name" class="flex gap-4 p-5">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              <component :is="item.icon" class="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-slate-950">{{ item.name }}</h3>
+              <p class="mt-1 text-xs font-semibold uppercase tracking-wide text-blue-700">{{ item.status }}</p>
+              <p class="mt-2 text-sm leading-6 text-slate-500">{{ item.desc }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, onMounted } from 'vue';
 import {
     AlertTriangleIcon,
     BotIcon,
     CheckCircle2Icon,
+    ClipboardListIcon,
+    CopyIcon,
+    DatabaseIcon,
+    DownloadIcon,
+    EyeIcon,
     FileOutputIcon,
     FileTextIcon,
     Globe2Icon,
+    HistoryIcon,
+    LayersIcon,
     Loader2Icon,
+    RefreshCwIcon,
     SearchIcon,
     SendIcon,
+    ServerIcon,
+    SettingsIcon,
     TerminalIcon,
     UploadCloudIcon,
     XIcon
 } from 'lucide-vue-next';
-import { uploadFiles, streamChat, clearContext } from './services/api';
+import {
+    uploadFiles,
+    streamChat,
+    clearContext,
+    listTasks,
+    getTask,
+    getTaskLogs,
+    getThreadReports,
+    getReport,
+    currentThreadId
+} from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
@@ -287,9 +539,39 @@ const logsContainer = ref(null);
 const uploadedFiles = ref([]);
 const isDragging = ref(false);
 const searchMode = ref('hybrid');
+const activeWorkspace = ref('run');
+const activeThreadId = ref(currentThreadId);
 
 const displayedReport = ref('');
 const isTyping = ref(false);
+
+const tasks = ref([]);
+const selectedTask = ref(null);
+const taskLogs = ref([]);
+const taskPage = ref({ page: 1, size: 10, total: 0 });
+const taskKeyword = ref('');
+const taskStatus = ref('');
+const isLoadingTasks = ref(false);
+const taskError = ref('');
+
+const reports = ref([]);
+const selectedReport = ref(null);
+const isLoadingReports = ref(false);
+const reportError = ref('');
+const configItems = computed(() => [
+    { name: 'LLM Provider', status: 'Configured by backend', desc: 'OpenAI-compatible chat model with local fallback', icon: ServerIcon },
+    { name: 'Tavily Search', status: 'Optional key', desc: 'Web search source with fallback result when key is missing', icon: Globe2Icon },
+    { name: 'MySQL', status: 'Required', desc: 'Task, log, report and checkpoint persistence', icon: DatabaseIcon },
+    { name: 'Redis', status: 'Optional runtime cache', desc: 'Running task state and latest SSE event cache', icon: LayersIcon },
+    { name: 'ChromaDB', status: 'Optional vector store', desc: 'Vector RAG store with local in-memory fallback', icon: SearchIcon }
+]);
+
+const workspaceTabs = [
+    { id: 'run', label: 'Run', icon: SendIcon },
+    { id: 'tasks', label: 'Tasks', icon: ClipboardListIcon },
+    { id: 'reports', label: 'Reports', icon: HistoryIcon },
+    { id: 'settings', label: 'Settings', icon: SettingsIcon }
+];
 
 const renderedReport = computed(() => {
     let raw = displayedReport.value || '';
@@ -338,6 +620,99 @@ const processFiles = async (files) => {
 
 const setMode = (mode) => {
     searchMode.value = mode;
+};
+
+const formatDate = (value) => {
+    if (!value) return '-';
+    return new Intl.DateTimeFormat('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(new Date(value));
+};
+
+const statusStyles = (status) => {
+    const value = (status || '').toUpperCase();
+    if (value === 'COMPLETED' || value === 'SUCCESS' || value === 'PASS') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    if (value === 'FAILED' || value === 'FAIL') return 'bg-rose-50 text-rose-700 ring-rose-200';
+    if (value === 'RUNNING') return 'bg-blue-50 text-blue-700 ring-blue-200';
+    return 'bg-slate-100 text-slate-600 ring-slate-200';
+};
+
+const loadTasks = async () => {
+    isLoadingTasks.value = true;
+    taskError.value = '';
+    try {
+        const page = await listTasks({
+            page: taskPage.value.page,
+            size: taskPage.value.size,
+            status: taskStatus.value,
+            keyword: taskKeyword.value
+        });
+        tasks.value = page.items || [];
+        taskPage.value = { page: page.page, size: page.size, total: page.total };
+        if (!selectedTask.value && tasks.value.length > 0) {
+            await selectTask(tasks.value[0]);
+        }
+    } catch (error) {
+        taskError.value = error.message;
+    } finally {
+        isLoadingTasks.value = false;
+    }
+};
+
+const selectTask = async (task) => {
+    selectedTask.value = await getTask(task.id);
+    taskLogs.value = await getTaskLogs(task.id);
+    activeThreadId.value = selectedTask.value.threadId || currentThreadId;
+    await loadReports(activeThreadId.value);
+};
+
+const loadReports = async (threadId = activeThreadId.value) => {
+    isLoadingReports.value = true;
+    reportError.value = '';
+    try {
+        reports.value = await getThreadReports(threadId);
+        if (!selectedReport.value && reports.value.length > 0) {
+            selectedReport.value = reports.value[0];
+        }
+    } catch (error) {
+        reportError.value = error.message;
+    } finally {
+        isLoadingReports.value = false;
+    }
+};
+
+const selectReport = async (report) => {
+    selectedReport.value = await getReport(report.id);
+    activeThreadId.value = selectedReport.value.threadId || currentThreadId;
+    displayedReport.value = selectedReport.value.content || '';
+};
+
+const reviseSelectedReport = () => {
+    if (!selectedReport.value) return;
+    activeThreadId.value = selectedReport.value.threadId || currentThreadId;
+    query.value = '修改上一版报告：请补充关键结论，并让内容更适合简历项目展示。';
+    displayedReport.value = selectedReport.value.content || '';
+    activeWorkspace.value = 'run';
+};
+
+const copySelectedReport = async () => {
+    if (!selectedReport.value?.content) return;
+    await navigator.clipboard.writeText(selectedReport.value.content);
+    logs.value.push('[SYSTEM] Report copied to clipboard.');
+};
+
+const downloadSelectedReport = () => {
+    if (!selectedReport.value?.content) return;
+    const blob = new Blob([selectedReport.value.content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `report-v${selectedReport.value.version || selectedReport.value.id}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
 };
 
 let typingInterval = null;
@@ -455,13 +830,16 @@ const startResearch = async () => {
                 isLoading.value = false;
                 currentStep.value = 'done';
                 logs.value.push('[DONE] Process complete.');
+                loadTasks();
+                loadReports(activeThreadId.value);
                 scrollToBottom();
             },
             (err) => {
                 isLoading.value = false;
                 logs.value.push(`[ERROR] ${err.message}`);
                 scrollToBottom();
-            }
+            },
+            activeThreadId.value
         );
     } catch (e) {
         isLoading.value = false;
@@ -469,6 +847,11 @@ const startResearch = async () => {
         alert("System Error: " + e.message);
     }
 };
+
+onMounted(async () => {
+    await loadTasks();
+    await loadReports(currentThreadId);
+});
 </script>
 
 <style>
