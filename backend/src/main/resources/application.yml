@@ -9,6 +9,12 @@ spring:
     username: ${DRAI_DATASOURCE_USERNAME:root}
     password: ${DRAI_DATASOURCE_PASSWORD:}
     driver-class-name: ${DRAI_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+  data:
+    redis:
+      host: ${DRAI_REDIS_HOST:localhost}
+      port: ${DRAI_REDIS_PORT:6379}
+      password: ${DRAI_REDIS_PASSWORD:}
+      timeout: ${DRAI_REDIS_TIMEOUT:2s}
   sql:
     init:
       mode: always
@@ -26,3 +32,5 @@ drai:
     smart-model: ${DRAI_LLM_SMART_MODEL:deepseek-r1}
   tavily:
     api-key: ${TAVILY_API_KEY:}
+  redis:
+    runtime-ttl: ${DRAI_REDIS_RUNTIME_TTL:PT24H}

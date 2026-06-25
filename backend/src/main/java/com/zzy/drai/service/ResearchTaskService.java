@@ -22,6 +22,7 @@ public class ResearchTaskService {
     private final ResearchTaskRepository taskRepository;
     private final AgentStepLogRepository stepLogRepository;
     private final CheckpointRepository checkpointRepository;
+    private final TaskRuntimeStateService runtimeStateService;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     public ResearchTaskService(
@@ -29,20 +30,24 @@ public class ResearchTaskService {
             SseService sseService,
             ResearchTaskRepository taskRepository,
             AgentStepLogRepository stepLogRepository,
-            CheckpointRepository checkpointRepository
+            CheckpointRepository checkpointRepository,
+            TaskRuntimeStateService runtimeStateService
     ) {
         this.graphFactory = graphFactory;
         this.sseService = sseService;
         this.taskRepository = taskRepository;
         this.stepLogRepository = stepLogRepository;
         this.checkpointRepository = checkpointRepository;
+        this.runtimeStateService = runtimeStateService;
     }
 
     public void run(ChatRequest request, SseEmitter emitter) {
         executorService.submit(() -> {
             long taskId = taskRepository.create(request.getThreadId(), request.getQuery(), request.getSearchMode());
+            runtimeStateService.taskCreated(taskId, request.getThreadId());
             try {
                 taskRepository.markRunning(taskId);
+                runtimeStateService.markStatus(taskId, "RUNNING");
                 Map<String, Object> initialState = Map.of(
                         ResearchState.TASK_ID, taskId,
                         ResearchState.THREAD_ID, request.getThreadId(),
@@ -54,9 +59,11 @@ public class ResearchTaskService {
                         .filter(output -> !output.isSTART() && !output.isEND())
                         .forEach(output -> send(taskId, request.getThreadId(), emitter, output));
                 taskRepository.markCompleted(taskId);
+                runtimeStateService.markStatus(taskId, "COMPLETED");
                 sseService.done(emitter);
             } catch (Exception e) {
                 taskRepository.markFailed(taskId);
+                runtimeStateService.markStatus(taskId, "FAILED");
                 stepLogRepository.saveError(taskId, "workflow", e);
                 sseService.error(emitter, e);
             }
@@ -67,6 +74,7 @@ public class ResearchTaskService {
         try {
             stepLogRepository.save(taskId, output.node(), output.state().data());
             checkpointRepository.save(threadId, taskId, output.state().data());
+            runtimeStateService.recordStep(taskId, threadId, output.node(), output.state().data());
             sseService.send(emitter, output.node(), output.state().data());
         } catch (IOException e) {
             throw new IllegalStateException("发送 SSE 事件失败", e);
