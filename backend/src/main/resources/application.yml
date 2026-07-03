@@ -5,16 +5,16 @@ spring:
   application:
     name: drai-backend
   datasource:
-    url: ${DRAI_DATASOURCE_URL:jdbc:mysql://localhost:3306/drai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
-    username: ${DRAI_DATASOURCE_USERNAME:root}
-    password: ${DRAI_DATASOURCE_PASSWORD:123456}
-    driver-class-name: ${DRAI_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+    url: jdbc:mysql://localhost:3306/drai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${DRAI_REDIS_HOST:localhost}
-      port: ${DRAI_REDIS_PORT:6379}
-      password: ${DRAI_REDIS_PASSWORD:}
-      timeout: ${DRAI_REDIS_TIMEOUT:2s}
+      host: localhost
+      port: 6379
+      timeout: 2s
+      database: 6
   sql:
     init:
       mode: always
@@ -26,35 +26,35 @@ spring:
 
 drai:
   auth:
-    enabled: ${DRAI_AUTH_ENABLED:true}
-    token-secret: ${DRAI_AUTH_TOKEN_SECRET:dev-only-change-me}
-    token-ttl-seconds: ${DRAI_AUTH_TOKEN_TTL_SECONDS:86400}
+    enabled: true
+    token-secret: zzy-dev-local-secret-change-me-2026-long-enough
+    token-ttl-seconds: 86400
   llm:
-    base-url: ${OPENAI_API_BASE:https://api.openai.com/v1}
-    api-key: ${OPENAI_API_KEY:}
-    fast-model: ${DRAI_LLM_FAST_MODEL:qwen3-max}
-    smart-model: ${DRAI_LLM_SMART_MODEL:deepseek-r1}
-    timeout: ${DRAI_LLM_TIMEOUT:30s}
-    max-attempts: ${DRAI_LLM_MAX_ATTEMPTS:2}
-    provider-max-retries: ${DRAI_LLM_PROVIDER_MAX_RETRIES:0}
-    log-requests: ${DRAI_LLM_LOG_REQUESTS:false}
-    log-responses: ${DRAI_LLM_LOG_RESPONSES:false}
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api-key: ${OPENAI_API_KEY}
+    fast-model: qwen3.7-plus
+    smart-model: qwen3.7-max
+    timeout: 30s
+    max-attempts: 2
+    provider-max-retries: 0
+    log-requests: false
+    log-responses: false
   embedding:
-    model: ${DRAI_EMBEDDING_MODEL:text-embedding-3-small}
+    model: text-embedding-v4
   chroma:
-    base-url: ${DRAI_CHROMA_BASE_URL:http://localhost:8000}
-    tenant: ${DRAI_CHROMA_TENANT:default_tenant}
-    database: ${DRAI_CHROMA_DATABASE:default_database}
-    collection: ${DRAI_CHROMA_COLLECTION:drai_docs}
-    token: ${DRAI_CHROMA_TOKEN:}
+    base-url: http://localhost:8001
+    tenant: default_tenant
+    database: default_database
+    collection: drai_docs
+#    token:
   rag:
-    relevance-threshold: ${DRAI_RAG_RELEVANCE_THRESHOLD:0.2}
+    relevance-threshold: 0.2
   tavily:
-    api-key: ${TAVILY_API_KEY:}
+    api-key: ${TAVILY_API_KEY}
   search:
-    max-attempts: ${DRAI_SEARCH_MAX_ATTEMPTS:2}
+    max-attempts: 2
   redis:
-    runtime-ttl: ${DRAI_REDIS_RUNTIME_TTL:PT24H}
+    runtime-ttl: PT24H
   async:
-    workflow-threads: ${DRAI_WORKFLOW_THREADS:8}
-    financial-provider-threads: ${DRAI_FINANCIAL_PROVIDER_THREADS:6}
+    workflow-threads: 8
+    financial-provider-threads: 6
