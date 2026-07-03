@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,22 +14,27 @@ class FinancialSnapshotBuilderTest {
 
     @Test
     void collectsIndependentProvidersConcurrentlyAndRecordsStageMetadata() {
-        FinancialSnapshotBuilder builder = new FinancialSnapshotBuilder(List.of(
-                slowProvider("uploaded-report", "LOCAL_CONTEXT"),
-                slowProvider("public-market", "NEWS_SUMMARY")
-        ));
-        StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            FinancialSnapshotBuilder builder = new FinancialSnapshotBuilder(List.of(
+                    slowProvider("uploaded-report", "LOCAL_CONTEXT"),
+                    slowProvider("public-market", "NEWS_SUMMARY")
+            ), executor);
+            StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
-        long startedAt = System.currentTimeMillis();
-        FinancialSnapshot snapshot = builder.build(subject, "latest", "hybrid");
-        long elapsedMs = System.currentTimeMillis() - startedAt;
+            long startedAt = System.currentTimeMillis();
+            FinancialSnapshot snapshot = builder.build(subject, "latest", "hybrid");
+            long elapsedMs = System.currentTimeMillis() - startedAt;
 
-        assertThat(snapshot.evidenceItems()).hasSize(2);
-        assertThat(snapshot.stageResults()).hasSize(2);
-        assertThat(snapshot.stageResults()).allMatch(stage -> "SUCCESS".equals(stage.status()));
-        assertThat(snapshot.stageResults()).extracting(FinancialAgentStageResult::stageName)
-                .containsExactlyInAnyOrder("uploaded-report", "public-market");
-        assertThat(elapsedMs).isLessThan(450);
+            assertThat(snapshot.evidenceItems()).hasSize(2);
+            assertThat(snapshot.stageResults()).hasSize(2);
+            assertThat(snapshot.stageResults()).allMatch(stage -> "SUCCESS".equals(stage.status()));
+            assertThat(snapshot.stageResults()).extracting(FinancialAgentStageResult::stageName)
+                    .containsExactlyInAnyOrder("uploaded-report", "public-market");
+            assertThat(elapsedMs).isLessThan(450);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private FinancialDataProvider slowProvider(String name, String metricName) {

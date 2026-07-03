@@ -1,25 +1,35 @@
 package com.zzy.drai.financial;
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 @Component
 public class FinancialSnapshotBuilder {
     private final List<FinancialDataProvider> providers;
+    private final Executor executor;
 
-    public FinancialSnapshotBuilder(List<FinancialDataProvider> providers) {
+    public FinancialSnapshotBuilder(
+            List<FinancialDataProvider> providers,
+            @Qualifier("financialProviderExecutor") Executor executor
+    ) {
         this.providers = providers == null ? List.of() : providers;
+        this.executor = executor;
     }
 
     public FinancialSnapshot build(StockSubject subject, String reportPeriod, String searchMode) {
         List<FinancialEvidenceItem> evidenceItems = new ArrayList<>();
         List<FinancialAgentStageResult> stageResults = new ArrayList<>();
         List<CompletableFuture<ProviderResult>> futures = providers.stream()
-                .map(provider -> CompletableFuture.supplyAsync(() -> collectProvider(provider, subject, reportPeriod, searchMode)))
+                .map(provider -> CompletableFuture.supplyAsync(
+                        () -> collectProvider(provider, subject, reportPeriod, searchMode),
+                        executor
+                ))
                 .toList();
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
         for (CompletableFuture<ProviderResult> future : futures) {

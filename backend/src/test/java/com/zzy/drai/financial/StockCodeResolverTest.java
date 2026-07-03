@@ -19,6 +19,14 @@ class StockCodeResolverTest {
     }
 
     @Test
+    void resolvesKnownCompanyProfileFromLocalDirectory() {
+        StockSubject subject = resolver.resolve("600519");
+
+        assertThat(subject.companyName()).isEqualTo("贵州茅台");
+        assertThat(subject.industry()).isEqualTo("食品饮料");
+    }
+
+    @Test
     void resolvesShenzhenAShareCode() {
         StockSubject subject = resolver.resolve("300750");
 

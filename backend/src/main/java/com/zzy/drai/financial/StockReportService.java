@@ -6,6 +6,7 @@ import com.zzy.drai.repository.ResearchTaskRepository;
 import com.zzy.drai.service.ReportService;
 import com.zzy.drai.service.SseService;
 import com.zzy.drai.service.TaskRuntimeStateService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -13,9 +14,9 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Service
 public class StockReportService {
@@ -27,7 +28,7 @@ public class StockReportService {
     private final TaskRuntimeStateService runtimeStateService;
     private final ReportService reportService;
     private final SseService sseService;
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private final ExecutorService executorService;
 
     public StockReportService(
             StockReportWorkflow workflow,
@@ -37,7 +38,8 @@ public class StockReportService {
             CheckpointRepository checkpointRepository,
             TaskRuntimeStateService runtimeStateService,
             ReportService reportService,
-            SseService sseService
+            SseService sseService,
+            @Qualifier("workflowExecutor") ExecutorService executorService
     ) {
         this.workflow = workflow;
         this.snapshotRepository = snapshotRepository;
@@ -47,6 +49,7 @@ public class StockReportService {
         this.runtimeStateService = runtimeStateService;
         this.reportService = reportService;
         this.sseService = sseService;
+        this.executorService = executorService;
     }
 
     public void run(long ownerId, StockReportRequest request, SseEmitter emitter) {
@@ -120,10 +123,17 @@ public class StockReportService {
                 }
             }
 
-            String finalStatus = "PASS".equals(review.status()) && "PASS".equals(compliance.status()) ? "PASS" : "FAIL";
+            Optional<FinancialEvaluationResult> evaluation = workflow.evaluation(report, snapshot, metrics);
+            evaluation.ifPresent(result -> send(taskId, threadId, emitter, "evaluation", mapOf("evaluation", result)));
+
+            boolean reviewPassed = "PASS".equals(review.status());
+            boolean compliancePassed = "PASS".equals(compliance.status());
+            boolean evaluationPassed = evaluation.map(result -> "PASS".equals(result.status())).orElse(true);
+            String finalStatus = reviewPassed && compliancePassed && evaluationPassed ? "PASS" : "FAIL";
             String critique = "PASS".equals(finalStatus)
                     ? ""
-                    : (review.reason() + " " + compliance.issues()).trim();
+                    : (review.reason() + " " + compliance.issues() + " "
+                    + evaluation.map(FinancialEvaluationResult::failedReasons).orElse(List.of())).trim();
             reportService.saveLatest(ownerId, threadId, taskId, report, finalStatus, critique);
             taskRepository.markCompleted(taskId);
             runtimeStateService.markStatus(taskId, "COMPLETED");

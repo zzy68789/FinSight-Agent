@@ -9,6 +9,15 @@ import java.util.regex.Pattern;
 @Component
 public class StockCodeResolver {
     private static final Pattern EXPLICIT_CODE = Pattern.compile("^(\\d{6})\\.(SH|SZ)$", Pattern.CASE_INSENSITIVE);
+    private final AShareCompanyDirectory companyDirectory;
+
+    public StockCodeResolver() {
+        this(new AShareCompanyDirectory());
+    }
+
+    public StockCodeResolver(AShareCompanyDirectory companyDirectory) {
+        this.companyDirectory = companyDirectory;
+    }
 
     public StockSubject resolve(String input) {
         if (input == null || input.isBlank()) {
@@ -34,6 +43,8 @@ public class StockCodeResolver {
     }
 
     private StockSubject subject(String ticker, String exchange) {
-        return new StockSubject(ticker, exchange, ticker + "." + exchange, "待识别上市公司", "待识别行业");
+        return companyDirectory.findByTicker(ticker)
+                .map(profile -> new StockSubject(ticker, exchange, ticker + "." + exchange, profile.companyName(), profile.industry()))
+                .orElseGet(() -> new StockSubject(ticker, exchange, ticker + "." + exchange, "待识别上市公司", "待识别行业"));
     }
 }

@@ -7,13 +7,13 @@ import com.zzy.drai.repository.AgentStepLogRepository;
 import com.zzy.drai.repository.CheckpointRepository;
 import com.zzy.drai.repository.ResearchTaskRepository;
 import org.bsc.langgraph4j.NodeOutput;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Service
 public class ResearchTaskService {
@@ -23,7 +23,7 @@ public class ResearchTaskService {
     private final AgentStepLogRepository stepLogRepository;
     private final CheckpointRepository checkpointRepository;
     private final TaskRuntimeStateService runtimeStateService;
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private final ExecutorService executorService;
 
     public ResearchTaskService(
             ResearchGraphFactory graphFactory,
@@ -31,7 +31,8 @@ public class ResearchTaskService {
             ResearchTaskRepository taskRepository,
             AgentStepLogRepository stepLogRepository,
             CheckpointRepository checkpointRepository,
-            TaskRuntimeStateService runtimeStateService
+            TaskRuntimeStateService runtimeStateService,
+            @Qualifier("workflowExecutor") ExecutorService executorService
     ) {
         this.graphFactory = graphFactory;
         this.sseService = sseService;
@@ -39,6 +40,7 @@ public class ResearchTaskService {
         this.stepLogRepository = stepLogRepository;
         this.checkpointRepository = checkpointRepository;
         this.runtimeStateService = runtimeStateService;
+        this.executorService = executorService;
     }
 
     public void run(long ownerId, ChatRequest request, SseEmitter emitter) {

@@ -55,3 +55,6 @@ drai:
     max-attempts: ${DRAI_SEARCH_MAX_ATTEMPTS:2}
   redis:
     runtime-ttl: ${DRAI_REDIS_RUNTIME_TTL:PT24H}
+  async:
+    workflow-threads: ${DRAI_WORKFLOW_THREADS:8}
+    financial-provider-threads: ${DRAI_FINANCIAL_PROVIDER_THREADS:6}

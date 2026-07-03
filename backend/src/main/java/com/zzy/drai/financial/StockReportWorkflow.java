@@ -3,6 +3,7 @@ package com.zzy.drai.financial;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class StockReportWorkflow {
@@ -13,6 +14,7 @@ public class StockReportWorkflow {
     private final InvestmentReportWriter reportWriter;
     private final CitationReviewer citationReviewer;
     private final FinancialComplianceReviewer complianceReviewer;
+    private final FinancialEvaluationService evaluationService;
 
     public StockReportWorkflow(
             StockCodeResolver stockCodeResolver,
@@ -21,7 +23,8 @@ public class StockReportWorkflow {
             FinancialRiskScoringService riskScoringService,
             InvestmentReportWriter reportWriter,
             CitationReviewer citationReviewer,
-            FinancialComplianceReviewer complianceReviewer
+            FinancialComplianceReviewer complianceReviewer,
+            FinancialEvaluationService evaluationService
     ) {
         this.stockCodeResolver = stockCodeResolver;
         this.snapshotBuilder = snapshotBuilder;
@@ -30,6 +33,7 @@ public class StockReportWorkflow {
         this.reportWriter = reportWriter;
         this.citationReviewer = citationReviewer;
         this.complianceReviewer = complianceReviewer;
+        this.evaluationService = evaluationService;
     }
 
     public StockSubject resolve(StockReportRequest request) {
@@ -63,5 +67,13 @@ public class StockReportWorkflow {
 
     public FinancialComplianceReviewResult compliance(String report, CitationReviewResult citationReview) {
         return complianceReviewer.review(report, citationReview);
+    }
+
+    public Optional<FinancialEvaluationResult> evaluation(
+            String report,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics
+    ) {
+        return evaluationService.evaluateDefaultCase(report, snapshot, metrics);
     }
 }

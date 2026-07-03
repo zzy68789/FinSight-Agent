@@ -317,6 +317,12 @@
                 {{ financialCompliance?.status || '-' }} · {{ financialCompliance?.score ?? '-' }}
               </span>
             </div>
+            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
+              <span>评测门控</span>
+              <span class="mt-1 font-semibold" :class="financialEvaluation?.status === 'PASS' ? 'text-emerald-700' : 'text-amber-700'">
+                {{ financialEvaluation?.status || '-' }} · {{ financialEvaluation?.overallScore ?? '-' }}
+              </span>
+            </div>
             <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
               <span>证据条目</span>
               <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.evidenceCount ?? financialEvidence.length }}</span>
@@ -368,6 +374,17 @@
             <div v-for="issue in financialCompliance.issues" :key="`${issue.category}-${issue.description}`" class="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <div class="font-semibold">{{ issue.category }} · {{ issue.severity }}</div>
               <p class="mt-1 leading-5">{{ issue.description }}</p>
+            </div>
+          </div>
+
+          <div v-if="financialEvaluation?.metricScores?.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold text-slate-500">评测指标</p>
+            <div v-for="metric in financialEvaluation.metricScores" :key="metric.metricName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
+              <span class="min-w-0 truncate font-medium text-slate-700">{{ metric.metricName }}</span>
+              <span class="shrink-0 font-mono" :class="metric.status === 'PASS' ? 'text-emerald-700' : 'text-rose-700'">{{ metric.status }} · {{ metric.score }}</span>
+            </div>
+            <div v-if="financialEvaluation.failedReasons?.length" class="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+              {{ financialEvaluation.failedReasons.join('；') }}
             </div>
           </div>
 
@@ -985,6 +1002,7 @@ const financialEvidence = ref([]);
 const financialSnapshotSummary = ref(null);
 const financialRiskAssessment = ref(null);
 const financialCompliance = ref(null);
+const financialEvaluation = ref(null);
 const financialProviderStages = ref([]);
 const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
@@ -1214,6 +1232,7 @@ const currentStepLabel = (step) => {
         evidence_collect: '证据账本',
         writer: '撰写中',
         reviewer: '质检中',
+        evaluation: '评测中',
         refiner: '修订中',
         done: '已完成'
     };
@@ -1232,6 +1251,7 @@ const stepNameLabel = (step) => {
         evidence_collect: '证据账本',
         writer: '撰写',
         reviewer: '质检',
+        evaluation: '评测',
         refiner: '修订'
     };
     return labels[value] || step || '-';
@@ -1611,6 +1631,7 @@ const startStockResearch = async () => {
     financialSnapshotSummary.value = null;
     financialRiskAssessment.value = null;
     financialCompliance.value = null;
+    financialEvaluation.value = null;
     financialProviderStages.value = [];
     stockReplay.value = null;
     logs.value.push(`[初始化] 股票代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
@@ -1696,6 +1717,11 @@ const handleStockEvent = (event) => {
         const critique = payload.critique || '';
         financialCompliance.value = payload.compliance || null;
         logs.value.push(reviewStatus === 'PASS' ? '[引用审查] 已通过。' : `[引用审查] 未通过：${critique}`);
+    } else if (event.step === 'evaluation') {
+        financialEvaluation.value = payload.evaluation || null;
+        const status = financialEvaluation.value?.status || '-';
+        const score = financialEvaluation.value?.overallScore ?? '-';
+        logs.value.push(`[自动评测] ${status}，综合分：${score}。`);
     } else if (event.step === 'done') {
         latestStockTaskId.value = payload.taskId || null;
         logs.value.push(`[完成] 任务 #${latestStockTaskId.value || '-'} 已写入报告库。`);
