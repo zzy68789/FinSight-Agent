@@ -89,37 +89,48 @@ public class StockReportService {
             snapshotRepository.saveMetrics(snapshotId, taskId, metrics);
             send(taskId, threadId, emitter, "metric_engine", mapOf("metrics", metrics));
 
+            FinancialRiskAssessment riskAssessment = workflow.riskAssessment(metrics, snapshot);
+            send(taskId, threadId, emitter, "risk_assessment", mapOf("riskAssessment", riskAssessment));
+
             send(taskId, threadId, emitter, "evidence_collect", mapOf(
                     "evidence", snapshot.evidenceItems(),
-                    "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count()
+                    "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count(),
+                    "stageResults", snapshot.stageResults()
             ));
 
             CitationReviewResult review = CitationReviewResult.fail("NOT_REVIEWED");
+            FinancialComplianceReviewResult compliance = new FinancialComplianceReviewResult("FAIL", java.math.BigDecimal.ZERO, List.of());
             String report = "";
             for (int attempt = 0; attempt < 3; attempt++) {
-                report = workflow.write(snapshot, metrics, attempt == 0 ? null : review);
+                report = workflow.write(snapshot, metrics, riskAssessment, attempt == 0 ? null : review);
                 send(taskId, threadId, emitter, "writer", mapOf(
                         "attempt", attempt + 1,
                         "finalReport", report
                 ));
                 review = workflow.review(report, snapshot, metrics);
+                compliance = workflow.compliance(report, review);
                 send(taskId, threadId, emitter, "reviewer", mapOf(
                         "attempt", attempt + 1,
                         "reviewStatus", review.status(),
-                        "critique", review.reason()
+                        "critique", review.reason(),
+                        "compliance", compliance
                 ));
-                if ("PASS".equals(review.status())) {
+                if ("PASS".equals(review.status()) && "PASS".equals(compliance.status())) {
                     break;
                 }
             }
 
-            reportService.saveLatest(ownerId, threadId, taskId, report, review.status(), review.reason());
+            String finalStatus = "PASS".equals(review.status()) && "PASS".equals(compliance.status()) ? "PASS" : "FAIL";
+            String critique = "PASS".equals(finalStatus)
+                    ? ""
+                    : (review.reason() + " " + compliance.issues()).trim();
+            reportService.saveLatest(ownerId, threadId, taskId, report, finalStatus, critique);
             taskRepository.markCompleted(taskId);
             runtimeStateService.markStatus(taskId, "COMPLETED");
             send(taskId, threadId, emitter, "done", mapOf(
                     "taskId", taskId,
                     "threadId", threadId,
-                    "reviewStatus", review.status()
+                    "reviewStatus", finalStatus
             ));
             sseService.done(emitter);
         } catch (Exception e) {

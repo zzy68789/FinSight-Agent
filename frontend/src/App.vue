@@ -306,7 +306,17 @@
             <ShieldCheckIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
           </div>
 
-          <div class="space-y-2 text-xs text-slate-600">
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
+            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
+              <span>风险评分</span>
+              <span class="mt-1 font-semibold text-slate-900">{{ financialRiskAssessment?.finalScore ?? '-' }}/10 · {{ financialRiskAssessment?.riskLevel || '-' }}</span>
+            </div>
+            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
+              <span>合规审查</span>
+              <span class="mt-1 font-semibold" :class="financialCompliance?.status === 'PASS' ? 'text-emerald-700' : 'text-amber-700'">
+                {{ financialCompliance?.status || '-' }} · {{ financialCompliance?.score ?? '-' }}
+              </span>
+            </div>
             <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
               <span>证据条目</span>
               <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.evidenceCount ?? financialEvidence.length }}</span>
@@ -317,10 +327,47 @@
             </div>
           </div>
 
+          <div v-if="financialRiskAssessment" class="mt-4">
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div class="h-full rounded-full transition-all" :class="riskScorePercent > 60 ? 'bg-rose-500' : 'bg-blue-700'" :style="{ width: `${riskScorePercent}%` }"></div>
+            </div>
+            <div class="mt-3 space-y-2">
+              <div v-for="dimension in financialRiskAssessment.dimensions" :key="dimension.name" class="rounded-md border border-slate-100 px-3 py-2 text-xs">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-semibold text-slate-800">{{ dimension.name }}</span>
+                  <span class="font-mono text-slate-600">{{ dimension.score }}/10 · {{ dimension.weight }}%</span>
+                </div>
+                <p class="mt-1 leading-5 text-slate-500">{{ dimension.reason }}</p>
+              </div>
+            </div>
+          </div>
+
           <div v-if="financialMetrics.length > 0" class="mt-4 space-y-2">
             <div v-for="metric in financialMetrics" :key="metric.metricName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
               <span class="min-w-0 truncate font-medium text-slate-700">{{ metric.metricName }}</span>
               <span class="shrink-0 font-semibold" :class="metric.status === 'OK' ? 'text-emerald-700' : 'text-amber-700'">{{ metric.displayValue }}</span>
+            </div>
+          </div>
+
+          <div v-if="financialProviderStages.length > 0" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold text-slate-500">数据源执行</p>
+            <div v-for="stage in financialProviderStages" :key="stage.stageName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
+              <span class="min-w-0 truncate font-medium text-slate-700">{{ stage.stageName }}</span>
+              <span class="shrink-0 font-mono" :class="stage.status === 'SUCCESS' ? 'text-emerald-700' : 'text-rose-700'">{{ stage.status }} · {{ stage.durationMs }}ms</span>
+            </div>
+          </div>
+
+          <div v-if="evidenceBreakdown.length > 0" class="mt-4 flex flex-wrap gap-2">
+            <span v-for="item in evidenceBreakdown" :key="item.sourceType" class="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
+              {{ item.sourceType }} · {{ item.count }}
+            </span>
+          </div>
+
+          <div v-if="financialCompliance?.issues?.length" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold text-amber-700">合规问题</p>
+            <div v-for="issue in financialCompliance.issues" :key="`${issue.category}-${issue.description}`" class="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <div class="font-semibold">{{ issue.category }} · {{ issue.severity }}</div>
+              <p class="mt-1 leading-5">{{ issue.description }}</p>
             </div>
           </div>
 
@@ -936,6 +983,9 @@ const latestStockTaskId = ref(null);
 const financialMetrics = ref([]);
 const financialEvidence = ref([]);
 const financialSnapshotSummary = ref(null);
+const financialRiskAssessment = ref(null);
+const financialCompliance = ref(null);
+const financialProviderStages = ref([]);
 const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
 const isLoading = ref(false);
@@ -1018,6 +1068,20 @@ const canStartRun = computed(() => {
 });
 
 const runModeLabel = computed(() => runMode.value === 'stock' ? '股票代码分析' : '通用研究');
+
+const riskScorePercent = computed(() => {
+    const score = Number(financialRiskAssessment.value?.finalScore || 0);
+    return Math.max(0, Math.min(100, score * 10));
+});
+
+const evidenceBreakdown = computed(() => {
+    const counts = financialEvidence.value.reduce((acc, item) => {
+        const key = item.sourceType || 'UNKNOWN';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(counts).map(([sourceType, count]) => ({ sourceType, count }));
+});
 
 const initializeWorkspace = async () => {
     await loadTasks();
@@ -1146,6 +1210,7 @@ const currentStepLabel = (step) => {
         stock_resolve: '股票解析',
         data_snapshot: '数据快照',
         metric_engine: '指标计算',
+        risk_assessment: '风险评分',
         evidence_collect: '证据账本',
         writer: '撰写中',
         reviewer: '质检中',
@@ -1163,6 +1228,7 @@ const stepNameLabel = (step) => {
         stock_resolve: '股票解析',
         data_snapshot: '数据快照',
         metric_engine: '指标计算',
+        risk_assessment: '风险评分',
         evidence_collect: '证据账本',
         writer: '撰写',
         reviewer: '质检',
@@ -1543,6 +1609,9 @@ const startStockResearch = async () => {
     financialMetrics.value = [];
     financialEvidence.value = [];
     financialSnapshotSummary.value = null;
+    financialRiskAssessment.value = null;
+    financialCompliance.value = null;
+    financialProviderStages.value = [];
     stockReplay.value = null;
     logs.value.push(`[初始化] 股票代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
 
@@ -1606,8 +1675,14 @@ const handleStockEvent = (event) => {
     } else if (event.step === 'metric_engine') {
         financialMetrics.value = payload.metrics || [];
         logs.value.push(`[指标计算] 已计算 ${financialMetrics.value.length} 个财务指标。`);
+    } else if (event.step === 'risk_assessment') {
+        financialRiskAssessment.value = payload.riskAssessment || payload.risk_assessment || null;
+        const score = financialRiskAssessment.value?.finalScore ?? '-';
+        const level = financialRiskAssessment.value?.riskLevel || '-';
+        logs.value.push(`[风险评分] 综合风险 ${score}/10，等级：${level}。`);
     } else if (event.step === 'evidence_collect') {
         financialEvidence.value = payload.evidence || [];
+        financialProviderStages.value = payload.stageResults || payload.stage_results || [];
         logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
     } else if (event.step === 'writer') {
         logs.value.push(`[撰写] 正在生成第 ${payload.attempt || 1} 版股票报告...`);
@@ -1619,6 +1694,7 @@ const handleStockEvent = (event) => {
     } else if (event.step === 'reviewer') {
         const reviewStatus = payload.review_status || payload.reviewStatus;
         const critique = payload.critique || '';
+        financialCompliance.value = payload.compliance || null;
         logs.value.push(reviewStatus === 'PASS' ? '[引用审查] 已通过。' : `[引用审查] 未通过：${critique}`);
     } else if (event.step === 'done') {
         latestStockTaskId.value = payload.taskId || null;

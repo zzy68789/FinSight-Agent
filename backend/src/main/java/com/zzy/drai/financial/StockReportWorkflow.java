@@ -9,21 +9,27 @@ public class StockReportWorkflow {
     private final StockCodeResolver stockCodeResolver;
     private final FinancialSnapshotBuilder snapshotBuilder;
     private final FinancialMetricEngine metricEngine;
+    private final FinancialRiskScoringService riskScoringService;
     private final InvestmentReportWriter reportWriter;
     private final CitationReviewer citationReviewer;
+    private final FinancialComplianceReviewer complianceReviewer;
 
     public StockReportWorkflow(
             StockCodeResolver stockCodeResolver,
             FinancialSnapshotBuilder snapshotBuilder,
             FinancialMetricEngine metricEngine,
+            FinancialRiskScoringService riskScoringService,
             InvestmentReportWriter reportWriter,
-            CitationReviewer citationReviewer
+            CitationReviewer citationReviewer,
+            FinancialComplianceReviewer complianceReviewer
     ) {
         this.stockCodeResolver = stockCodeResolver;
         this.snapshotBuilder = snapshotBuilder;
         this.metricEngine = metricEngine;
+        this.riskScoringService = riskScoringService;
         this.reportWriter = reportWriter;
         this.citationReviewer = citationReviewer;
+        this.complianceReviewer = complianceReviewer;
     }
 
     public StockSubject resolve(StockReportRequest request) {
@@ -38,11 +44,24 @@ public class StockReportWorkflow {
         return metricEngine.compute(snapshot);
     }
 
-    public String write(FinancialSnapshot snapshot, List<FinancialMetricResult> metrics, CitationReviewResult previousReview) {
-        return reportWriter.write(snapshot, metrics, previousReview);
+    public FinancialRiskAssessment riskAssessment(List<FinancialMetricResult> metrics, FinancialSnapshot snapshot) {
+        return riskScoringService.assess(metrics, snapshot.evidenceItems());
+    }
+
+    public String write(
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment,
+            CitationReviewResult previousReview
+    ) {
+        return reportWriter.write(snapshot, metrics, riskAssessment, previousReview);
     }
 
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
         return citationReviewer.review(report, snapshot, metrics);
+    }
+
+    public FinancialComplianceReviewResult compliance(String report, CitationReviewResult citationReview) {
+        return complianceReviewer.review(report, citationReview);
     }
 }

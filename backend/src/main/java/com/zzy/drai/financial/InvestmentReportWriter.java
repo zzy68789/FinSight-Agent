@@ -8,7 +8,12 @@ import java.util.StringJoiner;
 @Component
 public class InvestmentReportWriter {
 
-    public String write(FinancialSnapshot snapshot, List<FinancialMetricResult> metrics, CitationReviewResult previousReview) {
+    public String write(
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment,
+            CitationReviewResult previousReview
+    ) {
         StockSubject subject = snapshot.subject();
         StringBuilder report = new StringBuilder();
         report.append("# ").append(subject.fullCode()).append(" A股投研报告\n\n");
@@ -41,9 +46,20 @@ public class InvestmentReportWriter {
         report.append(evidenceSentence(snapshot, "NEWS_SUMMARY", "未取得足够新闻摘要，暂不输出催化因素判断。")).append("\n\n");
 
         report.append("## 7. 主要风险\n\n");
-        report.append("- 数据风险：若有效证据不足 3 条，本报告只能作为流程回放样例，不能作为正式研究结论。\n");
-        report.append("- 口径风险：不同报告期或单位混用时，必须回到原始财报页码/URL 复核。\n");
-        report.append("- 市场风险：未接入实时行情时，不输出估值高低或买卖建议。\n\n");
+        if (riskAssessment != null) {
+            report.append("- 综合风险评分：").append(riskAssessment.finalScore()).append("/10（")
+                    .append(riskAssessment.riskLevel()).append("）。\n");
+            for (FinancialRiskDimension dimension : riskAssessment.dimensions()) {
+                report.append("- ").append(dimension.name()).append("：")
+                        .append(dimension.score()).append("/10，")
+                        .append(dimension.reason()).append("\n");
+            }
+        } else {
+            report.append("- 数据风险：若有效证据不足 3 条，本报告只能作为流程回放样例，不能作为正式研究结论。\n");
+            report.append("- 口径风险：不同报告期或单位混用时，必须回到原始财报页码/URL 复核。\n");
+            report.append("- 市场风险：未接入实时行情时，不输出估值高低或买卖建议。\n");
+        }
+        report.append("\n");
 
         report.append("## 8. 结论与后续观察点\n\n");
         report.append("- 结论：优先复核数据快照中标记为 `MISSING_INPUT` 或 `DATA_MISSING` 的条目。\n");
@@ -73,6 +89,16 @@ public class InvestmentReportWriter {
                     .append(String.join(", ", metric.evidenceRefs()))
                     .append(metric.reason().isBlank() ? "" : "，原因：" + metric.reason())
                     .append("\n");
+        }
+        if (riskAssessment != null) {
+            report.append("\n### 风险评分明细\n\n");
+            for (FinancialRiskDimension dimension : riskAssessment.dimensions()) {
+                report.append("- ").append(dimension.name()).append("：权重")
+                        .append(dimension.weight()).append("%，评分")
+                        .append(dimension.score()).append("/10，证据：")
+                        .append(dimension.evidenceRef()).append("，说明：")
+                        .append(dimension.reason()).append("\n");
+            }
         }
         return report.toString();
     }
