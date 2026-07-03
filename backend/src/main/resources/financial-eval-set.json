@@ -1,0 +1,73 @@
+{
+  "name": "A股投研报告评测集 v1",
+  "metrics": [
+    "claim_support_rate",
+    "unsupported_claim_rate",
+    "contradiction_rate",
+    "numeric_consistency_rate",
+    "citation_hit_rate",
+    "keypoint_coverage"
+  ],
+  "cases": [
+    {
+      "ticker": "600519",
+      "name": "贵州茅台",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "财务表现", "盈利能力与现金流", "主要风险"]
+    },
+    {
+      "ticker": "300750",
+      "name": "宁德时代",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "核心业务与行业位置", "行情与估值观察", "新闻与催化因素"]
+    },
+    {
+      "ticker": "000001",
+      "name": "平安银行",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "财务表现", "资产负债率", "主要风险"]
+    },
+    {
+      "ticker": "601318",
+      "name": "中国平安",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "核心业务与行业位置", "财务表现", "主要风险"]
+    },
+    {
+      "ticker": "600036",
+      "name": "招商银行",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "财务表现", "现金流", "结论与后续观察点"]
+    },
+    {
+      "ticker": "000858",
+      "name": "五粮液",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "财务表现", "盈利能力", "主要风险"]
+    },
+    {
+      "ticker": "601899",
+      "name": "紫金矿业",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "行业位置", "财务表现", "风险"]
+    },
+    {
+      "ticker": "002594",
+      "name": "比亚迪",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "核心业务", "新闻与催化因素", "估值观察"]
+    },
+    {
+      "ticker": "600276",
+      "name": "恒瑞医药",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "行业位置", "财务表现", "风险"]
+    },
+    {
+      "ticker": "688981",
+      "name": "中芯国际",
+      "report_period": "latest",
+      "required_keypoints": ["公司概况", "核心业务", "财务表现", "后续观察点"]
+    }
+  ]
+}

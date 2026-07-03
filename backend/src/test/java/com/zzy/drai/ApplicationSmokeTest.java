@@ -3,6 +3,7 @@ package com.zzy.drai;
 import com.zzy.drai.auth.AuthService;
 import com.zzy.drai.auth.UserContext;
 import com.zzy.drai.dto.ClearResponse;
+import com.zzy.drai.financial.FinancialSnapshotRepository;
 import com.zzy.drai.repository.AgentStepLogRepository;
 import com.zzy.drai.repository.AdminAuditLogRepository;
 import com.zzy.drai.repository.AdminRepository;
@@ -70,6 +71,9 @@ class ApplicationSmokeTest {
 
     @MockitoBean
     AdminAuditLogRepository adminAuditLogRepository;
+
+    @MockitoBean
+    FinancialSnapshotRepository financialSnapshotRepository;
 
     @BeforeEach
     void setUp() {

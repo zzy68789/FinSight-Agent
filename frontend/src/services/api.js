@@ -217,32 +217,20 @@ export async function adminSystemHealth() {
   return requestJson('/admin/system/health');
 }
 
-/**
- * 流式聊天
- * @param {string} query - 问题
- * @param {string} searchMode - 'hybrid' | 'document'
- * @param {function} onMessage - 接收消息回调
- * @param {function} onDone - 完成回调
- * @param {function} onError - 错误回调
- */
-export async function streamChat(query, search_mode, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
+async function streamSse(path, payload, onData, onDone, onError) {
   try {
-      const response = await fetch(`${API_BASE}/chat`, withAuth({
+      const response = await fetch(`${API_BASE}${path}`, withAuth({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-              query: query, 
-              search_mode: search_mode,  // 严格使用 search_mode
-              thread_id: threadId
-          }),
+          body: JSON.stringify(payload),
       }));
-      
+
       if (!response.ok) throw new Error('网络异常，请稍后重试');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-      
+
       while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -267,4 +255,44 @@ export async function streamChat(query, search_mode, onData, onDone, onError, th
           try { onData(JSON.parse(dataStr)); } catch(e){}
       }
   } catch (error) { onError(error); }
+}
+
+export async function streamStockReport(ticker, search_mode, report_period, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
+  return streamSse('/stock-reports', {
+      ticker,
+      search_mode,
+      report_period,
+      thread_id: threadId
+  }, onData, onDone, onError);
+}
+
+export async function saveStockFeedback(taskId, feedbackType, detail = '') {
+  return requestJson(`/stock-reports/${taskId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+          feedback_type: feedbackType,
+          detail
+      })
+  });
+}
+
+export async function getStockReplay(taskId) {
+  return requestJson(`/stock-reports/${taskId}/replay`);
+}
+
+/**
+ * 流式聊天
+ * @param {string} query - 问题
+ * @param {string} searchMode - 'hybrid' | 'document'
+ * @param {function} onMessage - 接收消息回调
+ * @param {function} onDone - 完成回调
+ * @param {function} onError - 错误回调
+ */
+export async function streamChat(query, search_mode, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
+  return streamSse('/chat', {
+      query,
+      search_mode,
+      thread_id: threadId
+  }, onData, onDone, onError);
 }

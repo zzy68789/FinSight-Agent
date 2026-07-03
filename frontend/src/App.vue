@@ -183,6 +183,40 @@
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
+              <h2 class="text-sm font-semibold text-blue-950">任务类型</h2>
+              <p class="mt-1 text-xs text-slate-500">选择通用调研或 A 股投研报告链路</p>
+            </div>
+            <BotIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2" role="group" aria-label="任务类型">
+            <button
+              type="button"
+              :aria-pressed="runMode === 'research'"
+              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+              :class="runMode === 'research' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
+              @click="runMode = 'research'"
+            >
+              <SearchIcon class="h-4 w-4" aria-hidden="true" />
+              通用研究
+            </button>
+
+            <button
+              type="button"
+              :aria-pressed="runMode === 'stock'"
+              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+              :class="runMode === 'stock' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
+              @click="runMode = 'stock'"
+            >
+              <FileOutputIcon class="h-4 w-4" aria-hidden="true" />
+              股票代码分析
+            </button>
+          </div>
+        </section>
+
+        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div>
               <h2 class="text-sm font-semibold text-blue-950">检索模式</h2>
               <p class="mt-1 text-xs text-slate-500">选择本次研究使用的证据来源</p>
             </div>
@@ -216,8 +250,31 @@
         </section>
 
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <label for="research-query" class="text-sm font-semibold text-blue-950">研究任务</label>
+          <label :for="runMode === 'stock' ? 'stock-ticker' : 'research-query'" class="text-sm font-semibold text-blue-950">
+            {{ runMode === 'stock' ? '股票代码' : '研究任务' }}
+          </label>
+          <div v-if="runMode === 'stock'" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
+            <input
+              id="stock-ticker"
+              v-model="stockTicker"
+              type="text"
+              inputmode="text"
+              class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+              placeholder="600519"
+              :disabled="isLoading"
+            />
+            <select
+              v-model="stockReportPeriod"
+              class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+              :disabled="isLoading"
+            >
+              <option value="latest">最新期</option>
+              <option value="annual">年报</option>
+              <option value="quarterly">季报</option>
+            </select>
+          </div>
           <textarea
+            v-else
             id="research-query"
             v-model="query"
             class="mt-3 min-h-28 w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
@@ -229,16 +286,72 @@
           <button
             type="button"
             class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
-            :disabled="isLoading || !query"
+            :disabled="isLoading || !canStartRun"
             @click="startResearch"
           >
             <Loader2Icon v-if="isLoading" class="h-4 w-4 animate-spin" aria-hidden="true" />
             <SendIcon v-else class="h-4 w-4" aria-hidden="true" />
-            <span>{{ isLoading ? '研究中' : '开始研究' }}</span>
+            <span>{{ isLoading ? '运行中' : (runMode === 'stock' ? '生成股票报告' : '开始研究') }}</span>
           </button>
         </section>
 
-        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" />
+        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" :flowType="runMode" />
+
+        <section v-if="runMode === 'stock'" class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-blue-950">股票报告质检</h2>
+              <p class="mt-1 text-xs text-slate-500">指标、证据和 Bad Case 回放</p>
+            </div>
+            <ShieldCheckIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
+          </div>
+
+          <div class="space-y-2 text-xs text-slate-600">
+            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+              <span>证据条目</span>
+              <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.evidenceCount ?? financialEvidence.length }}</span>
+            </div>
+            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+              <span>缺失项</span>
+              <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.missingCount ?? 0 }}</span>
+            </div>
+          </div>
+
+          <div v-if="financialMetrics.length > 0" class="mt-4 space-y-2">
+            <div v-for="metric in financialMetrics" :key="metric.metricName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
+              <span class="min-w-0 truncate font-medium text-slate-700">{{ metric.metricName }}</span>
+              <span class="shrink-0 font-semibold" :class="metric.status === 'OK' ? 'text-emerald-700' : 'text-amber-700'">{{ metric.displayValue }}</span>
+            </div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <button
+              v-for="type in ['数字错', '引用错', '逻辑错', '信息过期']"
+              :key="type"
+              type="button"
+              class="min-h-9 rounded-lg border border-slate-200 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+              :disabled="!latestStockTaskId"
+              @click="submitStockFeedback(type)"
+            >
+              {{ type }}
+            </button>
+          </div>
+          <input
+            v-model="stockFeedbackDetail"
+            type="text"
+            class="mt-2 min-h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+            placeholder="可选：补充反馈说明"
+          />
+          <button
+            type="button"
+            class="mt-3 flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            :disabled="!latestStockTaskId"
+            @click="loadStockReplay"
+          >
+            <EyeIcon class="h-3.5 w-3.5" aria-hidden="true" />
+            回放本次快照
+          </button>
+        </section>
 
         <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
           <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
@@ -271,6 +384,7 @@
               <p class="mt-1 text-sm text-slate-500">智能体工作流生成的报告内容</p>
             </div>
             <div class="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ runModeLabel }}</span>
               <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ searchModeLabel(searchMode) }}</span>
               <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ currentStepLabel(currentStep) }}</span>
             </div>
@@ -312,6 +426,16 @@
               <div v-html="renderedReport"></div>
               <span v-if="isTyping" class="ml-1 inline-block h-5 w-2 animate-pulse bg-blue-700 align-middle"></span>
             </article>
+
+            <section v-if="stockReplay" class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div class="mb-3 flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold text-slate-950">本次报告回放快照</h3>
+                <button type="button" class="rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-slate-800" aria-label="关闭回放" @click="stockReplay = null">
+                  <XIcon class="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100">{{ stockReplay }}</pre>
+            </section>
           </div>
         </div>
       </section>
@@ -755,6 +879,9 @@ import {
 import {
     uploadFiles,
     streamChat,
+    streamStockReport,
+    saveStockFeedback,
+    getStockReplay,
     clearContext,
     listTasks,
     getTask,
@@ -802,6 +929,15 @@ const triggerWarning = (msg) => {
 };
 
 const query = ref('');
+const runMode = ref('research');
+const stockTicker = ref('600519');
+const stockReportPeriod = ref('latest');
+const latestStockTaskId = ref(null);
+const financialMetrics = ref([]);
+const financialEvidence = ref([]);
+const financialSnapshotSummary = ref(null);
+const stockFeedbackDetail = ref('');
+const stockReplay = ref(null);
 const isLoading = ref(false);
 const currentStep = ref('idle');
 const completedSteps = ref([]);
@@ -873,6 +1009,15 @@ const workspaceTabs = computed(() => {
     }
     return tabs;
 });
+
+const canStartRun = computed(() => {
+    if (runMode.value === 'stock') {
+        return /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim());
+    }
+    return Boolean(query.value.trim());
+});
+
+const runModeLabel = computed(() => runMode.value === 'stock' ? '股票代码分析' : '通用研究');
 
 const initializeWorkspace = async () => {
     await loadTasks();
@@ -987,6 +1132,9 @@ const searchModeLabel = (mode) => {
     const value = (mode || '').toLowerCase();
     if (value === 'document') return '仅文档';
     if (value === 'hybrid') return '混合检索';
+    if (value === 'stock-hybrid') return '股票混合';
+    if (value === 'stock-document') return '股票文档';
+    if (value === 'stock-web') return '股票联网';
     return mode || '-';
 };
 
@@ -995,6 +1143,10 @@ const currentStepLabel = (step) => {
         idle: '就绪',
         planner: '规划中',
         researcher: '检索中',
+        stock_resolve: '股票解析',
+        data_snapshot: '数据快照',
+        metric_engine: '指标计算',
+        evidence_collect: '证据账本',
         writer: '撰写中',
         reviewer: '质检中',
         refiner: '修订中',
@@ -1008,6 +1160,10 @@ const stepNameLabel = (step) => {
     const labels = {
         planner: '规划',
         researcher: '检索',
+        stock_resolve: '股票解析',
+        data_snapshot: '数据快照',
+        metric_engine: '指标计算',
+        evidence_collect: '证据账本',
         writer: '撰写',
         reviewer: '质检',
         refiner: '修订'
@@ -1260,6 +1416,10 @@ const typeWriterEffect = (text) => {
 };
 
 const startResearch = async () => {
+    if (runMode.value === 'stock') {
+        await startStockResearch();
+        return;
+    }
     if (!query.value) return;
 
     isLoading.value = true;
@@ -1368,6 +1528,126 @@ const startResearch = async () => {
         isLoading.value = false;
         logs.value.push(`[错误] 初始化失败：${e.message}`);
         alert(`系统错误：${e.message}`);
+    }
+};
+
+const startStockResearch = async () => {
+    if (!canStartRun.value) return;
+
+    isLoading.value = true;
+    currentStep.value = 'stock_resolve';
+    completedSteps.value = [];
+    logs.value = [];
+    displayedReport.value = '';
+    latestStockTaskId.value = null;
+    financialMetrics.value = [];
+    financialEvidence.value = [];
+    financialSnapshotSummary.value = null;
+    stockReplay.value = null;
+    logs.value.push(`[初始化] 股票代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
+
+    const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
+
+    try {
+        if (uploadedFiles.value.length > 0) {
+            logs.value.push(`[系统] 正在上传 ${uploadedFiles.value.length} 个财报文档...`);
+            const res = await uploadFiles(uploadedFiles.value);
+            logs.value.push(`[系统] 财报知识库已构建，已索引 ${res.chunks_stored} 个文本块。`);
+        } else {
+            logs.value.push('[系统] 正在清理上一轮知识库上下文...');
+            await clearContext();
+            logs.value.push('[系统] 上下文已清理，将使用公开数据源与降级缺失标记。');
+        }
+
+        streamStockReport(
+            stockTicker.value.trim().toUpperCase(),
+            actualMode,
+            stockReportPeriod.value,
+            handleStockEvent,
+            () => {
+                isLoading.value = false;
+                currentStep.value = 'done';
+                logs.value.push('[完成] 股票报告流程已结束。');
+                loadTasks();
+                loadReports(activeThreadId.value);
+                scrollToBottom();
+            },
+            (err) => {
+                isLoading.value = false;
+                logs.value.push(`[错误] ${err.message}`);
+                scrollToBottom();
+            },
+            activeThreadId.value
+        );
+    } catch (e) {
+        isLoading.value = false;
+        logs.value.push(`[错误] 初始化失败：${e.message}`);
+        alert(`系统错误：${e.message}`);
+    }
+};
+
+const handleStockEvent = (event) => {
+    if (event.step) {
+        currentStep.value = event.step;
+        if (!completedSteps.value.includes(event.step)) {
+            completedSteps.value = [...completedSteps.value, event.step];
+        }
+    }
+    const payload = event.data || {};
+    if (event.step === 'stock_resolve') {
+        const subject = payload.subject || {};
+        logs.value.push(`[股票解析] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别上市公司'}`);
+    } else if (event.step === 'data_snapshot') {
+        financialSnapshotSummary.value = {
+            evidenceCount: payload.evidenceCount || 0,
+            missingCount: payload.missingCount || 0
+        };
+        logs.value.push(`[数据快照] 证据 ${financialSnapshotSummary.value.evidenceCount} 条，缺失标记 ${financialSnapshotSummary.value.missingCount} 条。`);
+    } else if (event.step === 'metric_engine') {
+        financialMetrics.value = payload.metrics || [];
+        logs.value.push(`[指标计算] 已计算 ${financialMetrics.value.length} 个财务指标。`);
+    } else if (event.step === 'evidence_collect') {
+        financialEvidence.value = payload.evidence || [];
+        logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
+    } else if (event.step === 'writer') {
+        logs.value.push(`[撰写] 正在生成第 ${payload.attempt || 1} 版股票报告...`);
+        const finalReport = payload.final_report || payload.finalReport;
+        if (finalReport) {
+            displayedReport.value = '';
+            typeWriterEffect(finalReport);
+        }
+    } else if (event.step === 'reviewer') {
+        const reviewStatus = payload.review_status || payload.reviewStatus;
+        const critique = payload.critique || '';
+        logs.value.push(reviewStatus === 'PASS' ? '[引用审查] 已通过。' : `[引用审查] 未通过：${critique}`);
+    } else if (event.step === 'done') {
+        latestStockTaskId.value = payload.taskId || null;
+        logs.value.push(`[完成] 任务 #${latestStockTaskId.value || '-'} 已写入报告库。`);
+    }
+    scrollToBottom();
+};
+
+const submitStockFeedback = async (feedbackType) => {
+    if (!latestStockTaskId.value) return;
+    try {
+        await saveStockFeedback(latestStockTaskId.value, feedbackType, stockFeedbackDetail.value);
+        logs.value.push(`[反馈] 已记录 Bad Case：${feedbackType}`);
+        stockFeedbackDetail.value = '';
+        scrollToBottom();
+    } catch (error) {
+        triggerWarning(error.message);
+    }
+};
+
+const loadStockReplay = async () => {
+    if (!latestStockTaskId.value) return;
+    try {
+        const replay = await getStockReplay(latestStockTaskId.value);
+        stockReplay.value = JSON.stringify(replay, null, 2);
+        logs.value.push('[回放] 已加载本次 snapshot + evidence + metric。');
+        scrollToBottom();
+    } catch (error) {
+        triggerWarning(error.message);
     }
 };
 

@@ -1,0 +1,74 @@
+package com.zzy.drai.financial;
+
+import com.zzy.drai.rag.RagDocument;
+import com.zzy.drai.rag.RagService;
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class UploadedReportProvider implements FinancialDataProvider {
+    private final RagService ragService;
+    private final FinancialEvidenceParser evidenceParser;
+
+    public UploadedReportProvider(RagService ragService, FinancialEvidenceParser evidenceParser) {
+        this.ragService = ragService;
+        this.evidenceParser = evidenceParser;
+    }
+
+    @Override
+    public String name() {
+        return "uploaded-report";
+    }
+
+    @Override
+    public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+        if ("web".equalsIgnoreCase(searchMode)) {
+            return List.of();
+        }
+        String query = subject.fullCode() + " " + subject.companyName() + " 年报 季报 营业收入 净利润 经营现金流 总资产 总负债";
+        List<RagDocument> documents = ragService.retrieve(query, 6);
+        List<FinancialEvidenceItem> items = new ArrayList<>();
+        for (RagDocument document : documents) {
+            BigDecimal confidence = BigDecimal.valueOf(Math.max(0.1d, Math.min(1.0d, document.score())));
+            List<FinancialEvidenceItem> parsed = evidenceParser.parse(
+                    document.content(),
+                    "UPLOADED_REPORT",
+                    document.source(),
+                    "",
+                    reportPeriod,
+                    confidence
+            );
+            if (parsed.isEmpty()) {
+                items.add(new FinancialEvidenceItem(
+                        "UPLOADED_REPORT",
+                        document.source(),
+                        "",
+                        null,
+                        reportPeriod,
+                        "LOCAL_CONTEXT",
+                        null,
+                        null,
+                        trim(document.content()),
+                        confidence,
+                        LocalDateTime.now(),
+                        ""
+                ));
+            } else {
+                items.addAll(parsed);
+            }
+        }
+        return items;
+    }
+
+    private String trim(String content) {
+        if (content == null) {
+            return "";
+        }
+        String normalized = content.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 300 ? normalized : normalized.substring(0, 300);
+    }
+}

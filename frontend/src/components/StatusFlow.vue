@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-5 py-4">
       <div>
         <h2 id="agent-flow-title" class="text-sm font-semibold text-white">Agent 执行轨迹</h2>
-        <p class="mt-1 text-xs text-slate-400">Planner → Researcher → Writer → Reviewer</p>
+        <p class="mt-1 text-xs text-slate-400">{{ flowSubtitle }}</p>
       </div>
       <span class="rounded-md border border-blue-300/30 bg-blue-300/10 px-2 py-1 text-xs font-medium text-blue-100">
         {{ statusLabel }}
@@ -65,10 +65,11 @@ import {
 
 const props = defineProps({
   currentStep: { type: String, default: 'idle' },
-  completedSteps: { type: Array, default: () => [] }
+  completedSteps: { type: Array, default: () => [] },
+  flowType: { type: String, default: 'research' }
 });
 
-const steps = [
+const researchSteps = [
   { id: 'planner', code: 'PLAN', label: '规划', desc: '拆解任务并制定检索计划', icon: BrainCircuitIcon },
   { id: 'researcher', code: 'EVIDENCE', label: '检索', desc: '收集文档证据和联网资料', icon: SearchIcon },
   { id: 'writer', code: 'DRAFT', label: '撰写', desc: '生成 Markdown 研究报告', icon: FileTextIcon },
@@ -76,6 +77,19 @@ const steps = [
   { id: 'refiner', code: 'REVISE', label: '修订', desc: '基于同一会话继续调整报告', icon: FilePenLineIcon, optional: true }
 ];
 
+const stockSteps = [
+  { id: 'stock_resolve', code: 'RESOLVE', label: '股票解析', desc: '标准化 A 股代码与交易所', icon: BrainCircuitIcon },
+  { id: 'data_snapshot', code: 'SNAPSHOT', label: '数据快照', desc: '拉取或复用财报、行情、新闻证据', icon: SearchIcon },
+  { id: 'metric_engine', code: 'METRIC', label: '指标计算', desc: '用 Java 确定性计算核心财务指标', icon: FilePenLineIcon },
+  { id: 'evidence_collect', code: 'LEDGER', label: '证据账本', desc: '沉淀引用、缺失项和置信度', icon: SearchIcon },
+  { id: 'writer', code: 'DRAFT', label: '撰写', desc: '生成固定八章节股票投研报告', icon: FileTextIcon },
+  { id: 'reviewer', code: 'CITATION', label: '引用审查', desc: '检查数字、口径和证据充分性', icon: ShieldCheckIcon }
+];
+
+const steps = computed(() => props.flowType === 'stock' ? stockSteps : researchSteps);
+const flowSubtitle = computed(() => props.flowType === 'stock'
+  ? 'Resolve → Snapshot → Metric → Evidence → Writer → Reviewer'
+  : 'Planner → Researcher → Writer → Reviewer');
 const seenSteps = ref(new Set());
 
 watch(
@@ -88,7 +102,7 @@ watch(
   { immediate: true }
 );
 
-const currentStepIndex = computed(() => steps.findIndex((step) => step.id === props.currentStep));
+const currentStepIndex = computed(() => steps.value.findIndex((step) => step.id === props.currentStep));
 const completedStepSet = computed(() => new Set([...props.completedSteps, ...seenSteps.value]));
 
 const statusLabel = computed(() => {
