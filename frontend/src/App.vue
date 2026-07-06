@@ -209,7 +209,7 @@
               @click="runMode = 'stock'"
             >
               <FileOutputIcon class="h-4 w-4" aria-hidden="true" />
-              股票代码分析
+              股票/ETF分析
             </button>
           </div>
         </section>
@@ -251,7 +251,7 @@
 
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <label :for="runMode === 'stock' ? 'stock-ticker' : 'research-query'" class="text-sm font-semibold text-blue-950">
-            {{ runMode === 'stock' ? '股票代码' : '研究任务' }}
+            {{ runMode === 'stock' ? '股票/ETF代码' : '研究任务' }}
           </label>
           <div v-if="runMode === 'stock'" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
             <input
@@ -260,7 +260,7 @@
               type="text"
               inputmode="text"
               class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              placeholder="600519"
+              placeholder="600519 或 588200"
               :disabled="isLoading"
             />
             <select
@@ -1085,7 +1085,7 @@ const canStartRun = computed(() => {
     return Boolean(query.value.trim());
 });
 
-const runModeLabel = computed(() => runMode.value === 'stock' ? '股票代码分析' : '通用研究');
+const runModeLabel = computed(() => runMode.value === 'stock' ? '股票/ETF分析' : '通用研究');
 
 const riskScorePercent = computed(() => {
     const score = Number(financialRiskAssessment.value?.finalScore || 0);
@@ -1634,7 +1634,7 @@ const startStockResearch = async () => {
     financialEvaluation.value = null;
     financialProviderStages.value = [];
     stockReplay.value = null;
-    logs.value.push(`[初始化] 股票代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
+    logs.value.push(`[初始化] 股票/ETF分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
 
@@ -1686,7 +1686,8 @@ const handleStockEvent = (event) => {
     const payload = event.data || {};
     if (event.step === 'stock_resolve') {
         const subject = payload.subject || {};
-        logs.value.push(`[股票解析] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别上市公司'}`);
+        const assetLabel = subject.assetType === 'ETF' ? 'ETF解析' : '股票解析';
+        logs.value.push(`[${assetLabel}] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别上市公司'}`);
     } else if (event.step === 'data_snapshot') {
         financialSnapshotSummary.value = {
             evidenceCount: payload.evidenceCount || 0,

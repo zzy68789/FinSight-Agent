@@ -52,10 +52,24 @@ class StockCodeResolverTest {
     }
 
     @Test
-    void rejectsShanghaiFundCodeWithClearMessage() {
-        assertThatThrownBy(() -> resolver.resolve("588200"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("588200")
-                .hasMessageContaining("暂不支持基金、ETF");
+    void resolvesShanghaiEtfCode() {
+        StockSubject subject = resolver.resolve("588200");
+
+        assertThat(subject.ticker()).isEqualTo("588200");
+        assertThat(subject.exchange()).isEqualTo("SH");
+        assertThat(subject.fullCode()).isEqualTo("588200.SH");
+        assertThat(subject.assetType()).isEqualTo(StockAssetType.ETF);
+        assertThat(subject.companyName()).isEqualTo("待识别ETF");
+        assertThat(subject.industry()).isEqualTo("ETF");
+    }
+
+    @Test
+    void resolvesShenzhenEtfCode() {
+        StockSubject subject = resolver.resolve("159915");
+
+        assertThat(subject.ticker()).isEqualTo("159915");
+        assertThat(subject.exchange()).isEqualTo("SZ");
+        assertThat(subject.fullCode()).isEqualTo("159915.SZ");
+        assertThat(subject.assetType()).isEqualTo(StockAssetType.ETF);
     }
 }

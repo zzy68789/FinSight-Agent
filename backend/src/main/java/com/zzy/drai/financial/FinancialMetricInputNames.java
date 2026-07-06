@@ -10,6 +10,9 @@ public final class FinancialMetricInputNames {
     public static final String TOTAL_LIABILITIES = "TOTAL_LIABILITIES";
     public static final String TOTAL_ASSETS = "TOTAL_ASSETS";
     public static final String OPERATING_CASH_FLOW = "OPERATING_CASH_FLOW";
+    public static final String ETF_CLOSE = "ETF_CLOSE";
+    public static final String ETF_PCT_CHANGE = "ETF_PCT_CHANGE";
+    public static final String ETF_AMOUNT = "ETF_AMOUNT";
 
     private FinancialMetricInputNames() {
     }

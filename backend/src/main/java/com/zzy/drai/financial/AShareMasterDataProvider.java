@@ -23,6 +23,22 @@ public class AShareMasterDataProvider implements FinancialDataProvider {
 
     @Override
     public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+        if (subject.isEtf()) {
+            return List.of(new FinancialEvidenceItem(
+                    "LOCAL_CONTEXT",
+                    "本地ETF代码识别",
+                    "",
+                    null,
+                    reportPeriod,
+                    "LOCAL_CONTEXT",
+                    null,
+                    null,
+                    subject.fullCode() + " 已识别为沪深交易所 ETF 标的；该主档仅用于资产类型识别，不代表基金净值、持仓或规模数据。",
+                    BigDecimal.ONE,
+                    LocalDateTime.now(),
+                    ""
+            ));
+        }
         return companyDirectory.findByTicker(subject.ticker())
                 .map(profile -> List.of(new FinancialEvidenceItem(
                         "LOCAL_CONTEXT",

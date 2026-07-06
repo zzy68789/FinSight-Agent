@@ -1,4 +1,4 @@
-# DRAI 问题日志
+# do not miss 问题日志
 
 这份文档只记录明确指定要沉淀的问题。每条记录保持同一结构：发生了什么、原因、解决方式、结果。
 
@@ -253,3 +253,21 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 ### 结果
 
 `StockReportControllerTest,StockCodeResolverTest` 8 个目标测试通过，前端构建通过。用户会看到明确的不支持原因，不再被误导为网络问题。
+
+## 015. 支持 ETF 时不能复用普通股票财务指标口径
+
+### 发生了什么
+
+用户同意将 `588200` 这类 ETF 代码纳入分析入口，但如果只放行 5 开头代码，系统会继续按普通上市公司股票生成 A 股投研报告。
+
+### 原因
+
+原 `StockSubject` 没有资产类型，`StockCodeResolver` 只能区分交易所，`FinancialMetricEngine`、`TushareMarketDataProvider` 和 `InvestmentReportWriter` 都默认使用普通股票财务报表口径。ETF 没有上市公司营业收入、毛利率、ROE 等指标，直接复用会造成报告口径错误。
+
+### 解决方式
+
+新增 `StockAssetType.ETF` 并贯穿 `StockSubject`；解析器支持沪市 `5xxxxx`、深市 `15xxxx/16xxxx/18xxxx` ETF；TuShare ETF 分支优先调用 `fund_daily`，指标引擎只输出 ETF 收盘价、涨跌幅和成交额；报告模板改为 ETF 研究报告，不再展示 ROE、毛利率等公司财务章节。
+
+### 结果
+
+`588200` 可进入 ETF 报告链路，前端显示“股票/ETF分析”和“ETF解析”。`StockCodeResolverTest,FinancialMetricEngineTest,InvestmentReportWriterTest,TushareMarketDataProviderTest` 目标测试通过，ETF 基础支持已落地；基金净值、持仓、规模和跟踪误差仍作为后续增强。

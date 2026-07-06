@@ -14,6 +14,13 @@ public class FinancialMetricEngine {
 
     public List<FinancialMetricResult> compute(FinancialSnapshot snapshot) {
         Map<String, FinancialEvidenceItem> inputs = indexInputs(snapshot);
+        if (snapshot != null && snapshot.subject() != null && snapshot.subject().isEtf()) {
+            return List.of(
+                    etfMetric("ETF收盘价", FinancialMetricInputNames.ETF_CLOSE, inputs, "ETF二级市场收盘价"),
+                    etfMetric("ETF涨跌幅", FinancialMetricInputNames.ETF_PCT_CHANGE, inputs, "ETF二级市场涨跌幅"),
+                    etfMetric("ETF成交额", FinancialMetricInputNames.ETF_AMOUNT, inputs, "ETF二级市场成交额")
+            );
+        }
         return List.of(
                 revenueYoY(inputs),
                 grossMargin(inputs),
@@ -22,6 +29,19 @@ public class FinancialMetricEngine {
                 debtRatio(inputs),
                 cashFlowToNetProfit(inputs)
         );
+    }
+
+    private FinancialMetricResult etfMetric(String name, String inputName, Map<String, FinancialEvidenceItem> inputs, String formula) {
+        FinancialEvidenceItem item = inputs.get(inputName);
+        if (item == null || item.normalizedValue() == null) {
+            return new FinancialMetricResult(name, null, "数据缺失", formula, "MISSING_INPUT", "缺少输入：" + inputName, List.of(inputName));
+        }
+        BigDecimal value = item.normalizedValue();
+        String display = value.setScale("ETF涨跌幅".equals(name) ? 2 : 3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
+        if ("ETF涨跌幅".equals(name)) {
+            display = display + "%";
+        }
+        return new FinancialMetricResult(name, value, display, formula, "OK", "", List.of(inputName));
     }
 
     private FinancialMetricResult revenueYoY(Map<String, FinancialEvidenceItem> inputs) {

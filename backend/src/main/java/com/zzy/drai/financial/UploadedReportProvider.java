@@ -29,7 +29,9 @@ public class UploadedReportProvider implements FinancialDataProvider {
         if ("web".equalsIgnoreCase(searchMode)) {
             return List.of();
         }
-        String query = subject.fullCode() + " " + subject.companyName() + " 年报 季报 营业收入 净利润 经营现金流 总资产 总负债";
+        String query = subject.isEtf()
+                ? subject.fullCode() + " ETF 基金 招募说明书 定期报告 净值 持仓 跟踪指数 规模"
+                : subject.fullCode() + " " + subject.companyName() + " 年报 季报 营业收入 净利润 经营现金流 总资产 总负债";
         List<RagDocument> documents = ragService.retrieve(query, 6);
         List<FinancialEvidenceItem> items = new ArrayList<>();
         for (RagDocument document : documents) {

@@ -46,6 +46,28 @@ class FinancialMetricEngineTest {
         assertThat(metric(results, "ROE").reason()).contains("缺少");
     }
 
+    @Test
+    void computesEtfMarketMetricsWithoutCompanyFinancialRatios() {
+        FinancialSnapshot snapshot = new FinancialSnapshot(
+                new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF),
+                "latest",
+                "hybrid",
+                List.of(
+                        evidence(FinancialMetricInputNames.ETF_CLOSE, "1.234"),
+                        evidence(FinancialMetricInputNames.ETF_PCT_CHANGE, "2.15"),
+                        evidence(FinancialMetricInputNames.ETF_AMOUNT, "35000")
+                ),
+                LocalDateTime.of(2026, 7, 6, 10, 0)
+        );
+
+        List<FinancialMetricResult> results = engine.compute(snapshot);
+
+        assertThat(results).extracting(FinancialMetricResult::metricName)
+                .containsExactly("ETF收盘价", "ETF涨跌幅", "ETF成交额");
+        assertThat(results).allMatch(result -> "OK".equals(result.status()));
+        assertThat(results).noneMatch(result -> "ROE".equals(result.metricName()) || "毛利率".equals(result.metricName()));
+    }
+
     private FinancialMetricResult metric(List<FinancialMetricResult> results, String name) {
         return results.stream()
                 .filter(result -> result.metricName().equals(name))

@@ -138,6 +138,45 @@ class TushareMarketDataProviderTest {
     }
 
     @Test
+    void requestsFundDailyForEtfInsteadOfCompanyFinancialApis() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TushareMarketDataProvider provider = new TushareMarketDataProvider(
+                builder,
+                new ObjectMapper(),
+                true,
+                "https://api.tushare.pro",
+                "token-123",
+                "PT10S"
+        );
+        StockSubject subject = new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF);
+
+        expectApi(server, "fund_daily", "588200.SH", "ts_code,trade_date,close,pct_chg,amount", "\"trade_date\":\"20260706\"", """
+                {
+                  "code": 0,
+                  "msg": "",
+                  "data": {
+                    "fields": ["ts_code", "trade_date", "close", "pct_chg", "amount"],
+                    "items": [
+                      ["588200.SH", "20260706", 1.234, 2.15, 35000.00]
+                    ]
+                  }
+                }
+                """);
+
+        List<FinancialEvidenceItem> items = provider.collect(subject, "20260706", "hybrid");
+
+        assertThat(items).extracting(FinancialEvidenceItem::metricName)
+                .containsExactly(
+                        FinancialMetricInputNames.ETF_CLOSE,
+                        FinancialMetricInputNames.ETF_PCT_CHANGE,
+                        FinancialMetricInputNames.ETF_AMOUNT
+                );
+        assertThat(items).allMatch(FinancialEvidenceItem::effective);
+        server.verify();
+    }
+
+    @Test
     void emitsDataMissingEvidenceWhenTushareReturnsError() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -169,12 +208,25 @@ class TushareMarketDataProviderTest {
     }
 
     private void expectApi(MockRestServiceServer server, String apiName, String fields, String response) {
+        expectApi(server, apiName, "600519.SH", fields, response);
+    }
+
+    private void expectApi(MockRestServiceServer server, String apiName, String tsCode, String fields, String response) {
+        expectApi(server, apiName, tsCode, fields, null, response);
+    }
+
+    private void expectApi(MockRestServiceServer server, String apiName, String tsCode, String fields, String expectedParam, String response) {
         server.expect(once(), requestTo("https://api.tushare.pro"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"api_name\":\"" + apiName + "\"")))
                 .andExpect(content().string(containsString("\"token\":\"token-123\"")))
-                .andExpect(content().string(containsString("\"ts_code\":\"600519.SH\"")))
+                .andExpect(content().string(containsString("\"ts_code\":\"" + tsCode + "\"")))
                 .andExpect(content().string(containsString("\"fields\":\"" + fields + "\"")))
+                .andExpect(request -> {
+                    if (expectedParam != null) {
+                        content().string(containsString(expectedParam)).match(request);
+                    }
+                })
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
     }
 }

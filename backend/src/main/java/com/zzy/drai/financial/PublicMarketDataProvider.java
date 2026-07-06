@@ -29,7 +29,10 @@ public class PublicMarketDataProvider implements FinancialDataProvider {
         }
         List<FinancialEvidenceItem> items = new ArrayList<>();
         try {
-            List<SearchResult> results = searchService.search(subject.fullCode() + " A股 财报 行情 新闻 估值", 5);
+            String query = subject.isEtf()
+                    ? subject.fullCode() + " ETF 基金 净值 跟踪指数 规模 成交额"
+                    : subject.fullCode() + " A股 财报 行情 新闻 估值";
+            List<SearchResult> results = searchService.search(query, 5);
             for (SearchResult result : results) {
                 if ("fallback".equalsIgnoreCase(result.source())) {
                     continue;

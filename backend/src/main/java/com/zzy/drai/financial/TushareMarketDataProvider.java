@@ -55,6 +55,13 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
             return List.of();
         }
         try {
+            if (subject.isEtf()) {
+                List<FinancialEvidenceItem> etfItems = fundDailyEvidence(subject, reportPeriod);
+                if (etfItems.isEmpty()) {
+                    return List.of(dataMissing(reportPeriod, "TuShare Pro 未返回可用 ETF 行情数据。"));
+                }
+                return etfItems;
+            }
             List<FinancialEvidenceItem> items = new ArrayList<>();
             items.addAll(incomeEvidence(subject, reportPeriod));
             items.addAll(balanceSheetEvidence(subject, reportPeriod));
@@ -67,6 +74,25 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
         } catch (RuntimeException e) {
             return List.of(dataMissing(reportPeriod, "TuShare Pro 数据不可用：" + e.getMessage()));
         }
+    }
+
+    private List<FinancialEvidenceItem> fundDailyEvidence(StockSubject subject, String reportPeriod) {
+        List<Map<String, JsonNode>> rows = sortByDate(query(
+                "fund_daily",
+                subject,
+                reportPeriod,
+                "ts_code,trade_date,close,pct_chg,amount"
+        ), "trade_date");
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<String, JsonNode> latest = rows.get(0);
+        String period = text(latest, "trade_date", reportPeriod);
+        List<FinancialEvidenceItem> items = new ArrayList<>();
+        addRawMetric(items, period, FinancialMetricInputNames.ETF_CLOSE, latest, "close", "ETF收盘价");
+        addRawMetric(items, period, FinancialMetricInputNames.ETF_PCT_CHANGE, latest, "pct_chg", "ETF涨跌幅");
+        addRawMetric(items, period, FinancialMetricInputNames.ETF_AMOUNT, latest, "amount", "ETF成交额");
+        return items;
     }
 
     private List<FinancialEvidenceItem> incomeEvidence(StockSubject subject, String reportPeriod) {
@@ -151,7 +177,7 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("ts_code", subject.fullCode());
         if (isConcreteReportPeriod(reportPeriod)) {
-            if ("daily_basic".equals(apiName)) {
+            if ("daily_basic".equals(apiName) || "fund_daily".equals(apiName)) {
                 params.put("trade_date", reportPeriod);
             } else {
                 params.put("end_date", reportPeriod);
@@ -218,6 +244,14 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
     }
 
     private void addRatio(List<FinancialEvidenceItem> items, String period, String metricName, Map<String, JsonNode> row, String field, String label) {
+        BigDecimal value = decimal(row, field);
+        if (value == null) {
+            return;
+        }
+        items.add(evidence(period, metricName, value, value, label + " " + value.toPlainString()));
+    }
+
+    private void addRawMetric(List<FinancialEvidenceItem> items, String period, String metricName, Map<String, JsonNode> row, String field, String label) {
         BigDecimal value = decimal(row, field);
         if (value == null) {
             return;
