@@ -31,7 +31,7 @@ drai:
     token-ttl-seconds: 86400
   llm:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api-key: ${OPENAI_API_KEY:}
+    api-key: ${OPENAI_API_KEY}
     fast-model: qwen3.7-plus
     smart-model: qwen3.7-max
     timeout: 30s
@@ -50,13 +50,13 @@ drai:
   rag:
     relevance-threshold: 0.2
   tavily:
-    api-key: ${TAVILY_API_KEY:}
+    api-key: ${TAVILY_API_KEY}
   market:
     tushare:
-      enabled: ${DRAI_TUSHARE_ENABLED:${DRAI_MARKET_ENABLED:false}}
-      base-url: ${DRAI_TUSHARE_BASE_URL:${DRAI_MARKET_BASE_URL:https://api.tushare.pro}}
-      api-key: ${DRAI_TUSHARE_API_KEY:${DRAI_MARKET_API_KEY:}}
-      timeout: ${DRAI_TUSHARE_TIMEOUT:${DRAI_MARKET_TIMEOUT:10s}}
+      enabled: true
+      base-url: https://api.tushare.pro
+      api-key: ${DRAI_TUSHARE_API_KEY}
+      timeout: 10s
   search:
     max-attempts: 2
   redis:
