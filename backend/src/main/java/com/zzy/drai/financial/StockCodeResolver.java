@@ -39,7 +39,8 @@ public class StockCodeResolver {
         if (normalized.startsWith("0") || normalized.startsWith("2") || normalized.startsWith("3")) {
             return subject(normalized, "SZ");
         }
-        throw new IllegalArgumentException("仅支持 A 股沪深市场股票代码");
+        throw new IllegalArgumentException("当前仅支持沪深 A 股普通股票代码（沪市 6xxxxx，深市 0/2/3xxxxx）；"
+                + normalized + " 这类代码暂不支持基金、ETF、B 股或北交所标的。");
     }
 
     private StockSubject subject(String ticker, String exchange) {

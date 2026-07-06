@@ -243,7 +243,15 @@ async function streamSse(path, payload, onData, onDone, onError) {
                   if (dataStr === '[DONE]') {
                       onDone(); return;
                   }
-                  try { onData(JSON.parse(dataStr)); } catch(e){}
+                  try {
+                      const event = JSON.parse(dataStr);
+                      if (event.step === 'error') {
+                          throw new Error(event.data?.message || '任务执行失败，请稍后重试');
+                      }
+                      onData(event);
+                  } catch(e){
+                      if (!(e instanceof SyntaxError)) throw e;
+                  }
               }
           }
       }
@@ -252,7 +260,15 @@ async function streamSse(path, payload, onData, onDone, onError) {
           if (dataStr === '[DONE]') {
               onDone(); return;
           }
-          try { onData(JSON.parse(dataStr)); } catch(e){}
+          try {
+              const event = JSON.parse(dataStr);
+              if (event.step === 'error') {
+                  throw new Error(event.data?.message || '任务执行失败，请稍后重试');
+              }
+              onData(event);
+          } catch(e){
+              if (!(e instanceof SyntaxError)) throw e;
+          }
       }
   } catch (error) { onError(error); }
 }

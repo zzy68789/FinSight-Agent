@@ -48,6 +48,14 @@ class StockCodeResolverTest {
     void rejectsUnsupportedCode() {
         assertThatThrownBy(() -> resolver.resolve("900001"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("仅支持 A 股");
+                .hasMessageContaining("当前仅支持沪深 A 股普通股票代码");
+    }
+
+    @Test
+    void rejectsShanghaiFundCodeWithClearMessage() {
+        assertThatThrownBy(() -> resolver.resolve("588200"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("588200")
+                .hasMessageContaining("暂不支持基金、ETF");
     }
 }
