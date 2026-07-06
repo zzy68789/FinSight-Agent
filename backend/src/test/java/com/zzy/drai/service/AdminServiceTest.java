@@ -47,4 +47,37 @@ class AdminServiceTest {
         verify(adminRepository).softDeleteReport(21L);
         verify(auditLogRepository).save(1L, "DELETE_REPORT", "REPORT", 21L, "softDelete=true");
     }
+
+    @Test
+    void systemHealthReportsTushareConfigurationStatus() {
+        AdminRepository adminRepository = mock(AdminRepository.class);
+        AdminAuditLogRepository auditLogRepository = mock(AdminAuditLogRepository.class);
+        AdminService configured = new AdminService(
+                adminRepository,
+                auditLogRepository,
+                null,
+                null,
+                null,
+                "",
+                "",
+                "",
+                true,
+                "tushare-token"
+        );
+        AdminService missing = new AdminService(
+                adminRepository,
+                auditLogRepository,
+                null,
+                null,
+                null,
+                "",
+                "",
+                "",
+                true,
+                ""
+        );
+
+        assertThat(configured.systemHealth().components()).containsEntry("tushare", "CONFIGURED");
+        assertThat(missing.systemHealth().components()).containsEntry("tushare", "MISSING");
+    }
 }

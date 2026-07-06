@@ -33,9 +33,11 @@ public class AdminService {
     private final String llmApiKey;
     private final String tavilyApiKey;
     private final String chromaBaseUrl;
+    private final boolean tushareEnabled;
+    private final String tushareApiKey;
 
     public AdminService(AdminRepository adminRepository, AdminAuditLogRepository auditLogRepository) {
-        this(adminRepository, auditLogRepository, null, null, null, "", "", "");
+        this(adminRepository, auditLogRepository, null, null, null, "", "", "", false, "");
     }
 
     @Autowired
@@ -47,7 +49,9 @@ public class AdminService {
             ObjectProvider<StringRedisTemplate> redisTemplateProvider,
             @Value("${drai.llm.api-key:}") String llmApiKey,
             @Value("${drai.tavily.api-key:}") String tavilyApiKey,
-            @Value("${drai.chroma.base-url:}") String chromaBaseUrl
+            @Value("${drai.chroma.base-url:}") String chromaBaseUrl,
+            @Value("${drai.market.tushare.enabled:false}") boolean tushareEnabled,
+            @Value("${drai.market.tushare.api-key:}") String tushareApiKey
     ) {
         this.adminRepository = adminRepository;
         this.auditLogRepository = auditLogRepository;
@@ -57,6 +61,8 @@ public class AdminService {
         this.llmApiKey = llmApiKey;
         this.tavilyApiKey = tavilyApiKey;
         this.chromaBaseUrl = chromaBaseUrl;
+        this.tushareEnabled = tushareEnabled;
+        this.tushareApiKey = tushareApiKey;
     }
 
     public List<AdminUserResponse> listUsers(String keyword) {
@@ -117,7 +123,15 @@ public class AdminService {
         components.put("chroma", isBlank(chromaBaseUrl) ? "MISSING" : "CONFIGURED");
         components.put("llm", isBlank(llmApiKey) ? "MISSING" : "CONFIGURED");
         components.put("tavily", isBlank(tavilyApiKey) ? "MISSING" : "CONFIGURED");
+        components.put("tushare", marketDataStatus());
         return new AdminSystemHealthResponse(components);
+    }
+
+    private String marketDataStatus() {
+        if (!tushareEnabled) {
+            return "DISABLED";
+        }
+        return isBlank(tushareApiKey) ? "MISSING" : "CONFIGURED";
     }
 
     private String mysqlStatus() {
