@@ -270,4 +270,4 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 
 ### 结果
 
-`588200` 可进入 ETF 报告链路，前端显示“股票/ETF分析”和“ETF解析”。`StockCodeResolverTest,FinancialMetricEngineTest,InvestmentReportWriterTest,TushareMarketDataProviderTest` 目标测试通过，ETF 基础支持已落地；基金净值、持仓、规模和跟踪误差仍作为后续增强。
+`588200` 可进入 ETF 报告链路，前端入口统一为“证券代码分析”，解析日志显示“ETF解析”。`StockCodeResolverTest,FinancialMetricEngineTest,InvestmentReportWriterTest,TushareMarketDataProviderTest` 目标测试通过，ETF 基础支持已落地；基金净值、持仓、规模和跟踪误差仍作为后续增强。

@@ -184,7 +184,7 @@
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 class="text-sm font-semibold text-blue-950">任务类型</h2>
-              <p class="mt-1 text-xs text-slate-500">选择通用调研或 A 股投研报告链路</p>
+              <p class="mt-1 text-xs text-slate-500">选择通用调研或证券研究报告链路</p>
             </div>
             <BotIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
           </div>
@@ -209,7 +209,7 @@
               @click="runMode = 'stock'"
             >
               <FileOutputIcon class="h-4 w-4" aria-hidden="true" />
-              股票/ETF分析
+              证券代码分析
             </button>
           </div>
         </section>
@@ -251,7 +251,7 @@
 
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <label :for="runMode === 'stock' ? 'stock-ticker' : 'research-query'" class="text-sm font-semibold text-blue-950">
-            {{ runMode === 'stock' ? '股票/ETF代码' : '研究任务' }}
+            {{ runMode === 'stock' ? '证券代码' : '研究任务' }}
           </label>
           <div v-if="runMode === 'stock'" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
             <input
@@ -291,7 +291,7 @@
           >
             <Loader2Icon v-if="isLoading" class="h-4 w-4 animate-spin" aria-hidden="true" />
             <SendIcon v-else class="h-4 w-4" aria-hidden="true" />
-            <span>{{ isLoading ? '运行中' : (runMode === 'stock' ? '生成股票报告' : '开始研究') }}</span>
+            <span>{{ isLoading ? '运行中' : (runMode === 'stock' ? '生成证券报告' : '开始研究') }}</span>
           </button>
         </section>
 
@@ -300,7 +300,7 @@
         <section v-if="runMode === 'stock'" class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h2 class="text-sm font-semibold text-blue-950">股票报告质检</h2>
+              <h2 class="text-sm font-semibold text-blue-950">证券报告质检</h2>
               <p class="mt-1 text-xs text-slate-500">指标、证据和 Bad Case 回放</p>
             </div>
             <ShieldCheckIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -1085,7 +1085,7 @@ const canStartRun = computed(() => {
     return Boolean(query.value.trim());
 });
 
-const runModeLabel = computed(() => runMode.value === 'stock' ? '股票/ETF分析' : '通用研究');
+const runModeLabel = computed(() => runMode.value === 'stock' ? '证券代码分析' : '通用研究');
 
 const riskScorePercent = computed(() => {
     const score = Number(financialRiskAssessment.value?.finalScore || 0);
@@ -1634,15 +1634,15 @@ const startStockResearch = async () => {
     financialEvaluation.value = null;
     financialProviderStages.value = [];
     stockReplay.value = null;
-    logs.value.push(`[初始化] 股票/ETF分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
+    logs.value.push(`[初始化] 证券代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
 
     try {
         if (uploadedFiles.value.length > 0) {
-            logs.value.push(`[系统] 正在上传 ${uploadedFiles.value.length} 个财报文档...`);
+            logs.value.push(`[系统] 正在上传 ${uploadedFiles.value.length} 个研究资料...`);
             const res = await uploadFiles(uploadedFiles.value);
-            logs.value.push(`[系统] 财报知识库已构建，已索引 ${res.chunks_stored} 个文本块。`);
+            logs.value.push(`[系统] 证券研究知识库已构建，已索引 ${res.chunks_stored} 个文本块。`);
         } else {
             logs.value.push('[系统] 正在清理上一轮知识库上下文...');
             await clearContext();
@@ -1657,7 +1657,7 @@ const startStockResearch = async () => {
             () => {
                 isLoading.value = false;
                 currentStep.value = 'done';
-                logs.value.push('[完成] 股票报告流程已结束。');
+                logs.value.push('[完成] 证券报告流程已结束。');
                 loadTasks();
                 loadReports(activeThreadId.value);
                 scrollToBottom();
@@ -1707,7 +1707,7 @@ const handleStockEvent = (event) => {
         financialProviderStages.value = payload.stageResults || payload.stage_results || [];
         logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
     } else if (event.step === 'writer') {
-        logs.value.push(`[撰写] 正在生成第 ${payload.attempt || 1} 版股票报告...`);
+        logs.value.push(`[撰写] 正在生成第 ${payload.attempt || 1} 版证券研究报告...`);
         const finalReport = payload.final_report || payload.finalReport;
         if (finalReport) {
             displayedReport.value = '';
