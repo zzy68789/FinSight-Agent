@@ -16,6 +16,6 @@ final class LlmFallbacks {
                 + "当前未配置可用的大模型 API，系统使用本地降级内容完成流程验证。\n\n"
                 + "- 任务摘要：" + firstLine + "\n"
                 + "- 工程链路：Planner、Researcher、Writer、Reviewer 已完成状态流转。\n"
-                + "- 后续建议：配置 `OPENAI_API_KEY`、Tavily Key 和 ChromaDB 后验证真实调研质量。\n";
+                + "- 后续建议：配置 `DRAI_LLM_API_KEY`、Tavily Key 和 ChromaDB 后验证真实调研质量。\n";
     }
 }

@@ -271,3 +271,21 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 ### 结果
 
 `588200` 可进入 ETF 报告链路，前端入口统一为“证券代码分析”，解析日志显示“ETF解析”。`StockCodeResolverTest,FinancialMetricEngineTest,InvestmentReportWriterTest,TushareMarketDataProviderTest` 目标测试通过，ETF 基础支持已落地；基金净值、持仓、规模和跟踪误差仍作为后续增强。
+
+## 016. 项目读取全局 OPENAI_API_KEY 会影响 cc-switch 配置
+
+### 发生了什么
+
+用户删除了项目中的 `OPENAI_API_KEY`，因为这个全局变量会影响本机 `cc-switch` 相关配置，希望 DRAI 改用自己的环境变量名。
+
+### 原因
+
+`application.yml` 直接通过 `${OPENAI_API_KEY}` 读取 LLM Key，项目配置和本机全局 OpenAI-compatible 工具共享同一个变量名。只要 `cc-switch` 切换或清理该变量，DRAI 的 LLM 配置也会被连带影响。
+
+### 解决方式
+
+将后端 LLM 配置改为项目专用命名空间：`DRAI_LLM_BASE_URL`、`DRAI_LLM_API_KEY`、`DRAI_LLM_FAST_MODEL`、`DRAI_LLM_SMART_MODEL` 等；README 和本地降级提示同步改名，并新增 `ConfigurationPlaceholderTest` 断言 `application.yml` 不再包含 `OPENAI_API_KEY` 或 `OPENAI_API_BASE`。
+
+### 结果
+
+DRAI 和 `cc-switch` 的全局 OpenAI 配置解耦。目标测试先因旧配置失败，改名后通过；`ApplicationSmokeTest` 和后端全量 `mvn.cmd test` 也通过。用户只需要在本项目启动窗口配置 `DRAI_LLM_API_KEY`。

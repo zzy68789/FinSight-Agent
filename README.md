@@ -276,8 +276,8 @@ $env:DRAI_RAG_RELEVANCE_THRESHOLD="0.2"
 配置大模型和搜索服务：
 
 ```powershell
-$env:OPENAI_API_BASE="https://your-openai-compatible-endpoint/v1"
-$env:OPENAI_API_KEY="your_api_key"
+$env:DRAI_LLM_BASE_URL="https://your-openai-compatible-endpoint/v1"
+$env:DRAI_LLM_API_KEY="your_api_key"
 $env:DRAI_LLM_FAST_MODEL="qwen3-max"
 $env:DRAI_LLM_SMART_MODEL="deepseek-r1"
 $env:DRAI_LLM_TIMEOUT="30s"
@@ -286,11 +286,11 @@ $env:DRAI_LLM_PROVIDER_MAX_RETRIES="0"
 $env:DRAI_LLM_LOG_REQUESTS="false"
 $env:DRAI_LLM_LOG_RESPONSES="false"
 $env:DRAI_EMBEDDING_MODEL="text-embedding-3-small"
-$env:TAVILY_API_KEY="your_tavily_key"
+$env:DRAI_TAVILY_API_KEY="your_tavily_key"
 $env:DRAI_SEARCH_MAX_ATTEMPTS="2"
 ```
 
-后端通过 LangChain4j `OpenAiChatModel` 调用 OpenAI-compatible `/chat/completions`，并在外层增加失败重试和本地 fallback。Planner 会优先解析 JSON array，Reviewer 会强制解析 `{"status":"PASS|FAIL","feedback":""}` 结构。未配置 `OPENAI_API_KEY` 时，系统会使用本地降级内容，便于验证完整 Agent 流程；embedding 也会降级为本地 hash 向量，方便开发环境跑通 ChromaDB 写入和查询；搜索服务通过 `SearchSource` 抽象接入 Tavily，并统一做失败重试、去重、质量过滤和本地 fallback，未配置 `TAVILY_API_KEY` 时会返回降级结果。
+后端通过 LangChain4j `OpenAiChatModel` 调用 OpenAI-compatible `/chat/completions`，并在外层增加失败重试和本地 fallback。Planner 会优先解析 JSON array，Reviewer 会强制解析 `{"status":"PASS|FAIL","feedback":""}` 结构。未配置 `DRAI_LLM_API_KEY` 时，系统会使用本地降级内容，便于验证完整 Agent 流程；embedding 也会降级为本地 hash 向量，方便开发环境跑通 ChromaDB 写入和查询。项目不再读取 `OPENAI_API_KEY`，避免影响 `cc-switch` 等全局 OpenAI 配置；搜索服务通过 `SearchSource` 抽象接入 Tavily，并统一做失败重试、去重、质量过滤和本地 fallback，未配置 `DRAI_TAVILY_API_KEY` 或 `TAVILY_API_KEY` 时会返回降级结果。
 
 配置 TuShare Pro 授权行情和财务数据源：
 

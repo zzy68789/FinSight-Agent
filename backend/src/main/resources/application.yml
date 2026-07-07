@@ -30,17 +30,17 @@ drai:
     token-secret: zzy-dev-local-secret-change-me-2026-long-enough
     token-ttl-seconds: 86400
   llm:
-    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api-key: ${OPENAI_API_KEY}
-    fast-model: qwen3.7-plus
-    smart-model: qwen3.7-max
-    timeout: 30s
-    max-attempts: 2
-    provider-max-retries: 0
-    log-requests: false
-    log-responses: false
+    base-url: ${DRAI_LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    api-key: ${DRAI_LLM_API_KEY:}
+    fast-model: ${DRAI_LLM_FAST_MODEL:qwen3.7-plus}
+    smart-model: ${DRAI_LLM_SMART_MODEL:qwen3.7-max}
+    timeout: ${DRAI_LLM_TIMEOUT:30s}
+    max-attempts: ${DRAI_LLM_MAX_ATTEMPTS:2}
+    provider-max-retries: ${DRAI_LLM_PROVIDER_MAX_RETRIES:0}
+    log-requests: ${DRAI_LLM_LOG_REQUESTS:false}
+    log-responses: ${DRAI_LLM_LOG_RESPONSES:false}
   embedding:
-    model: text-embedding-v4
+    model: ${DRAI_EMBEDDING_MODEL:text-embedding-v4}
   chroma:
     base-url: http://localhost:8001
     tenant: default_tenant
@@ -50,13 +50,13 @@ drai:
   rag:
     relevance-threshold: 0.2
   tavily:
-    api-key: ${TAVILY_API_KEY}
+    api-key: ${DRAI_TAVILY_API_KEY:${TAVILY_API_KEY:}}
   market:
     tushare:
-      enabled: true
-      base-url: https://api.tushare.pro
-      api-key: ${DRAI_TUSHARE_API_KEY}
-      timeout: 10s
+      enabled: ${DRAI_TUSHARE_ENABLED:${DRAI_MARKET_ENABLED:false}}
+      base-url: ${DRAI_TUSHARE_BASE_URL:${DRAI_MARKET_BASE_URL:https://api.tushare.pro}}
+      api-key: ${DRAI_TUSHARE_API_KEY:${DRAI_MARKET_API_KEY:}}
+      timeout: ${DRAI_TUSHARE_TIMEOUT:${DRAI_MARKET_TIMEOUT:10s}}
   search:
     max-attempts: 2
   redis:
