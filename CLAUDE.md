@@ -51,6 +51,7 @@ npm.cmd run build
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。
 - **结构化输出**：Planner 解析 JSON array，Reviewer 强制解析 `{"status":"PASS|FAIL","feedback":""}`，非法输出 fail-closed。
 - **前端 SSE 契约**：不轻改 `/api/chat`、`/api/stock-reports` 的路径、请求体和 SSE 字段。后端字段用 `finalReport`/`searchResults`/`reviewStatus`，前端兼容两种命名。
+- **注释统一用中文**：所有代码注释（类/方法 Javadoc、行内注释）一律用中文，与现有代码保持一致。
 
 ## Progress Docs
 
