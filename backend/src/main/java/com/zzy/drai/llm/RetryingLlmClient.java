@@ -23,6 +23,9 @@ public class RetryingLlmClient implements LlmClient {
                 lastFailure = e;
             }
         }
-        return LlmFallbacks.fallback(prompt, modelType, lastFailure);
+        // 重试耗尽后抛出最后一次失败，由调用方决定如何降级
+        throw lastFailure != null
+                ? lastFailure
+                : new IllegalStateException("LLM 调用失败且无可用响应");
     }
 }

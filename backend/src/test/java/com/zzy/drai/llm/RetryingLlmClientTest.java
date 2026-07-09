@@ -3,6 +3,7 @@ package com.zzy.drai.llm;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RetryingLlmClientTest {
 
@@ -18,14 +19,14 @@ class RetryingLlmClientTest {
     }
 
     @Test
-    void returnsStructuredReviewFallbackAfterAllAttemptsFail() {
+    void throwsLastFailureAfterAllAttemptsFail() {
         RetryingLlmClient client = new RetryingLlmClient((prompt, modelType) -> {
             throw new IllegalStateException("downstream unavailable");
         }, 2);
 
-        String response = client.generate("review", LlmClient.ModelType.SMART);
-
-        assertThat(response).isEqualTo("{\"status\":\"FAIL\",\"feedback\":\"LLM 调用失败，请稍后重试或检查模型配置。\"}");
+        assertThatThrownBy(() -> client.generate("prompt", LlmClient.ModelType.SMART))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("downstream unavailable");
     }
 
     private static class FailingOnceLlmClient implements LlmClient {
