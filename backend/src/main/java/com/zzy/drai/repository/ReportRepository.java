@@ -1,6 +1,7 @@
 package com.zzy.drai.repository;
 
 import com.zzy.drai.domain.ReportRecord;
+import com.zzy.drai.domain.ReusableReportRecord;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -22,7 +23,11 @@ public class ReportRepository {
             rs.getString("critique"),
             rs.getObject("created_at", LocalDateTime.class),
             rs.getBoolean("favorite"),
-            rs.getObject("indexed_at", LocalDateTime.class)
+            rs.getObject("indexed_at", LocalDateTime.class),
+            rs.getObject("snapshot_id", Long.class),
+            rs.getString("data_snapshot_hash"),
+            rs.getString("generation_context_hash"),
+            rs.getObject("reused_from_report_id", Long.class)
     );
 
     private final JdbcClient jdbcClient;
@@ -34,24 +39,104 @@ public class ReportRepository {
     }
 
     public void save(long ownerId, long taskId, String threadId, String content, String reviewStatus, String critique) {
+        save(ownerId, taskId, threadId, content, reviewStatus, critique, null, null, null, null);
+    }
+
+    public long save(
+            long ownerId,
+            long taskId,
+            String threadId,
+            String content,
+            String reviewStatus,
+            String critique,
+            Long snapshotId,
+            String dataSnapshotHash,
+            String generationContextHash,
+            Long reusedFromReportId
+    ) {
         Integer latestVersion = jdbcClient.sql("SELECT COALESCE(MAX(version), 0) FROM report WHERE owner_id = :ownerId AND thread_id = :threadId")
                 .param("ownerId", ownerId)
                 .param("threadId", threadId)
                 .query(Integer.class)
                 .single();
-        jdbcClient.sql("""
-                        INSERT INTO report(owner_id, task_id, thread_id, content, version, review_status, critique, favorite, created_at)
-                        VALUES (:ownerId, :taskId, :threadId, :content, :version, :reviewStatus, :critique, false, :createdAt)
-                        """)
-                .param("ownerId", ownerId)
-                .param("taskId", taskId)
-                .param("threadId", threadId)
-                .param("content", content)
-                .param("version", latestVersion + 1)
-                .param("reviewStatus", reviewStatus)
-                .param("critique", critique)
-                .param("createdAt", LocalDateTime.now())
-                .update();
+        org.springframework.jdbc.support.GeneratedKeyHolder keyHolder = new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            java.sql.PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO report(
+                      owner_id, task_id, thread_id, content, version, review_status, critique, favorite,
+                      snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, false, ?, ?, ?, ?, ?)
+                    """, java.sql.Statement.RETURN_GENERATED_KEYS);
+            statement.setLong(1, ownerId);
+            statement.setLong(2, taskId);
+            statement.setString(3, threadId);
+            statement.setString(4, content);
+            statement.setInt(5, latestVersion + 1);
+            statement.setString(6, reviewStatus);
+            statement.setString(7, critique);
+            statement.setObject(8, snapshotId);
+            statement.setString(9, dataSnapshotHash);
+            statement.setString(10, generationContextHash);
+            statement.setObject(11, reusedFromReportId);
+            statement.setObject(12, LocalDateTime.now());
+            return statement;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new IllegalStateException("保存报告后未返回生成主键");
+        }
+        return key.longValue();
+    }
+
+    public Optional<ReusableReportRecord> findReusable(long ownerId, String generationContextHash) {
+        return jdbcTemplate.query("""
+                        SELECT id, content, review_status
+                        FROM report
+                        WHERE owner_id = ?
+                          AND generation_context_hash = ?
+                          AND review_status = 'PASS'
+                          AND deleted_at IS NULL
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> new ReusableReportRecord(
+                        rs.getLong("id"), rs.getString("content"), rs.getString("review_status")
+                ),
+                ownerId,
+                generationContextHash
+        ).stream().findFirst();
+    }
+
+    public Optional<ReusableReportRecord> findByTask(long ownerId, long taskId) {
+        return jdbcTemplate.query("""
+                        SELECT id, content, review_status
+                        FROM report
+                        WHERE owner_id = ? AND task_id = ? AND deleted_at IS NULL
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> new ReusableReportRecord(
+                        rs.getLong("id"), rs.getString("content"), rs.getString("review_status")
+                ),
+                ownerId,
+                taskId
+        ).stream().findFirst();
+    }
+
+    public Optional<ReportRecord> findReportByTask(long ownerId, long taskId) {
+        return jdbcTemplate.query("""
+                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at,
+                               snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id
+                        FROM report
+                        WHERE owner_id = ? AND task_id = ? AND deleted_at IS NULL
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                REPORT_MAPPER,
+                ownerId,
+                taskId
+        ).stream().findFirst();
     }
 
     public Optional<String> findLatestByThread(long ownerId, String threadId) {
@@ -70,7 +155,8 @@ public class ReportRepository {
 
     public List<ReportRecord> findReportsByThread(long ownerId, String threadId) {
         return jdbcTemplate.query("""
-                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at
+                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at,
+                               snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id
                         FROM report
                         WHERE owner_id = ? AND thread_id = ?
                           AND deleted_at IS NULL
@@ -84,7 +170,8 @@ public class ReportRepository {
 
     public Optional<ReportRecord> findReportById(long ownerId, long reportId) {
         return jdbcTemplate.query("""
-                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at
+                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at,
+                               snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id
                         FROM report
                         WHERE owner_id = ? AND id = ? AND deleted_at IS NULL
                         """,
@@ -97,7 +184,8 @@ public class ReportRepository {
     public List<ReportRecord> findReports(long ownerId, String keyword, boolean favoriteOnly) {
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : "%" + keyword.trim() + "%";
         return jdbcClient.sql("""
-                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at
+                        SELECT id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at,
+                               snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id
                         FROM report
                         WHERE owner_id = :ownerId
                           AND deleted_at IS NULL

@@ -50,6 +50,10 @@ public class RagService {
         return hybridRagRetriever.retrieve(query, topK);
     }
 
+    public RagRetrievalResult retrieveWithTrace(String query, int topK) {
+        return hybridRagRetriever.retrieveWithTrace(query, topK);
+    }
+
     public int indexText(String source, String text) {
         if (text == null || text.isBlank()) {
             return 0;

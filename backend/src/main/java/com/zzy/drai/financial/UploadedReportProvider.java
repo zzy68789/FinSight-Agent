@@ -2,6 +2,7 @@ package com.zzy.drai.financial;
 
 import com.zzy.drai.rag.RagDocument;
 import com.zzy.drai.rag.RagService;
+import com.zzy.drai.rag.RagRetrievalResult;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -26,13 +27,19 @@ public class UploadedReportProvider implements FinancialDataProvider {
 
     @Override
     public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+        return collectWithTrace(subject, reportPeriod, searchMode).evidenceItems();
+    }
+
+    @Override
+    public FinancialDataCollection collectWithTrace(StockSubject subject, String reportPeriod, String searchMode) {
         if ("web".equalsIgnoreCase(searchMode)) {
-            return List.of();
+            return FinancialDataCollection.evidenceOnly(List.of());
         }
         String query = subject.isEtf()
                 ? subject.fullCode() + " ETF 基金 招募说明书 定期报告 净值 持仓 跟踪指数 规模"
                 : subject.fullCode() + " " + subject.companyName() + " 年报 季报 营业收入 净利润 经营现金流 总资产 总负债";
-        List<RagDocument> documents = ragService.retrieve(query, 6);
+        RagRetrievalResult retrievalResult = ragService.retrieveWithTrace(query, 6);
+        List<RagDocument> documents = retrievalResult.documents();
         List<FinancialEvidenceItem> items = new ArrayList<>();
         for (RagDocument document : documents) {
             BigDecimal confidence = BigDecimal.valueOf(Math.max(0.1d, Math.min(1.0d, document.score())));
@@ -63,7 +70,7 @@ public class UploadedReportProvider implements FinancialDataProvider {
                 items.addAll(parsed);
             }
         }
-        return items;
+        return new FinancialDataCollection(items, retrievalResult);
     }
 
     private String trim(String content) {

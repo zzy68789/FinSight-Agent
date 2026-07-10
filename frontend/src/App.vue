@@ -491,14 +491,76 @@
               <span v-if="isTyping" class="ml-1 inline-block h-5 w-2 animate-pulse bg-blue-700 align-middle"></span>
             </article>
 
-            <section v-if="stockReplay" class="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <section v-if="stockTrace" class="mt-6 border-t border-slate-200 pt-5">
               <div class="mb-3 flex items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold text-slate-950">本次报告回放快照</h3>
-                <button type="button" class="rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-slate-800" aria-label="关闭回放" @click="stockReplay = null">
+                <div>
+                  <h3 class="text-sm font-semibold text-slate-950">报告可信度轨迹</h3>
+                  <p class="mt-1 text-xs text-slate-500">任务 #{{ stockTrace.taskId }} · {{ stockTrace.stage }}</p>
+                </div>
+                <button type="button" class="rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800" aria-label="关闭回放" @click="stockReplay = null; stockTrace = null">
                   <XIcon class="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
-              <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100">{{ stockReplay }}</pre>
+              <div class="grid grid-cols-2 border-y border-slate-200 text-sm sm:grid-cols-4">
+                <div class="px-3 py-3">
+                  <p class="text-xs text-slate-500">任务状态</p>
+                  <p class="mt-1 font-semibold text-slate-900">{{ stockTrace.status }}</p>
+                </div>
+                <div class="border-l border-slate-200 px-3 py-3">
+                  <p class="text-xs text-slate-500">报告版本</p>
+                  <p class="mt-1 font-semibold text-slate-900">v{{ stockTrace.reportVersion || '-' }}</p>
+                </div>
+                <div class="border-l-0 border-slate-200 px-3 py-3 sm:border-l">
+                  <p class="text-xs text-slate-500">证据有效率</p>
+                  <p class="mt-1 font-semibold text-slate-900">{{ stockTrace.evidenceEffective }}/{{ stockTrace.evidenceTotal }}</p>
+                </div>
+                <div class="border-l border-slate-200 px-3 py-3">
+                  <p class="text-xs text-slate-500">生成方式</p>
+                  <p class="mt-1 font-semibold" :class="stockTrace.cacheHit ? 'text-emerald-700' : 'text-blue-700'">{{ stockTrace.cacheHit ? '缓存复用' : '实时生成' }}</p>
+                </div>
+              </div>
+              <div class="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+                <div class="min-w-0">
+                  <span class="text-slate-500">数据快照</span>
+                  <p class="mt-1 truncate font-mono text-slate-800" :title="stockTrace.dataSnapshotHash">{{ stockTrace.dataSnapshotHash || '-' }}</p>
+                </div>
+                <div class="min-w-0">
+                  <span class="text-slate-500">生成上下文</span>
+                  <p class="mt-1 truncate font-mono text-slate-800" :title="stockTrace.generationContextHash">{{ stockTrace.generationContextHash || '-' }}</p>
+                </div>
+              </div>
+              <div v-if="stockTrace.retrievalResults?.length" class="mt-5">
+                <h4 class="text-xs font-semibold text-slate-900">混合检索</h4>
+                <div v-for="(retrieval, index) in stockTrace.retrievalResults" :key="`${retrieval.query}-${index}`" class="mt-2 border-t border-slate-200 pt-2 text-xs">
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                    <span>候选 {{ retrieval.candidateCount }}</span>
+                    <span>接受 {{ retrieval.acceptedCount }}</span>
+                    <span>过滤 {{ retrieval.filteredCount }}</span>
+                    <span>{{ retrieval.durationMs }} ms</span>
+                  </div>
+                  <div class="mt-2 space-y-1">
+                    <div v-for="entry in retrieval.traceEntries" :key="`${entry.rank}-${entry.source}`" class="flex items-center justify-between gap-3 py-1">
+                      <span class="min-w-0 truncate text-slate-700">#{{ entry.rank }} {{ entry.source }}</span>
+                      <span class="shrink-0 font-mono text-slate-500">{{ entry.channels.join('+') }} · {{ entry.fusionScore }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-5 overflow-x-auto">
+                <table class="w-full min-w-[520px] text-left text-xs">
+                  <thead class="border-y border-slate-200 text-slate-500">
+                    <tr><th class="py-2">阶段</th><th>尝试</th><th>状态</th><th>耗时</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr v-for="stage in stockTrace.stages" :key="`${stage.stage}-${stage.attemptNo}-${stage.createdAt}`">
+                      <td class="py-2 font-medium text-slate-800">{{ stage.stage }}</td>
+                      <td>{{ stage.attemptNo }}</td>
+                      <td>{{ stage.status }}</td>
+                      <td>{{ stage.durationMs }} ms</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
         </div>
@@ -946,6 +1008,7 @@ import {
     streamStockReport,
     saveStockFeedback,
     getStockReplay,
+    getStockTrace,
     clearContext,
     listTasks,
     getTask,
@@ -1006,6 +1069,7 @@ const financialEvaluation = ref(null);
 const financialProviderStages = ref([]);
 const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
+const stockTrace = ref(null);
 const isLoading = ref(false);
 const currentStep = ref('idle');
 const completedSteps = ref([]);
@@ -1634,6 +1698,7 @@ const startStockResearch = async () => {
     financialEvaluation.value = null;
     financialProviderStages.value = [];
     stockReplay.value = null;
+    stockTrace.value = null;
     logs.value.push(`[初始化] 证券代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
@@ -1745,9 +1810,13 @@ const submitStockFeedback = async (feedbackType) => {
 const loadStockReplay = async () => {
     if (!latestStockTaskId.value) return;
     try {
-        const replay = await getStockReplay(latestStockTaskId.value);
-        stockReplay.value = JSON.stringify(replay, null, 2);
-        logs.value.push('[回放] 已加载本次 snapshot + evidence + metric。');
+        const [replay, trace] = await Promise.all([
+            getStockReplay(latestStockTaskId.value),
+            getStockTrace(latestStockTaskId.value)
+        ]);
+        stockReplay.value = replay;
+        stockTrace.value = trace;
+        logs.value.push('[回放] 已加载本次快照、证据、指标与可信度轨迹。');
         scrollToBottom();
     } catch (error) {
         triggerWarning(error.message);

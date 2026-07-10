@@ -134,6 +134,8 @@ public class TaskQueryService {
                 log.outputSnapshot(),
                 log.status(),
                 log.errorMessage(),
+                log.attemptNo(),
+                log.durationMs(),
                 log.createdAt()
         );
     }

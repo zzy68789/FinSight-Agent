@@ -40,11 +40,18 @@ public class HybridRagRetriever {
     }
 
     public List<RagDocument> retrieve(String query, int topK) {
+        return retrieveWithTrace(query, topK).documents();
+    }
+
+    public RagRetrievalResult retrieveWithTrace(String query, int topK) {
+        long startedAt = System.nanoTime();
         if (query == null || query.isBlank() || topK <= 0) {
-            return List.of();
+            return RagRetrievalResult.empty(query, relevanceThreshold, elapsedMs(startedAt));
         }
         int candidateLimit = Math.max(topK * 2, topK);
-        return merge(bm25(query, candidateLimit), vectorDocumentStore.query(query, candidateLimit), topK);
+        List<RagDocument> keywordCandidates = bm25(query, candidateLimit);
+        List<RagDocument> vectorCandidates = vectorDocumentStore.query(query, candidateLimit);
+        return mergeWithTrace(query, keywordCandidates, vectorCandidates, topK, startedAt);
     }
 
     public void clear() {
@@ -73,7 +80,6 @@ public class HybridRagRetriever {
         double maxScore = scoredChunks.stream().mapToDouble(ScoredChunk::score).max().orElse(1.0d);
         return scoredChunks.stream()
                 .map(scored -> new RagDocument(scored.chunk().source(), scored.chunk().content(), round(scored.score() / maxScore)))
-                .filter(doc -> doc.score() >= relevanceThreshold)
                 .sorted(Comparator.comparingDouble(RagDocument::score).reversed())
                 .limit(topK)
                 .toList();
@@ -119,28 +125,63 @@ public class HybridRagRetriever {
         return df;
     }
 
-    private List<RagDocument> merge(List<RagDocument> bm25Results, List<RagDocument> vectorResults, int topK) {
-        Map<String, RagDocument> merged = new LinkedHashMap<>();
-        for (RagDocument doc : bm25Results) {
-            putBest(merged, doc);
+    private RagRetrievalResult mergeWithTrace(
+            String query,
+            List<RagDocument> keywordCandidates,
+            List<RagDocument> vectorCandidates,
+            int topK,
+            long startedAt
+    ) {
+        Map<String, MutableTrace> candidates = new LinkedHashMap<>();
+        for (RagDocument document : keywordCandidates) {
+            candidates.computeIfAbsent(normalizeKey(document), key -> new MutableTrace(document))
+                    .keywordScore = Math.max(document.score(), candidates.get(normalizeKey(document)).keywordScore);
         }
-        for (RagDocument doc : vectorResults) {
-            if (doc.score() >= relevanceThreshold) {
-                putBest(merged, doc);
-            }
+        for (RagDocument document : vectorCandidates) {
+            candidates.computeIfAbsent(normalizeKey(document), key -> new MutableTrace(document))
+                    .vectorScore = Math.max(document.score(), candidates.get(normalizeKey(document)).vectorScore);
         }
-        return merged.values().stream()
-                .sorted(Comparator.comparingDouble(RagDocument::score).reversed())
+
+        List<MutableTrace> accepted = candidates.values().stream()
+                .peek(trace -> trace.fusionScore = Math.max(trace.keywordScore, trace.vectorScore))
+                .filter(trace -> trace.fusionScore >= relevanceThreshold)
+                .sorted(Comparator.comparingDouble(MutableTrace::fusionScore).reversed())
                 .limit(topK)
                 .toList();
-    }
-
-    private void putBest(Map<String, RagDocument> merged, RagDocument doc) {
-        String key = normalizeKey(doc);
-        RagDocument existing = merged.get(key);
-        if (existing == null || doc.score() > existing.score()) {
-            merged.put(key, doc);
+        List<RagRetrievalTraceEntry> entries = new ArrayList<>(accepted.size());
+        List<RagDocument> documents = new ArrayList<>(accepted.size());
+        for (int index = 0; index < accepted.size(); index++) {
+            MutableTrace trace = accepted.get(index);
+            List<String> channels = new ArrayList<>(2);
+            if (trace.keywordScore > 0) {
+                channels.add("keyword");
+            }
+            if (trace.vectorScore > 0) {
+                channels.add("vector");
+            }
+            documents.add(new RagDocument(trace.document.source(), trace.document.content(), round(trace.fusionScore)));
+            entries.add(new RagRetrievalTraceEntry(
+                    trace.document.source(),
+                    trace.document.content(),
+                    round(trace.keywordScore),
+                    round(trace.vectorScore),
+                    round(trace.fusionScore),
+                    index + 1,
+                    channels
+            ));
         }
+        return new RagRetrievalResult(
+                query,
+                documents,
+                entries,
+                candidates.size(),
+                entries.size(),
+                Math.max(0, candidates.size() - entries.size()),
+                keywordCandidates.size(),
+                vectorCandidates.size(),
+                relevanceThreshold,
+                elapsedMs(startedAt)
+        );
     }
 
     private String normalizeKey(RagDocument doc) {
@@ -167,6 +208,25 @@ public class HybridRagRetriever {
         return Math.round(value * 1_000_000d) / 1_000_000d;
     }
 
+    private long elapsedMs(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
+    }
+
     private record ScoredChunk(RagDocumentChunk chunk, double score) {
+    }
+
+    private static final class MutableTrace {
+        private final RagDocument document;
+        private double keywordScore;
+        private double vectorScore;
+        private double fusionScore;
+
+        private MutableTrace(RagDocument document) {
+            this.document = document;
+        }
+
+        private double fusionScore() {
+            return fusionScore;
+        }
     }
 }

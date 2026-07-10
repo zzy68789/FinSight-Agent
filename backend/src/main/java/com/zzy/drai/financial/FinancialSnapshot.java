@@ -1,5 +1,7 @@
 package com.zzy.drai.financial;
 
+import com.zzy.drai.rag.RagRetrievalResult;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -9,11 +11,24 @@ public record FinancialSnapshot(
         String searchMode,
         List<FinancialEvidenceItem> evidenceItems,
         List<FinancialAgentStageResult> stageResults,
+        List<RagRetrievalResult> retrievalResults,
         LocalDateTime createdAt
 ) {
     public FinancialSnapshot {
         evidenceItems = evidenceItems == null ? List.of() : List.copyOf(evidenceItems);
         stageResults = stageResults == null ? List.of() : List.copyOf(stageResults);
+        retrievalResults = retrievalResults == null ? List.of() : List.copyOf(retrievalResults);
+    }
+
+    public FinancialSnapshot(
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode,
+            List<FinancialEvidenceItem> evidenceItems,
+            List<FinancialAgentStageResult> stageResults,
+            LocalDateTime createdAt
+    ) {
+        this(subject, reportPeriod, searchMode, evidenceItems, stageResults, List.of(), createdAt);
     }
 
     public FinancialSnapshot(
@@ -23,6 +38,6 @@ public record FinancialSnapshot(
             List<FinancialEvidenceItem> evidenceItems,
             LocalDateTime createdAt
     ) {
-        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), createdAt);
+        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), List.of(), createdAt);
     }
 }

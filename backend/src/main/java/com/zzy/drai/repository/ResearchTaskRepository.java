@@ -1,6 +1,7 @@
 package com.zzy.drai.repository;
 
 import com.zzy.drai.domain.ResearchTaskRecord;
+import com.zzy.drai.domain.WorkflowTaskExecutionRecord;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -27,6 +28,20 @@ public class ResearchTaskRepository {
             rs.getObject("created_at", LocalDateTime.class),
             rs.getObject("updated_at", LocalDateTime.class)
     );
+    private static final RowMapper<WorkflowTaskExecutionRecord> EXECUTION_MAPPER = (rs, rowNum) -> new WorkflowTaskExecutionRecord(
+            rs.getLong("id"),
+            rs.getLong("owner_id"),
+            rs.getString("thread_id"),
+            rs.getString("status"),
+            rs.getString("stage"),
+            rs.getInt("attempt_count"),
+            rs.getString("request_payload"),
+            rs.getString("last_error"),
+            rs.getObject("heartbeat_at", LocalDateTime.class),
+            rs.getString("lease_owner"),
+            rs.getObject("lease_until", LocalDateTime.class),
+            rs.getObject("updated_at", LocalDateTime.class)
+    );
 
     private final JdbcClient jdbcClient;
     private final JdbcTemplate jdbcTemplate;
@@ -37,20 +52,28 @@ public class ResearchTaskRepository {
     }
 
     public long create(long ownerId, String threadId, String query, String searchMode) {
+        return create(ownerId, threadId, query, searchMode, null);
+    }
+
+    public long create(long ownerId, String threadId, String query, String searchMode, String requestPayload) {
         LocalDateTime now = LocalDateTime.now();
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO research_task(owner_id, thread_id, query, search_mode, status, revision_number, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+                    INSERT INTO research_task(
+                      owner_id, thread_id, query, search_mode, status, revision_number,
+                      stage, attempt_count, request_payload, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, 0, 'CREATED', 0, ?, ?, ?)
                     """, Statement.RETURN_GENERATED_KEYS);
             statement.setLong(1, ownerId);
             statement.setString(2, threadId);
             statement.setString(3, query);
             statement.setString(4, searchMode);
             statement.setString(5, "CREATED");
-            statement.setObject(6, now);
+            statement.setString(6, requestPayload);
             statement.setObject(7, now);
+            statement.setObject(8, now);
             return statement;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -64,12 +87,127 @@ public class ResearchTaskRepository {
         updateStatus(taskId, "RUNNING");
     }
 
+    public boolean startAttempt(long taskId, String leaseOwner, LocalDateTime leaseUntil) {
+        LocalDateTime now = LocalDateTime.now();
+        return jdbcClient.sql("""
+                        UPDATE research_task
+                        SET status = 'RUNNING',
+                            attempt_count = attempt_count + 1,
+                            heartbeat_at = :now,
+                            lease_owner = :leaseOwner,
+                            lease_until = :leaseUntil,
+                            last_error = NULL,
+                            updated_at = :now
+                        WHERE id = :id
+                          AND attempt_count < 3
+                          AND status IN ('CREATED', 'RETRYING')
+                          AND (lease_until IS NULL OR lease_until < :now OR lease_owner = :leaseOwner)
+                        """)
+                .param("now", now)
+                .param("leaseOwner", leaseOwner)
+                .param("leaseUntil", leaseUntil)
+                .param("id", taskId)
+                .update() == 1;
+    }
+
+    public void updateStage(long taskId, String stage, String leaseOwner, LocalDateTime leaseUntil) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcClient.sql("""
+                        UPDATE research_task
+                        SET stage = :stage, heartbeat_at = :now, lease_until = :leaseUntil, updated_at = :now
+                        WHERE id = :id AND status = 'RUNNING' AND lease_owner = :leaseOwner
+                        """)
+                .param("stage", stage)
+                .param("now", now)
+                .param("leaseUntil", leaseUntil)
+                .param("id", taskId)
+                .param("leaseOwner", leaseOwner)
+                .update();
+    }
+
     public void markCompleted(long taskId) {
-        updateStatus(taskId, "COMPLETED");
+        finish(taskId, "COMPLETED", "COMPLETED", null);
     }
 
     public void markFailed(long taskId) {
-        updateStatus(taskId, "FAILED");
+        markFailed(taskId, null);
+    }
+
+    public void markFailed(long taskId, String error) {
+        finish(taskId, "FAILED", "FAILED", error);
+    }
+
+    public boolean markRetrying(long taskId, String expectedStatus) {
+        return jdbcClient.sql("""
+                        UPDATE research_task
+                        SET status = 'RETRYING', stage = 'RETRYING', lease_owner = NULL, lease_until = NULL, updated_at = :now
+                        WHERE id = :id AND status = :expectedStatus AND attempt_count < 3
+                        """)
+                .param("now", LocalDateTime.now())
+                .param("id", taskId)
+                .param("expectedStatus", expectedStatus)
+                .update() == 1;
+    }
+
+    public boolean markStaleRetrying(long taskId, LocalDateTime heartbeatBefore) {
+        return jdbcClient.sql("""
+                        UPDATE research_task
+                        SET status = 'RETRYING', stage = 'RETRYING', lease_owner = NULL, lease_until = NULL, updated_at = :now
+                        WHERE id = :id
+                          AND status = 'RUNNING'
+                          AND attempt_count < 3
+                          AND COALESCE(heartbeat_at, updated_at) < :heartbeatBefore
+                        """)
+                .param("now", LocalDateTime.now())
+                .param("id", taskId)
+                .param("heartbeatBefore", heartbeatBefore)
+                .update() == 1;
+    }
+
+    public Optional<WorkflowTaskExecutionRecord> findExecution(long ownerId, long taskId) {
+        return jdbcTemplate.query("""
+                        SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
+                               last_error, heartbeat_at, lease_owner, lease_until, updated_at
+                        FROM research_task
+                        WHERE owner_id = ? AND id = ?
+                        """,
+                EXECUTION_MAPPER,
+                ownerId,
+                taskId
+        ).stream().findFirst();
+    }
+
+    public List<WorkflowTaskExecutionRecord> findStaleRunning(LocalDateTime heartbeatBefore, int limit) {
+        return jdbcTemplate.query("""
+                        SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
+                               last_error, heartbeat_at, lease_owner, lease_until, updated_at
+                        FROM research_task
+                        WHERE status = 'RUNNING'
+                          AND search_mode LIKE 'stock-%'
+                          AND COALESCE(heartbeat_at, updated_at) < ?
+                        ORDER BY updated_at ASC
+                        LIMIT ?
+                        """,
+                EXECUTION_MAPPER,
+                heartbeatBefore,
+                Math.max(1, limit)
+        );
+    }
+
+    private void finish(long taskId, String status, String stage, String error) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcClient.sql("""
+                        UPDATE research_task
+                        SET status = :status, stage = :stage, last_error = :error,
+                            heartbeat_at = :now, lease_owner = NULL, lease_until = NULL, updated_at = :now
+                        WHERE id = :id
+                        """)
+                .param("status", status)
+                .param("stage", stage)
+                .param("error", error)
+                .param("now", now)
+                .param("id", taskId)
+                .update();
     }
 
     private void updateStatus(long taskId, String status) {

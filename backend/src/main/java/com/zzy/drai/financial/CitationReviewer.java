@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 @Component
 public class CitationReviewer {
+    public static final String POLICY_VERSION = "citation-policy-v1";
     private static final BigDecimal ABSOLUTE_TOLERANCE = new BigDecimal("0.01");
     private static final BigDecimal RELATIVE_TOLERANCE = new BigDecimal("0.005");
 

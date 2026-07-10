@@ -25,6 +25,7 @@ public class FinancialSnapshotBuilder {
     public FinancialSnapshot build(StockSubject subject, String reportPeriod, String searchMode) {
         List<FinancialEvidenceItem> evidenceItems = new ArrayList<>();
         List<FinancialAgentStageResult> stageResults = new ArrayList<>();
+        List<com.zzy.drai.rag.RagRetrievalResult> retrievalResults = new ArrayList<>();
         List<CompletableFuture<ProviderResult>> futures = providers.stream()
                 .map(provider -> CompletableFuture.supplyAsync(
                         () -> collectProvider(provider, subject, reportPeriod, searchMode),
@@ -36,19 +37,24 @@ public class FinancialSnapshotBuilder {
             ProviderResult result = future.join();
             evidenceItems.addAll(result.evidenceItems());
             stageResults.add(result.stageResult());
+            if (result.retrievalResult() != null) {
+                retrievalResults.add(result.retrievalResult());
+            }
         }
-        return new FinancialSnapshot(subject, reportPeriod, searchMode, evidenceItems, stageResults, LocalDateTime.now());
+        return new FinancialSnapshot(subject, reportPeriod, searchMode, evidenceItems, stageResults, retrievalResults, LocalDateTime.now());
     }
 
     private ProviderResult collectProvider(FinancialDataProvider provider, StockSubject subject, String reportPeriod, String searchMode) {
         long startedAt = System.currentTimeMillis();
         try {
-            List<FinancialEvidenceItem> items = provider.collect(subject, reportPeriod, searchMode);
+            FinancialDataCollection collection = provider.collectWithTrace(subject, reportPeriod, searchMode);
+            List<FinancialEvidenceItem> items = collection == null ? List.of() : collection.evidenceItems();
             items = items == null ? List.of() : items;
             long durationMs = Math.max(0, System.currentTimeMillis() - startedAt);
             return new ProviderResult(
                     items,
-                    new FinancialAgentStageResult(provider.name(), "SUCCESS", durationMs, items.size(), "")
+                    new FinancialAgentStageResult(provider.name(), "SUCCESS", durationMs, items.size(), ""),
+                    collection == null ? null : collection.retrievalResult()
             );
         } catch (RuntimeException e) {
             long durationMs = Math.max(0, System.currentTimeMillis() - startedAt);
@@ -68,11 +74,16 @@ public class FinancialSnapshotBuilder {
             ));
             return new ProviderResult(
                     fallback,
-                    new FinancialAgentStageResult(provider.name(), "FAILED", durationMs, 0, e.getMessage())
+                    new FinancialAgentStageResult(provider.name(), "FAILED", durationMs, 0, e.getMessage()),
+                    null
             );
         }
     }
 
-    private record ProviderResult(List<FinancialEvidenceItem> evidenceItems, FinancialAgentStageResult stageResult) {
+    private record ProviderResult(
+            List<FinancialEvidenceItem> evidenceItems,
+            FinancialAgentStageResult stageResult,
+            com.zzy.drai.rag.RagRetrievalResult retrievalResult
+    ) {
     }
 }

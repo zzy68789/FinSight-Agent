@@ -102,6 +102,8 @@ public class AdminService {
                         log.outputSnapshot(),
                         log.status(),
                         log.errorMessage(),
+                        log.attemptNo(),
+                        log.durationMs(),
                         log.createdAt()
                 ))
                 .toList();

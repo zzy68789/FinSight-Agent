@@ -6,6 +6,7 @@ import com.zzy.drai.financial.StockBadCaseFeedbackRequest;
 import com.zzy.drai.financial.StockReportReplayResponse;
 import com.zzy.drai.financial.StockReportRequest;
 import com.zzy.drai.financial.StockReportService;
+import com.zzy.drai.financial.StockReportTraceResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,5 +46,16 @@ public class StockReportController {
     @GetMapping("/stock-reports/{taskId}/replay")
     public ApiResponse<StockReportReplayResponse> replay(@PathVariable long taskId) {
         return ApiResponse.success(stockReportService.replay(userContext.currentUserId(), taskId));
+    }
+
+    @PostMapping("/stock-reports/{taskId}/retry")
+    public ApiResponse<Void> retry(@PathVariable long taskId) {
+        stockReportService.retry(userContext.currentUserId(), taskId);
+        return ApiResponse.success(null);
+    }
+
+    @GetMapping("/stock-reports/{taskId}/trace")
+    public ApiResponse<StockReportTraceResponse> trace(@PathVariable long taskId) {
+        return ApiResponse.success(stockReportService.trace(userContext.currentUserId(), taskId));
     }
 }

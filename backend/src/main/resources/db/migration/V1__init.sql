@@ -21,18 +21,10 @@ CREATE TABLE IF NOT EXISTS research_task (
   search_mode VARCHAR(32) NOT NULL COMMENT '调研工作流使用的搜索模式',
   status VARCHAR(32) NOT NULL COMMENT '任务执行状态',
   revision_number INT NOT NULL DEFAULT 0 COMMENT '当前评审修订次数',
-  stage VARCHAR(64) NOT NULL DEFAULT 'CREATED' COMMENT '金融工作流当前持久化阶段',
-  attempt_count INT NOT NULL DEFAULT 0 COMMENT '工作流执行尝试次数',
-  request_payload LONGTEXT COMMENT '可恢复执行所需的请求JSON',
-  last_error LONGTEXT COMMENT '最近一次执行失败原因',
-  heartbeat_at DATETIME COMMENT '工作流最近心跳时间',
-  lease_owner VARCHAR(128) COMMENT '当前任务租约持有者',
-  lease_until DATETIME COMMENT '当前任务租约到期时间',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   updated_at DATETIME NOT NULL COMMENT '记录最后更新时间',
   INDEX idx_research_task_owner_id (owner_id),
-  INDEX idx_research_task_thread_id (thread_id),
-  INDEX idx_research_task_recovery (status, heartbeat_at)
+  INDEX idx_research_task_thread_id (thread_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_step_log (
@@ -43,8 +35,6 @@ CREATE TABLE IF NOT EXISTS agent_step_log (
   output_snapshot LONGTEXT COMMENT '序列化后的步骤输出快照',
   status VARCHAR(32) NOT NULL COMMENT '步骤执行状态',
   error_message LONGTEXT COMMENT '步骤失败时的错误信息',
-  attempt_no INT NOT NULL DEFAULT 1 COMMENT '当前步骤执行尝试次数',
-  duration_ms BIGINT NOT NULL DEFAULT 0 COMMENT '步骤执行耗时毫秒数',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   INDEX idx_agent_step_log_task_id (task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -58,10 +48,6 @@ CREATE TABLE IF NOT EXISTS report (
   version INT NOT NULL DEFAULT 1 COMMENT '同一线程下的报告版本号',
   review_status VARCHAR(32) COMMENT '报告评审结果',
   critique LONGTEXT COMMENT '评审意见或修订反馈',
-  snapshot_id BIGINT COMMENT '关联的金融数据快照ID',
-  data_snapshot_hash CHAR(64) COMMENT '生成报告使用的数据快照SHA-256',
-  generation_context_hash CHAR(64) COMMENT '包含生成规则版本的上下文SHA-256',
-  reused_from_report_id BIGINT COMMENT '缓存复用来源报告ID',
   favorite TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否标记为收藏',
   indexed_at DATETIME COMMENT '报告被索引用于检索的时间',
   deleted_at DATETIME COMMENT '软删除时间',
@@ -69,8 +55,7 @@ CREATE TABLE IF NOT EXISTS report (
   INDEX idx_report_owner_id (owner_id),
   INDEX idx_report_thread_id (thread_id),
   INDEX idx_report_favorite (favorite),
-  INDEX idx_report_deleted_at (deleted_at),
-  INDEX idx_report_context_hash (owner_id, generation_context_hash)
+  INDEX idx_report_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS checkpoint (
@@ -107,14 +92,12 @@ CREATE TABLE IF NOT EXISTS stock_analysis_snapshot (
   report_period VARCHAR(32) NOT NULL COMMENT '报告期口径',
   search_mode VARCHAR(32) NOT NULL COMMENT '数据搜索模式',
   snapshot_json LONGTEXT NOT NULL COMMENT '本次报告生成使用的数据快照JSON',
-  data_snapshot_hash CHAR(64) NOT NULL DEFAULT '' COMMENT '稳定业务字段生成的数据快照SHA-256',
   status VARCHAR(32) NOT NULL COMMENT '快照采集状态',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   updated_at DATETIME NOT NULL COMMENT '记录最后更新时间',
   INDEX idx_stock_snapshot_owner_task (owner_id, task_id),
   INDEX idx_stock_snapshot_ticker (ticker, exchange_code),
-  INDEX idx_stock_snapshot_thread (thread_id),
-  INDEX idx_stock_snapshot_hash (owner_id, ticker, report_period, data_snapshot_hash)
+  INDEX idx_stock_snapshot_thread (thread_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS stock_evidence_item (
@@ -145,7 +128,6 @@ CREATE TABLE IF NOT EXISTS stock_metric_result (
   task_id BIGINT NOT NULL COMMENT '关联的股票分析任务ID',
   metric_name VARCHAR(128) NOT NULL COMMENT '财务指标名称',
   formula VARCHAR(512) NOT NULL COMMENT '指标计算公式说明',
-  formula_version VARCHAR(32) NOT NULL DEFAULT 'v1' COMMENT '指标计算公式版本',
   metric_value DECIMAL(24,6) COMMENT '指标计算结果数值',
   display_value VARCHAR(64) NOT NULL COMMENT '报告展示值',
   status VARCHAR(32) NOT NULL COMMENT '指标计算状态',
@@ -168,3 +150,4 @@ CREATE TABLE IF NOT EXISTS stock_bad_case_feedback (
   INDEX idx_stock_feedback_owner_task (owner_id, task_id),
   INDEX idx_stock_feedback_type (feedback_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

@@ -7,6 +7,7 @@ import java.util.StringJoiner;
 
 @Component
 public class InvestmentReportWriter {
+    public static final String WRITER_VERSION = "investment-report-writer-v1";
 
     public String write(
             FinancialSnapshot snapshot,

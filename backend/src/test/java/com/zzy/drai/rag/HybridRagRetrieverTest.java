@@ -49,6 +49,24 @@ class HybridRagRetrieverTest {
                 .containsExactly("strong.pdf");
     }
 
+    @Test
+    void exposesChannelScoresAndFilteringStatistics() {
+        StubVectorDocumentStore vectorStore = new StubVectorDocumentStore(List.of(
+                new RagDocument("shared.pdf", "agent workflow reviewer", 0.70),
+                new RagDocument("weak.pdf", "weak", 0.10)
+        ));
+        HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
+        retriever.index(List.of(new RagDocumentChunk("shared.pdf", 0, "agent workflow reviewer")));
+
+        RagRetrievalResult result = retriever.retrieveWithTrace("agent workflow", 5);
+
+        assertThat(result.candidateCount()).isEqualTo(2);
+        assertThat(result.acceptedCount()).isEqualTo(1);
+        assertThat(result.filteredCount()).isEqualTo(1);
+        assertThat(result.traceEntries().get(0).channels()).containsExactly("keyword", "vector");
+        assertThat(result.traceEntries().get(0).fusionScore()).isGreaterThanOrEqualTo(0.70);
+    }
+
     private static class StubVectorDocumentStore implements VectorDocumentStore {
         private final List<RagDocument> queryResults;
 

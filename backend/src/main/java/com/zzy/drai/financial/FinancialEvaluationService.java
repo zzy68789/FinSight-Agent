@@ -14,6 +14,7 @@ import java.util.Optional;
 
 @Component
 public class FinancialEvaluationService {
+    public static final String POLICY_VERSION = "financial-evaluation-v2";
     private static final String DEFAULT_EVAL_SET = "financial-eval-set.json";
     private static final BigDecimal PASS_THRESHOLD = new BigDecimal("0.80");
 
@@ -52,7 +53,8 @@ public class FinancialEvaluationService {
                 score("contradiction_rate", contradictionScore(text), BigDecimal.ONE, "不得同时表达数据缺失和确定性投资结论"),
                 score("numeric_consistency_rate", numericConsistencyScore(text, metricResults), new BigDecimal("0.95"), "报告中的指标展示值需和确定性指标结果一致"),
                 score("citation_hit_rate", citationHitScore(text, evidenceItems), PASS_THRESHOLD, "报告需包含引用与数据快照并命中有效证据"),
-                score("keypoint_coverage", keypointCoverageScore(text, evalCase), PASS_THRESHOLD, "报告需覆盖评测样例要求的关键点")
+                score("keypoint_coverage", keypointCoverageScore(text, evalCase), PASS_THRESHOLD, "报告需覆盖评测样例要求的关键点"),
+                score("evidence_effective_rate", evidenceEffectiveScore(evidenceItems), PASS_THRESHOLD, "有效证据占比不得低于阈值")
         );
 
         BigDecimal overall = scores.stream()
@@ -149,6 +151,14 @@ public class FinancialEvaluationService {
                 .filter(keypoint -> report.contains(keypoint))
                 .count();
         return ratio(hits, keypoints.size());
+    }
+
+    private BigDecimal evidenceEffectiveScore(List<FinancialEvidenceItem> evidenceItems) {
+        if (evidenceItems.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        long effective = evidenceItems.stream().filter(FinancialEvidenceItem::effective).count();
+        return ratio(effective, evidenceItems.size());
     }
 
     private BigDecimal ratio(long numerator, long denominator) {

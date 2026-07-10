@@ -21,6 +21,8 @@ public class AgentStepLogRepository {
             rs.getString("output_snapshot"),
             rs.getString("status"),
             rs.getString("error_message"),
+            rs.getInt("attempt_no"),
+            rs.getLong("duration_ms"),
             rs.getObject("created_at", LocalDateTime.class)
     );
 
@@ -35,21 +37,36 @@ public class AgentStepLogRepository {
     }
 
     public void save(long taskId, String stepName, Object outputSnapshot) {
+        save(taskId, stepName, outputSnapshot, 1, 0L);
+    }
+
+    public void save(long taskId, String stepName, Object outputSnapshot, int attemptNo, long durationMs) {
         jdbcClient.sql("""
-                        INSERT INTO agent_step_log(task_id, step_name, input_snapshot, output_snapshot, status, error_message, created_at)
-                        VALUES (:taskId, :stepName, NULL, :outputSnapshot, 'SUCCESS', NULL, :createdAt)
+                        INSERT INTO agent_step_log(
+                          task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+                          attempt_no, duration_ms, created_at
+                        )
+                        VALUES (
+                          :taskId, :stepName, NULL, :outputSnapshot, 'SUCCESS', NULL,
+                          :attemptNo, :durationMs, :createdAt
+                        )
                         """)
                 .param("taskId", taskId)
                 .param("stepName", stepName)
                 .param("outputSnapshot", toJson(outputSnapshot))
+                .param("attemptNo", Math.max(1, attemptNo))
+                .param("durationMs", Math.max(0L, durationMs))
                 .param("createdAt", LocalDateTime.now())
                 .update();
     }
 
     public void saveError(long taskId, String stepName, Throwable throwable) {
         jdbcClient.sql("""
-                        INSERT INTO agent_step_log(task_id, step_name, input_snapshot, output_snapshot, status, error_message, created_at)
-                        VALUES (:taskId, :stepName, NULL, NULL, 'FAILED', :errorMessage, :createdAt)
+                        INSERT INTO agent_step_log(
+                          task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+                          attempt_no, duration_ms, created_at
+                        )
+                        VALUES (:taskId, :stepName, NULL, NULL, 'FAILED', :errorMessage, 1, 0, :createdAt)
                         """)
                 .param("taskId", taskId)
                 .param("stepName", stepName)
@@ -60,7 +77,8 @@ public class AgentStepLogRepository {
 
     public List<AgentStepLogRecord> findByTaskId(long taskId) {
         return jdbcTemplate.query("""
-                        SELECT id, task_id, step_name, input_snapshot, output_snapshot, status, error_message, created_at
+                        SELECT id, task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+                               attempt_no, duration_ms, created_at
                         FROM agent_step_log
                         WHERE task_id = ?
                         ORDER BY id ASC

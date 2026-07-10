@@ -11,14 +11,23 @@ import java.util.Map;
 @Component
 public class FinancialMetricEngine {
     private static final int SCALE = 2;
+    private final MetricDefinitionCatalog catalog;
+
+    public FinancialMetricEngine() {
+        this(new MetricDefinitionCatalog());
+    }
+
+    public FinancialMetricEngine(MetricDefinitionCatalog catalog) {
+        this.catalog = catalog;
+    }
 
     public List<FinancialMetricResult> compute(FinancialSnapshot snapshot) {
         Map<String, FinancialEvidenceItem> inputs = indexInputs(snapshot);
         if (snapshot != null && snapshot.subject() != null && snapshot.subject().isEtf()) {
             return List.of(
-                    etfMetric("ETF收盘价", FinancialMetricInputNames.ETF_CLOSE, inputs, "ETF二级市场收盘价"),
-                    etfMetric("ETF涨跌幅", FinancialMetricInputNames.ETF_PCT_CHANGE, inputs, "ETF二级市场涨跌幅"),
-                    etfMetric("ETF成交额", FinancialMetricInputNames.ETF_AMOUNT, inputs, "ETF二级市场成交额")
+                    etfMetric("etf_close", inputs),
+                    etfMetric("etf_pct_change", inputs),
+                    etfMetric("etf_amount", inputs)
             );
         }
         return List.of(
@@ -31,25 +40,26 @@ public class FinancialMetricEngine {
         );
     }
 
-    private FinancialMetricResult etfMetric(String name, String inputName, Map<String, FinancialEvidenceItem> inputs, String formula) {
+    private FinancialMetricResult etfMetric(String code, Map<String, FinancialEvidenceItem> inputs) {
+        MetricDefinition definition = catalog.get(code);
+        String name = definition.displayName();
+        String inputName = definition.dependencies().get(0);
         FinancialEvidenceItem item = inputs.get(inputName);
         if (item == null || item.normalizedValue() == null) {
-            return new FinancialMetricResult(name, null, "数据缺失", formula, "MISSING_INPUT", "缺少输入：" + inputName, List.of(inputName));
+            return result(definition, null, "数据缺失", "MISSING_INPUT", "缺少输入：" + inputName);
         }
         BigDecimal value = item.normalizedValue();
         String display = value.setScale("ETF涨跌幅".equals(name) ? 2 : 3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
         if ("ETF涨跌幅".equals(name)) {
             display = display + "%";
         }
-        return new FinancialMetricResult(name, value, display, formula, "OK", "", List.of(inputName));
+        return result(definition, value, display, "OK", "");
     }
 
     private FinancialMetricResult revenueYoY(Map<String, FinancialEvidenceItem> inputs) {
         return ratio(
-                "营收同比",
-                List.of(FinancialMetricInputNames.OPERATING_REVENUE, FinancialMetricInputNames.OPERATING_REVENUE_PRIOR),
+                catalog.get("revenue_yoy"),
                 inputs,
-                "（本期营业收入 - 上年同期营业收入）/ 上年同期营业收入",
                 true,
                 values -> values.get(0).subtract(values.get(1)).divide(values.get(1), 8, RoundingMode.HALF_UP)
         );
@@ -58,19 +68,15 @@ public class FinancialMetricEngine {
     private FinancialMetricResult grossMargin(Map<String, FinancialEvidenceItem> inputs) {
         if (inputs.containsKey(FinancialMetricInputNames.GROSS_PROFIT)) {
             return ratio(
-                    "毛利率",
-                    List.of(FinancialMetricInputNames.GROSS_PROFIT, FinancialMetricInputNames.OPERATING_REVENUE),
+                    catalog.get("gross_margin_profit"),
                     inputs,
-                    "毛利 / 营业收入",
                     true,
                     values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
             );
         }
         return ratio(
-                "毛利率",
-                List.of(FinancialMetricInputNames.OPERATING_REVENUE, FinancialMetricInputNames.OPERATING_COST),
+                catalog.get("gross_margin_cost"),
                 inputs,
-                "（营业收入 - 营业成本）/ 营业收入",
                 true,
                 values -> values.get(0).subtract(values.get(1)).divide(values.get(0), 8, RoundingMode.HALF_UP)
         );
@@ -78,10 +84,8 @@ public class FinancialMetricEngine {
 
     private FinancialMetricResult netMargin(Map<String, FinancialEvidenceItem> inputs) {
         return ratio(
-                "净利率",
-                List.of(FinancialMetricInputNames.NET_PROFIT, FinancialMetricInputNames.OPERATING_REVENUE),
+                catalog.get("net_margin"),
                 inputs,
-                "净利润 / 营业收入",
                 true,
                 values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
         );
@@ -89,10 +93,8 @@ public class FinancialMetricEngine {
 
     private FinancialMetricResult roe(Map<String, FinancialEvidenceItem> inputs) {
         return ratio(
-                "ROE",
-                List.of(FinancialMetricInputNames.NET_PROFIT, FinancialMetricInputNames.AVERAGE_EQUITY),
+                catalog.get("roe"),
                 inputs,
-                "净利润 / 平均净资产",
                 true,
                 values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
         );
@@ -100,10 +102,8 @@ public class FinancialMetricEngine {
 
     private FinancialMetricResult debtRatio(Map<String, FinancialEvidenceItem> inputs) {
         return ratio(
-                "资产负债率",
-                List.of(FinancialMetricInputNames.TOTAL_LIABILITIES, FinancialMetricInputNames.TOTAL_ASSETS),
+                catalog.get("debt_ratio"),
                 inputs,
-                "总负债 / 总资产",
                 true,
                 values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
         );
@@ -111,44 +111,58 @@ public class FinancialMetricEngine {
 
     private FinancialMetricResult cashFlowToNetProfit(Map<String, FinancialEvidenceItem> inputs) {
         return ratio(
-                "经营现金流 / 净利润",
-                List.of(FinancialMetricInputNames.OPERATING_CASH_FLOW, FinancialMetricInputNames.NET_PROFIT),
+                catalog.get("cashflow_profit"),
                 inputs,
-                "经营活动现金流量净额 / 净利润",
                 false,
                 values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
         );
     }
 
     private FinancialMetricResult ratio(
-            String name,
-            List<String> required,
+            MetricDefinition definition,
             Map<String, FinancialEvidenceItem> inputs,
-            String formula,
             boolean percent,
             RatioFormula ratioFormula
     ) {
+        List<String> required = definition.dependencies();
         List<String> missing = required.stream()
                 .filter(key -> !inputs.containsKey(key) || inputs.get(key).normalizedValue() == null)
                 .toList();
         if (!missing.isEmpty()) {
-            return new FinancialMetricResult(name, null, "数据缺失", formula, "MISSING_INPUT", "缺少输入：" + String.join(", ", missing), required);
+            return result(definition, null, "数据缺失", "MISSING_INPUT", "缺少输入：" + String.join(", ", missing));
         }
         List<BigDecimal> values = required.stream().map(key -> inputs.get(key).normalizedValue()).toList();
         if (values.size() > 1 && BigDecimal.ZERO.compareTo(values.get(1)) == 0) {
-            return new FinancialMetricResult(name, null, "数据缺失", formula, "INVALID_DENOMINATOR", "分母为 0，无法计算", required);
+            return result(definition, null, "数据缺失", "INVALID_DENOMINATOR", "分母为 0，无法计算");
         }
         BigDecimal value = ratioFormula.compute(values);
         BigDecimal displayValue = percent ? value.multiply(BigDecimal.valueOf(100)) : value;
         displayValue = displayValue.setScale(SCALE, RoundingMode.HALF_UP);
-        return new FinancialMetricResult(
-                name,
+        return result(
+                definition,
                 displayValue,
                 percent ? displayValue.toPlainString() + "%" : displayValue.toPlainString(),
-                formula,
                 "OK",
-                "",
-                required
+                ""
+        );
+    }
+
+    private FinancialMetricResult result(
+            MetricDefinition definition,
+            BigDecimal value,
+            String displayValue,
+            String status,
+            String reason
+    ) {
+        return new FinancialMetricResult(
+                definition.displayName(),
+                value,
+                displayValue,
+                definition.formula(),
+                definition.formulaVersion(),
+                status,
+                reason,
+                definition.dependencies()
         );
     }
 

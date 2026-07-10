@@ -1,6 +1,7 @@
 package com.zzy.drai.service;
 
 import com.zzy.drai.repository.ReportRepository;
+import com.zzy.drai.domain.ReusableReportRecord;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -26,10 +27,34 @@ public class ReportService {
     }
 
     public void saveLatest(long ownerId, String threadId, long taskId, String report, String reviewStatus, String critique) {
+        saveLatest(ownerId, threadId, taskId, report, reviewStatus, critique, null, null, null, null);
+    }
+
+    public void saveLatest(
+            long ownerId,
+            String threadId,
+            long taskId,
+            String report,
+            String reviewStatus,
+            String critique,
+            Long snapshotId,
+            String dataSnapshotHash,
+            String generationContextHash,
+            Long reusedFromReportId
+    ) {
         if (threadId != null && report != null && !report.isBlank()) {
             latestReportByThread.put(cacheKey(ownerId, threadId), report);
-            reportRepository.save(ownerId, taskId, threadId, report, reviewStatus, critique);
+            reportRepository.save(ownerId, taskId, threadId, report, reviewStatus, critique,
+                    snapshotId, dataSnapshotHash, generationContextHash, reusedFromReportId);
         }
+    }
+
+    public Optional<ReusableReportRecord> findReusable(long ownerId, String generationContextHash) {
+        return reportRepository.findReusable(ownerId, generationContextHash);
+    }
+
+    public Optional<ReusableReportRecord> findByTask(long ownerId, long taskId) {
+        return reportRepository.findByTask(ownerId, taskId);
     }
 
     private String cacheKey(long ownerId, String threadId) {

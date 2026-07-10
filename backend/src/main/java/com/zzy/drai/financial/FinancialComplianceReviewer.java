@@ -10,6 +10,7 @@ import java.util.Locale;
 
 @Component
 public class FinancialComplianceReviewer {
+    public static final String POLICY_VERSION = "compliance-policy-v1";
 
     public FinancialComplianceReviewResult review(String report, CitationReviewResult citationReview) {
         List<FinancialComplianceIssue> issues = new ArrayList<>();

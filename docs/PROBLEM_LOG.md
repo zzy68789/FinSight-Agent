@@ -289,3 +289,21 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 ### 结果
 
 DRAI 和 `cc-switch` 的全局 OpenAI 配置解耦。目标测试先因旧配置失败，改名后通过；`ApplicationSmokeTest` 和后端全量 `mvn.cmd test` 也通过。用户只需要在本项目启动窗口配置 `DRAI_LLM_API_KEY`。
+
+## 017. SSE 客户端断开不应决定后台任务成败
+
+### 发生了什么
+
+股票报告的步骤持久化、运行状态和 SSE 推送写在同一个 `send` 方法中。浏览器关闭、网络切换或页面刷新导致 `SseEmitter.send` 抛出异常时，完整工作流会进入失败分支。
+
+### 原因
+
+系统把 SSE 当成工作流执行依赖，而不是可随时断开的观察通道；编排逻辑又直接放在异步 Service 中，难以单独验证重写、失败和断连分支。
+
+### 解决方式
+
+抽出同步可测试的 `StockReportRunner`，先持久化任务阶段、步骤日志和 checkpoint，再尽力通知 `StockReportProgressListener`。监听器异常被隔离，后台任务继续执行；同时增加 `StockReportServiceTest` 覆盖客户端断开场景。
+
+### 结果
+
+SSE 断开不再把报告任务误标为失败，恢复调度器也能复用同一 Runner。2026-07-10 后端全量 90 个测试通过，前端生产构建通过。

@@ -8,11 +8,25 @@ public record FinancialMetricResult(
         BigDecimal value,
         String displayValue,
         String formula,
+        String formulaVersion,
         String status,
         String reason,
         List<String> evidenceRefs
 ) {
     public FinancialMetricResult {
+        formulaVersion = formulaVersion == null || formulaVersion.isBlank() ? "v1" : formulaVersion;
         evidenceRefs = evidenceRefs == null ? List.of() : List.copyOf(evidenceRefs);
+    }
+
+    public FinancialMetricResult(
+            String metricName,
+            BigDecimal value,
+            String displayValue,
+            String formula,
+            String status,
+            String reason,
+            List<String> evidenceRefs
+    ) {
+        this(metricName, value, displayValue, formula, "v1", status, reason, evidenceRefs);
     }
 }

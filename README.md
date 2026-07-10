@@ -12,6 +12,9 @@ FinSight Agent 是从 DRAI 重构出来的金融投研专用版本，基于 **Sp
 - **A股/ETF 解析**：普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`；常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
 - **金融数据快照**：通过 `FinancialDataProvider` 扩展点聚合上传报告、本地主档、Tavily fallback 和 TuShare Pro 数据源。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
+- **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，相同上下文只复用同一用户下已通过评审的报告。
+- **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
+- **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **风险评分**：`FinancialRiskScoringService` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 检查证据数量、报告期、指标引用和指标值展示；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
 - **自动评测门控**：`FinancialEvaluationService` 加载 `financial-eval-set.json`，对默认样例输出 claim/citation/numeric/keypoint 评测结果。
@@ -100,7 +103,7 @@ FinSight-Agent/
 │       └── resources/
 │           ├── application.yml
 │           ├── financial-eval-set.json
-│           └── db/schema.sql
+│           └── db/                # Flyway 迁移、完整 schema 与手动升级脚本
 ├── frontend/                      # Vue 3 前端
 ├── docs/                          # 路线图、已实现能力、遗留问题、踩坑日志
 └── README.md
@@ -127,14 +130,9 @@ $env:DRAI_DATASOURCE_PASSWORD="your_password"
 $env:DRAI_DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
 ```
 
-新库会在 Spring Boot 启动时按 `backend/src/main/resources/db/schema.sql` 初始化。旧库请按需手动执行：
+数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
 
-```text
-backend/src/main/resources/db/upgrade-user-auth.sql
-backend/src/main/resources/db/upgrade-report-library.sql
-backend/src/main/resources/db/upgrade-admin-console.sql
-backend/src/main/resources/db/upgrade-financial-report.sql
-```
+如需临时关闭自动迁移，可设置 `DRAI_FLYWAY_ENABLED=false`；关闭后需自行保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -305,6 +303,15 @@ Bad Case 反馈与回放：
 ```http
 POST /api/stock-reports/{taskId}/feedback
 GET /api/stock-reports/{taskId}/replay
+GET /api/stock-reports/{taskId}/trace
+POST /api/stock-reports/{taskId}/retry
+```
+
+运行监控：
+
+```http
+GET /actuator/health
+GET /actuator/prometheus
 ```
 
 ### 报告库
@@ -375,4 +382,4 @@ npm.cmd run build
 - 当前仓库聚焦金融投研报告 Agent，不再对外提供通用 `/api/chat` deep-research 链路。
 - 前端通用研究模式仍需清理或改造成金融入口，这是下一轮 P0/P1 工作。
 - TuShare 真实 token、缓存、限速、接口权限错误提示和更多行情序列仍需继续硬化。
-- ETF 深度数据、ECharts 行情图、多空辩论、批量评测 CLI 和 Flyway/Liquibase 迁移属于后续增强。
+- ETF 深度数据、ECharts 行情图、多空辩论、批量评测 CLI 和真实 MySQL 迁移集成测试属于后续增强。

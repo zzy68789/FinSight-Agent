@@ -297,6 +297,14 @@ export async function getStockReplay(taskId) {
   return requestJson(`/stock-reports/${taskId}/replay`);
 }
 
+export async function getStockTrace(taskId) {
+  return requestJson(`/stock-reports/${taskId}/trace`);
+}
+
+export async function retryStockReport(taskId) {
+  return requestJson(`/stock-reports/${taskId}/retry`, { method: 'POST' });
+}
+
 /**
  * 流式聊天
  * @param {string} query - 问题
