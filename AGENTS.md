@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project
 
-DRAI 是基于 **Spring Boot 3.4.3 (Java 17) + LangGraph4j + Vue 3** 的 Multi-Agent 深度调研报告生成系统。核心是两条独立的 Agent 工作流 + RAG 检索 + SSE 流式推送，外加一条 A股/ETF 投研报告链路。
+FinSight 是基于 **Spring Boot 3.4.3 (Java 17) + LangGraph4j + Vue 3** 的 Multi-Agent 深度调研报告生成系统。核心是两条独立的 Agent 工作流 + RAG 检索 + SSE 流式推送，外加一条 A股/ETF 投研报告链路。
 
 环境为 **Windows / PowerShell**，命令用 `mvn.cmd`、`npm.cmd`（带 `.cmd` 后缀）。后端无 Maven wrapper，直接用 `mvn.cmd`。
 
@@ -37,15 +37,15 @@ npm.cmd run build
 - 证券代码研究链路 —— `financial/StockReportWorkflow.java`
   `StockResolve → DataSnapshot → MetricEngine → RiskAssessment → EvidenceCollect → InvestmentWriter → CitationReviewer + ComplianceReviewer → Evaluation`。
 
-**后端分层**（`backend/src/main/java/com/zzy/drai/`）：`controller` → `service` → `repository`(JDBC)，`agent`(通用工作流/节点/状态)、`financial`(投研报告/证据/指标/回放)、`rag`(PDF 解析·切片·embedding·ChromaDB)、`llm`、`search`。
+**后端分层**（`backend/src/main/java/com/zzy/finsight/`）：`controller` → `service` → `repository`(JDBC)，`agent`(通用工作流/节点/状态)、`financial`(投研报告/证据/指标/回放)、`rag`(PDF 解析·切片·embedding·ChromaDB)、`llm`、`search`。
 
 **外部依赖与降级**：MySQL 长期持久化；Redis 存运行态（未启动降级为进程内内存）；ChromaDB 向量检索（未启动降级为进程内向量库，重启丢失）；LLM / Tavily / TuShare 未配置 key 时走本地 fallback，可跑通完整流程。RAG 默认 `BM25 + vector` 融合 + 相关性阈值。
 
-**数据库**：`backend/src/main/resources/db/schema.sql` 由 Spring Boot 启动时按 `spring.sql.init.schema-locations` 自动执行（首次需先手动建 `drai` 库）。旧库需手动跑 `db/upgrade-*.sql`。schema 变更时新增 `db/upgrade-<feature>.sql`，所有字段带中文 `COMMENT`。
+**数据库**：`backend/src/main/resources/db/schema.sql` 由 Spring Boot 启动时按 `spring.sql.init.schema-locations` 自动执行（首次需先手动建 `finsight` 库）。旧库需手动跑 `db/upgrade-*.sql`。schema 变更时新增 `db/upgrade-<feature>.sql`，所有字段带中文 `COMMENT`。
 
 ## Conventions
 
-- **环境变量隔离**：所有配置用项目专用前缀 `DRAI_*`（`DRAI_LLM_API_KEY`、`DRAI_TAVILY_API_KEY`、`DRAI_TUSHARE_API_KEY`、`DRAI_DATASOURCE_*` 等）。**不要读取全局 `OPENAI_API_KEY`**——会影响用户的 `cc-switch` 等全局 OpenAI 配置。已有 `ConfigurationPlaceholderTest` 防回退。
+- **环境变量隔离**：所有配置用项目专用前缀 `FINSIGHT_*`（`FINSIGHT_LLM_API_KEY`、`FINSIGHT_TAVILY_API_KEY`、`FINSIGHT_TUSHARE_API_KEY`、`FINSIGHT_DATASOURCE_*` 等）。**不要读取全局 `OPENAI_API_KEY`**——会影响用户的 `cc-switch` 等全局 OpenAI 配置。已有 `ConfigurationPlaceholderTest` 防回退。
 - **金融数字确定性**：财务指标一律用 Java `BigDecimal` 计算，不让 LLM 算关键数字。缺输入标 `MISSING_INPUT`，公开数据源失败标 `DATA_MISSING`。
 - **投研报告合规**：报告必须标注"仅作研究辅助，不构成投资建议"；不做荐股、仓位、保证收益、自动交易、回测。最终报告需同时通过 `CitationReviewer` 和 `ComplianceReviewer`。
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。

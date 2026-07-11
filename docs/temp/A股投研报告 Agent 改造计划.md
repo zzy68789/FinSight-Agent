@@ -76,7 +76,7 @@ StockResolve
   -> END / Retry
 ```
 
-复用现有 [ResearchGraphFactory](D:/Code/zy-agent/backend/src/main/java/com/zzy/drai/agent/graph/ResearchGraphFactory.java) 的 LangGraph4j 思路，但金融链路独立建类，避免污染通用 `Researcher/Writer/Reviewer`。
+复用现有 [ResearchGraphFactory](D:/Code/zy-agent/backend/src/main/java/com/zzy/finsight/agent/graph/ResearchGraphFactory.java) 的 LangGraph4j 思路，但金融链路独立建类，避免污染通用 `Researcher/Writer/Reviewer`。
 
 ### Step 6：报告模板与引用规则
 

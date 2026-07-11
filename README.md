@@ -1,8 +1,8 @@
 # FinSight Agent - A股/ETF 金融投研 Agent
 
-FinSight Agent 是从 DRAI 重构出来的金融投研专用版本，基于 **Spring Boot 3.4.3 + Java 17 + Vue 3**。本仓库不再维护通用 deep-research 编排链路，核心目标收束为：围绕 A 股和 ETF 代码生成可追踪、可回放、带证据账本和合规审查的研究辅助报告。
+FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 17 + Vue 3**。本仓库不再维护通用 deep-research 编排链路，核心目标收束为：围绕 A 股和 ETF 代码生成可追踪、可回放、带证据账本和合规审查的研究辅助报告。
 
-系统保留 DRAI 中对金融链路仍有价值的基础设施：PDF/RAG 证据输入、Tavily 搜索封装、MySQL 持久化、Redis 运行态降级、ChromaDB 向量检索降级、用户登录、报告库、管理员后台和 SSE 流式推送。
+系统保留 FinSight 中对金融链路仍有价值的基础设施：PDF/RAG 证据输入、Tavily 搜索封装、MySQL 持久化、Redis 运行态降级、ChromaDB 向量检索降级、用户登录、报告库、管理员后台和 SSE 流式推送。
 
 > 合规边界：报告统一标注“仅作研究辅助，不构成投资建议”。系统不做荐股、仓位建议、保证收益、自动交易或回测。
 
@@ -25,7 +25,7 @@ FinSight Agent 是从 DRAI 重构出来的金融投研专用版本，基于 **Sp
 ## 当前重构状态
 
 - 后端通用 deep-research 文件已从本仓库移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService` 和 `/api/chat` 控制器。
-- 金融投研链路保留在 `backend/src/main/java/com/zzy/drai/financial/`，公开入口为 `/api/stock-reports`。
+- 金融投研链路保留在 `backend/src/main/java/com/zzy/finsight/financial/`，公开入口为 `/api/stock-reports`。
 - RAG、搜索、报告库、用户、管理员后台等基础设施继续复用，但定位为金融投研链路的支撑能力。
 - 前端仍有部分通用研究模式 UI/调用需要后续清理，路线图见 `docs/待实现功能.md`。
 
@@ -89,7 +89,7 @@ FinSight-Agent/
 ├── backend/
 │   ├── pom.xml
 │   └── src/main/
-│       ├── java/com/zzy/drai/
+│       ├── java/com/zzy/finsight/
 │       │   ├── auth/              # 注册、登录、Bearer Token、用户上下文
 │       │   ├── config/            # CORS、LLM、异步执行器等配置
 │       │   ├── controller/        # REST API 与 SSE 接口
@@ -116,7 +116,7 @@ FinSight-Agent/
 先创建数据库：
 
 ```sql
-CREATE DATABASE IF NOT EXISTS drai
+CREATE DATABASE IF NOT EXISTS finsight
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_unicode_ci;
 ```
@@ -124,15 +124,15 @@ CREATE DATABASE IF NOT EXISTS drai
 如需覆盖默认连接配置：
 
 ```powershell
-$env:DRAI_DATASOURCE_URL="jdbc:mysql://localhost:3306/drai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
-$env:DRAI_DATASOURCE_USERNAME="root"
-$env:DRAI_DATASOURCE_PASSWORD="your_password"
-$env:DRAI_DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
+$env:FINSIGHT_DATASOURCE_URL="jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+$env:FINSIGHT_DATASOURCE_USERNAME="root"
+$env:FINSIGHT_DATASOURCE_PASSWORD="your_password"
+$env:FINSIGHT_DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
 ```
 
 数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
 
-如需临时关闭自动迁移，可设置 `DRAI_FLYWAY_ENABLED=false`；关闭后需自行保证数据库结构与代码一致。
+如需临时关闭自动迁移，可设置 `FINSIGHT_FLYWAY_ENABLED=false`；关闭后需自行保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -179,70 +179,71 @@ http://localhost:8000/api
 
 ## 环境变量
 
-项目配置统一使用 `DRAI_*` 前缀，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。
+项目配置统一使用 `FINSIGHT_*` 前缀，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。
 
 认证配置：
 
 ```powershell
-$env:DRAI_AUTH_ENABLED="true"
-$env:DRAI_AUTH_TOKEN_SECRET="replace_with_a_long_random_secret"
-$env:DRAI_AUTH_TOKEN_TTL_SECONDS="86400"
+$env:FINSIGHT_AUTH_ENABLED="true"
+$env:FINSIGHT_AUTH_TOKEN_SECRET="replace_with_a_long_random_secret"
+$env:FINSIGHT_AUTH_TOKEN_TTL_SECONDS="86400"
 ```
 
 Redis 配置：
 
 ```powershell
-$env:DRAI_REDIS_HOST="localhost"
-$env:DRAI_REDIS_PORT="6379"
-$env:DRAI_REDIS_PASSWORD=""
-$env:DRAI_REDIS_TIMEOUT="2s"
-$env:DRAI_REDIS_RUNTIME_TTL="PT24H"
+$env:FINSIGHT_REDIS_HOST="localhost"
+$env:FINSIGHT_REDIS_PORT="6379"
+$env:FINSIGHT_REDIS_PASSWORD=""
+$env:FINSIGHT_REDIS_TIMEOUT="2s"
+$env:FINSIGHT_REDIS_DATABASE="7"
+$env:FINSIGHT_REDIS_RUNTIME_TTL="PT24H"
 ```
 
 ChromaDB 配置：
 
 ```powershell
-$env:DRAI_CHROMA_BASE_URL="http://localhost:8000"
-$env:DRAI_CHROMA_TENANT="default_tenant"
-$env:DRAI_CHROMA_DATABASE="default_database"
-$env:DRAI_CHROMA_COLLECTION="drai_docs"
-$env:DRAI_CHROMA_TOKEN=""
+$env:FINSIGHT_CHROMA_BASE_URL="http://localhost:8001"
+$env:FINSIGHT_CHROMA_TENANT="default_tenant"
+$env:FINSIGHT_CHROMA_DATABASE="default_database"
+$env:FINSIGHT_CHROMA_COLLECTION="finsight_docs"
+$env:FINSIGHT_CHROMA_TOKEN=""
 ```
 
 RAG 检索阈值：
 
 ```powershell
-$env:DRAI_RAG_RELEVANCE_THRESHOLD="0.2"
+$env:FINSIGHT_RAG_RELEVANCE_THRESHOLD="0.2"
 ```
 
 LLM 与搜索配置：
 
 ```powershell
-$env:DRAI_LLM_BASE_URL="https://your-openai-compatible-endpoint/v1"
-$env:DRAI_LLM_API_KEY="your_api_key"
-$env:DRAI_LLM_FAST_MODEL="qwen3-max"
-$env:DRAI_LLM_SMART_MODEL="deepseek-r1"
-$env:DRAI_LLM_TIMEOUT="30s"
-$env:DRAI_LLM_MAX_ATTEMPTS="2"
-$env:DRAI_LLM_PROVIDER_MAX_RETRIES="0"
-$env:DRAI_LLM_LOG_REQUESTS="false"
-$env:DRAI_LLM_LOG_RESPONSES="false"
-$env:DRAI_EMBEDDING_MODEL="text-embedding-3-small"
-$env:DRAI_TAVILY_API_KEY="your_tavily_key"
-$env:DRAI_SEARCH_MAX_ATTEMPTS="2"
+$env:FINSIGHT_LLM_BASE_URL="https://your-openai-compatible-endpoint/v1"
+$env:FINSIGHT_LLM_API_KEY="your_api_key"
+$env:FINSIGHT_LLM_FAST_MODEL="qwen3-max"
+$env:FINSIGHT_LLM_SMART_MODEL="deepseek-r1"
+$env:FINSIGHT_LLM_TIMEOUT="30s"
+$env:FINSIGHT_LLM_MAX_ATTEMPTS="2"
+$env:FINSIGHT_LLM_PROVIDER_MAX_RETRIES="0"
+$env:FINSIGHT_LLM_LOG_REQUESTS="false"
+$env:FINSIGHT_LLM_LOG_RESPONSES="false"
+$env:FINSIGHT_EMBEDDING_MODEL="text-embedding-3-small"
+$env:FINSIGHT_TAVILY_API_KEY="your_tavily_key"
+$env:FINSIGHT_SEARCH_MAX_ATTEMPTS="2"
 ```
 
 TuShare Pro 配置：
 
 ```powershell
-$env:DRAI_TUSHARE_ENABLED="true"
-$env:DRAI_TUSHARE_BASE_URL="https://api.tushare.pro"
-$env:DRAI_TUSHARE_API_KEY="your_tushare_token"
-$env:DRAI_TUSHARE_TIMEOUT="10s"
-$env:DRAI_FINANCIAL_PROVIDER_THREADS="6"
+$env:FINSIGHT_TUSHARE_ENABLED="true"
+$env:FINSIGHT_TUSHARE_BASE_URL="https://api.tushare.pro"
+$env:FINSIGHT_TUSHARE_API_KEY="your_tushare_token"
+$env:FINSIGHT_TUSHARE_TIMEOUT="10s"
+$env:FINSIGHT_FINANCIAL_PROVIDER_THREADS="6"
 ```
 
-`DRAI_TUSHARE_API_KEY` 兼容上一版变量名 `DRAI_MARKET_API_KEY`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
+`FINSIGHT_TUSHARE_API_KEY` 兼容上一版变量名 `FINSIGHT_MARKET_API_KEY`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
 
 ## API 说明
 

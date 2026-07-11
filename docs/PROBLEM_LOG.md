@@ -14,7 +14,7 @@
 
 ### 解决方式
 
-新增独立股票报告链路 `/api/stock-reports`，并新增 `com.zzy.drai.financial` 包。工作流拆为 `StockResolve -> DataSnapshot -> MetricEngine -> EvidenceCollect -> Writer -> Reviewer`，同时保留通用调研链路不变。
+新增独立股票报告链路 `/api/stock-reports`，并新增 `com.zzy.finsight.financial` 包。工作流拆为 `StockResolve -> DataSnapshot -> MetricEngine -> EvidenceCollect -> Writer -> Reviewer`，同时保留通用调研链路不变。
 
 ### 结果
 
@@ -230,7 +230,7 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 
 ### 解决方式
 
-新增 `TushareMarketDataProvider` 和 `drai.market.tushare.*` 配置，支持 `DRAI_TUSHARE_API_KEY` / `DRAI_MARKET_API_KEY`，并把 `income`、`balancesheet`、`cashflow`、`daily_basic` 转成金融证据。
+新增 `TushareMarketDataProvider` 和 `finsight.market.tushare.*` 配置，支持 `FINSIGHT_TUSHARE_API_KEY` / `FINSIGHT_MARKET_API_KEY`，并把 `income`、`balancesheet`、`cashflow`、`daily_basic` 转成金融证据。
 
 ### 结果
 
@@ -276,19 +276,19 @@ PowerShell 对未加引号的逗号参数有特殊解析，会把它拆成参数
 
 ### 发生了什么
 
-用户删除了项目中的 `OPENAI_API_KEY`，因为这个全局变量会影响本机 `cc-switch` 相关配置，希望 DRAI 改用自己的环境变量名。
+用户删除了项目中的 `OPENAI_API_KEY`，因为这个全局变量会影响本机 `cc-switch` 相关配置，希望 FinSight 改用自己的环境变量名。
 
 ### 原因
 
-`application.yml` 直接通过 `${OPENAI_API_KEY}` 读取 LLM Key，项目配置和本机全局 OpenAI-compatible 工具共享同一个变量名。只要 `cc-switch` 切换或清理该变量，DRAI 的 LLM 配置也会被连带影响。
+`application.yml` 直接通过 `${OPENAI_API_KEY}` 读取 LLM Key，项目配置和本机全局 OpenAI-compatible 工具共享同一个变量名。只要 `cc-switch` 切换或清理该变量，FinSight 的 LLM 配置也会被连带影响。
 
 ### 解决方式
 
-将后端 LLM 配置改为项目专用命名空间：`DRAI_LLM_BASE_URL`、`DRAI_LLM_API_KEY`、`DRAI_LLM_FAST_MODEL`、`DRAI_LLM_SMART_MODEL` 等；README 和本地降级提示同步改名，并新增 `ConfigurationPlaceholderTest` 断言 `application.yml` 不再包含 `OPENAI_API_KEY` 或 `OPENAI_API_BASE`。
+将后端 LLM 配置改为项目专用命名空间：`FINSIGHT_LLM_BASE_URL`、`FINSIGHT_LLM_API_KEY`、`FINSIGHT_LLM_FAST_MODEL`、`FINSIGHT_LLM_SMART_MODEL` 等；README 和本地降级提示同步改名，并新增 `ConfigurationPlaceholderTest` 断言 `application.yml` 不再包含 `OPENAI_API_KEY` 或 `OPENAI_API_BASE`。
 
 ### 结果
 
-DRAI 和 `cc-switch` 的全局 OpenAI 配置解耦。目标测试先因旧配置失败，改名后通过；`ApplicationSmokeTest` 和后端全量 `mvn.cmd test` 也通过。用户只需要在本项目启动窗口配置 `DRAI_LLM_API_KEY`。
+FinSight 和 `cc-switch` 的全局 OpenAI 配置解耦。目标测试先因旧配置失败，改名后通过；`ApplicationSmokeTest` 和后端全量 `mvn.cmd test` 也通过。用户只需要在本项目启动窗口配置 `FINSIGHT_LLM_API_KEY`。
 
 ## 017. SSE 客户端断开不应决定后台任务成败
 
@@ -307,3 +307,21 @@ DRAI 和 `cc-switch` 的全局 OpenAI 配置解耦。目标测试先因旧配置
 ### 结果
 
 SSE 断开不再把报告任务误标为失败，恢复调度器也能复用同一 Runner。2026-07-10 后端全量 90 个测试通过，前端生产构建通过。
+
+## 018. 项目改名后继续复用旧命名会污染运行数据
+
+### 发生了什么
+
+项目已经统一为 FinSight Agent，但 Java 包、配置前缀、MySQL 库、Redis key、Chroma collection 和前端登录态仍沿用旧标识，新旧项目会共享业务数据和运行缓存。
+
+### 原因
+
+此前只完成产品定位和页面能力调整，没有把应用身份、配置命名空间与各类存储边界作为一次原子迁移处理；单独修改 Spring 应用名无法隔离 MySQL、Redis 和向量知识库。
+
+### 解决方式
+
+将 Java 根包迁移为 `com.zzy.finsight`，启动类改为 `FinSightApplication`，配置与环境变量统一为 `finsight.*` / `FINSIGHT_*`；新建独立 MySQL `finsight` 库，Redis 切换逻辑库 7 并使用 `finsight:*` key，Chroma collection 改为 `finsight_docs`，前端登录态改为 `finsight_token`。旧数据库不删除、不迁移。
+
+### 结果
+
+真实 MySQL 空库已成功执行 Flyway V1→V2 并生成 11 张表，健康检查通过；后端 91 个测试和前端生产构建通过。旧库仍原样保留，FinSight 的任务、报告、缓存和向量文档均使用新的隔离命名。

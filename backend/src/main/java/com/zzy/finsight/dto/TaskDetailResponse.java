@@ -1,0 +1,15 @@
+package com.zzy.finsight.dto;
+
+import java.time.LocalDateTime;
+
+public record TaskDetailResponse(
+        long id,
+        String threadId,
+        String query,
+        String searchMode,
+        String status,
+        int revisionNumber,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
+) {
+}

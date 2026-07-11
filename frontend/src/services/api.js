@@ -1,7 +1,7 @@
 // frontend/src/services/api.js
 
 const API_BASE = "http://localhost:8000/api";
-let authToken = localStorage.getItem('drai_token') || '';
+let authToken = localStorage.getItem('finsight_token') || '';
 
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -41,9 +41,9 @@ function withAuth(options = {}) {
 export function setAuthToken(token) {
   authToken = token || '';
   if (authToken) {
-      localStorage.setItem('drai_token', authToken);
+      localStorage.setItem('finsight_token', authToken);
   } else {
-      localStorage.removeItem('drai_token');
+      localStorage.removeItem('finsight_token');
   }
 }
 

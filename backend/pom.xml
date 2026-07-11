@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>com.zzy</groupId>
-    <artifactId>drai-backend</artifactId>
+    <artifactId>finsight-backend</artifactId>
     <version>0.1.0-SNAPSHOT</version>
-    <name>DRAI Java Backend</name>
-    <description>Spring Boot + LangGraph4j backend for DRAI research agent</description>
+    <name>FinSight Java Backend</name>
+    <description>Spring Boot + LangGraph4j backend for FinSight research agent</description>
 
     <properties>
         <java.version>17</java.version>

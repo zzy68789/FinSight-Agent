@@ -29,7 +29,7 @@
           <div>
             <p class="text-xs font-semibold uppercase text-blue-300">research agent workspace</p>
             <h1 class="font-display text-xl font-semibold text-white sm:text-2xl">
-              DRAI 深度研究助手
+              FinSight 深度研究助手
             </h1>
           </div>
         </div>
@@ -61,12 +61,12 @@
 
     <main v-if="!authUser" class="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_28rem] lg:px-8">
       <section class="max-w-2xl">
-        <p class="text-sm font-semibold text-blue-700">DRAI research agent</p>
+        <p class="text-sm font-semibold text-blue-700">FinSight research agent</p>
         <h2 class="mt-3 font-display text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
           把检索、撰写、质检收束到一条研究轨迹里。
         </h2>
         <p class="mt-5 max-w-xl text-base leading-7 text-slate-600">
-          上传 PDF 或使用混合检索，DRAI 会按 Planner、Researcher、Writer、Reviewer 的节点生成可追踪报告。
+          上传 PDF 或使用混合检索，FinSight 会按 Planner、Researcher、Writer、Reviewer 的节点生成可追踪报告。
         </p>
         <div class="mt-8 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
