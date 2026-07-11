@@ -1,5 +1,5 @@
 server:
-  port: ${FINSIGHT_SERVER_PORT:8000}
+  port: 8000
 
 management:
   endpoints:
@@ -14,23 +14,22 @@ spring:
   application:
     name: finsight-backend
   datasource:
-    url: ${FINSIGHT_DATASOURCE_URL:jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
-    username: ${FINSIGHT_DATASOURCE_USERNAME:root}
-    password: ${FINSIGHT_DATASOURCE_PASSWORD:123456}
-    driver-class-name: ${FINSIGHT_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+    url: jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${FINSIGHT_REDIS_HOST:localhost}
-      port: ${FINSIGHT_REDIS_PORT:6379}
-      password: ${FINSIGHT_REDIS_PASSWORD:}
-      timeout: ${FINSIGHT_REDIS_TIMEOUT:2s}
-      database: ${FINSIGHT_REDIS_DATABASE:7}
+      host: localhost
+      port: 6379
+      timeout: 2s
+      database: 7
   sql:
     init:
       mode: never
       schema-locations: classpath:db/schema.sql
   flyway:
-    enabled: ${FINSIGHT_FLYWAY_ENABLED:true}
+    enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 1
@@ -42,44 +41,44 @@ spring:
 
 finsight:
   auth:
-    enabled: ${FINSIGHT_AUTH_ENABLED:true}
-    token-secret: ${FINSIGHT_AUTH_TOKEN_SECRET:zzy-dev-local-secret-change-me-2026-long-enough}
-    token-ttl-seconds: ${FINSIGHT_AUTH_TOKEN_TTL_SECONDS:86400}
+    enabled: true
+    token-secret: zzy-dev-local-secret-change-me-2026-long-enough
+    token-ttl-seconds: 86400
   llm:
-    base-url: ${FINSIGHT_LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
     api-key: ${FINSIGHT_LLM_API_KEY:}
-    fast-model: ${FINSIGHT_LLM_FAST_MODEL:qwen3.7-plus}
-    smart-model: ${FINSIGHT_LLM_SMART_MODEL:qwen3.7-max}
-    timeout: ${FINSIGHT_LLM_TIMEOUT:30s}
-    max-attempts: ${FINSIGHT_LLM_MAX_ATTEMPTS:2}
-    provider-max-retries: ${FINSIGHT_LLM_PROVIDER_MAX_RETRIES:0}
-    log-requests: ${FINSIGHT_LLM_LOG_REQUESTS:false}
-    log-responses: ${FINSIGHT_LLM_LOG_RESPONSES:false}
+    fast-model: qwen3.7-plus
+    smart-model: qwen3.7-max
+    timeout: 30s
+    max-attempts: 2
+    provider-max-retries: 0
+    log-requests: false
+    log-responses: false
   embedding:
-    model: ${FINSIGHT_EMBEDDING_MODEL:text-embedding-v4}
+    model: text-embedding-v4
   chroma:
-    base-url: ${FINSIGHT_CHROMA_BASE_URL:http://localhost:8001}
-    tenant: ${FINSIGHT_CHROMA_TENANT:default_tenant}
-    database: ${FINSIGHT_CHROMA_DATABASE:default_database}
-    collection: ${FINSIGHT_CHROMA_COLLECTION:finsight_docs}
-    token: ${FINSIGHT_CHROMA_TOKEN:}
+    base-url: http://localhost:8001
+    tenant: default_tenant
+    database: default_database
+    collection: finsight_docs
+#    token:
   rag:
-    relevance-threshold: ${FINSIGHT_RAG_RELEVANCE_THRESHOLD:0.2}
+    relevance-threshold: 0.2
   tavily:
-    api-key: ${FINSIGHT_TAVILY_API_KEY:${TAVILY_API_KEY:}}
+    api-key: ${FINSIGHT_TAVILY_API_KEY:}
   market:
     tushare:
-      enabled: ${FINSIGHT_TUSHARE_ENABLED:${FINSIGHT_MARKET_ENABLED:false}}
-      base-url: ${FINSIGHT_TUSHARE_BASE_URL:${FINSIGHT_MARKET_BASE_URL:https://api.tushare.pro}}
-      api-key: ${FINSIGHT_TUSHARE_API_KEY:${FINSIGHT_MARKET_API_KEY:}}
-      timeout: ${FINSIGHT_TUSHARE_TIMEOUT:${FINSIGHT_MARKET_TIMEOUT:10s}}
+      enabled: false
+      base-url: https://api.tushare.pro
+      api-key: ${FINSIGHT_TUSHARE_API_KEY:}
+      timeout: 10s
   search:
-    max-attempts: ${FINSIGHT_SEARCH_MAX_ATTEMPTS:2}
+    max-attempts: 2
   redis:
-    runtime-ttl: ${FINSIGHT_REDIS_RUNTIME_TTL:PT24H}
+    runtime-ttl: PT24H
   async:
-    workflow-threads: ${FINSIGHT_WORKFLOW_THREADS:8}
-    financial-provider-threads: ${FINSIGHT_FINANCIAL_PROVIDER_THREADS:6}
+    workflow-threads: 8
+    financial-provider-threads: 6
   workflow:
-    recovery-interval-ms: ${FINSIGHT_WORKFLOW_RECOVERY_INTERVAL_MS:60000}
-    recovery-stale-after: ${FINSIGHT_WORKFLOW_RECOVERY_STALE_AFTER:PT5M}
+    recovery-interval-ms: 60000
+    recovery-stale-after: PT5M

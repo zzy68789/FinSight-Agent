@@ -5,17 +5,30 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ConfigurationPlaceholderTest {
 
     @Test
-    void applicationConfigUsesProjectScopedLlmEnvironmentVariables() throws IOException {
+    void applicationConfigOnlyUsesProjectScopedApiKeyEnvironmentVariables() throws IOException {
         String applicationYaml = readResource("/application.yml");
 
         assertThat(applicationYaml).contains("FINSIGHT_LLM_API_KEY");
-        assertThat(applicationYaml).contains("FINSIGHT_LLM_BASE_URL");
+        assertThat(applicationYaml).contains("FINSIGHT_TAVILY_API_KEY");
+        assertThat(applicationYaml).contains("FINSIGHT_TUSHARE_API_KEY");
+        List<String> placeholders = Pattern.compile("\\$\\{([^}:]+)")
+                .matcher(applicationYaml)
+                .results()
+                .map(result -> result.group(1))
+                .toList();
+        assertThat(placeholders).containsExactlyInAnyOrder(
+                "FINSIGHT_LLM_API_KEY",
+                "FINSIGHT_TAVILY_API_KEY",
+                "FINSIGHT_TUSHARE_API_KEY"
+        );
         assertThat(applicationYaml).doesNotContain("OPENAI_API_KEY");
         assertThat(applicationYaml).doesNotContain("OPENAI_API_BASE");
     }
@@ -24,10 +37,9 @@ class ConfigurationPlaceholderTest {
     void applicationConfigUsesIsolatedFinSightStorageNames() throws IOException {
         String applicationYaml = readResource("/application.yml");
 
-        assertThat(applicationYaml).contains("FINSIGHT_DATASOURCE_URL");
         assertThat(applicationYaml).contains("jdbc:mysql://localhost:3306/finsight");
-        assertThat(applicationYaml).contains("FINSIGHT_REDIS_DATABASE:7");
-        assertThat(applicationYaml).contains("FINSIGHT_CHROMA_COLLECTION:finsight_docs");
+        assertThat(applicationYaml).contains("database: 7");
+        assertThat(applicationYaml).contains("collection: finsight_docs");
         String retiredProjectIdentifier = String.join("", "d", "rai");
         assertThat(applicationYaml).doesNotContainIgnoringCase(retiredProjectIdentifier);
     }

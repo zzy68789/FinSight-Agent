@@ -121,18 +121,19 @@ CREATE DATABASE IF NOT EXISTS finsight
   DEFAULT COLLATE utf8mb4_unicode_ci;
 ```
 
-如需覆盖默认连接配置：
+本地连接配置直接维护在 `backend/src/main/resources/application.yml`：
 
-```powershell
-$env:FINSIGHT_DATASOURCE_URL="jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
-$env:FINSIGHT_DATASOURCE_USERNAME="root"
-$env:FINSIGHT_DATASOURCE_PASSWORD="your_password"
-$env:FINSIGHT_DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
 ```
 
 数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
 
-如需临时关闭自动迁移，可设置 `FINSIGHT_FLYWAY_ENABLED=false`；关闭后需自行保证数据库结构与代码一致。
+如需临时关闭自动迁移，可在 `application.yml` 中把 `spring.flyway.enabled` 改为 `false`；关闭后需自行保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -179,71 +180,17 @@ http://localhost:8000/api
 
 ## 环境变量
 
-项目配置统一使用 `FINSIGHT_*` 前缀，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。
+只有 API Key 使用 `FINSIGHT_*` 环境变量，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。模型、地址、超时、启用开关、MySQL、Redis、ChromaDB、认证和 RAG 阈值等其他配置直接维护在 `application.yml`。
 
-认证配置：
-
-```powershell
-$env:FINSIGHT_AUTH_ENABLED="true"
-$env:FINSIGHT_AUTH_TOKEN_SECRET="replace_with_a_long_random_secret"
-$env:FINSIGHT_AUTH_TOKEN_TTL_SECONDS="86400"
-```
-
-Redis 配置：
+API Key 配置：
 
 ```powershell
-$env:FINSIGHT_REDIS_HOST="localhost"
-$env:FINSIGHT_REDIS_PORT="6379"
-$env:FINSIGHT_REDIS_PASSWORD=""
-$env:FINSIGHT_REDIS_TIMEOUT="2s"
-$env:FINSIGHT_REDIS_DATABASE="7"
-$env:FINSIGHT_REDIS_RUNTIME_TTL="PT24H"
-```
-
-ChromaDB 配置：
-
-```powershell
-$env:FINSIGHT_CHROMA_BASE_URL="http://localhost:8001"
-$env:FINSIGHT_CHROMA_TENANT="default_tenant"
-$env:FINSIGHT_CHROMA_DATABASE="default_database"
-$env:FINSIGHT_CHROMA_COLLECTION="finsight_docs"
-$env:FINSIGHT_CHROMA_TOKEN=""
-```
-
-RAG 检索阈值：
-
-```powershell
-$env:FINSIGHT_RAG_RELEVANCE_THRESHOLD="0.2"
-```
-
-LLM 与搜索配置：
-
-```powershell
-$env:FINSIGHT_LLM_BASE_URL="https://your-openai-compatible-endpoint/v1"
 $env:FINSIGHT_LLM_API_KEY="your_api_key"
-$env:FINSIGHT_LLM_FAST_MODEL="qwen3-max"
-$env:FINSIGHT_LLM_SMART_MODEL="deepseek-r1"
-$env:FINSIGHT_LLM_TIMEOUT="30s"
-$env:FINSIGHT_LLM_MAX_ATTEMPTS="2"
-$env:FINSIGHT_LLM_PROVIDER_MAX_RETRIES="0"
-$env:FINSIGHT_LLM_LOG_REQUESTS="false"
-$env:FINSIGHT_LLM_LOG_RESPONSES="false"
-$env:FINSIGHT_EMBEDDING_MODEL="text-embedding-3-small"
 $env:FINSIGHT_TAVILY_API_KEY="your_tavily_key"
-$env:FINSIGHT_SEARCH_MAX_ATTEMPTS="2"
-```
-
-TuShare Pro 配置：
-
-```powershell
-$env:FINSIGHT_TUSHARE_ENABLED="true"
-$env:FINSIGHT_TUSHARE_BASE_URL="https://api.tushare.pro"
 $env:FINSIGHT_TUSHARE_API_KEY="your_tushare_token"
-$env:FINSIGHT_TUSHARE_TIMEOUT="10s"
-$env:FINSIGHT_FINANCIAL_PROVIDER_THREADS="6"
 ```
 
-`FINSIGHT_TUSHARE_API_KEY` 兼容上一版变量名 `FINSIGHT_MARKET_API_KEY`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
+使用 TuShare 时，还需要在 `application.yml` 中把 `finsight.market.tushare.enabled` 改为 `true`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
 
 ## API 说明
 
