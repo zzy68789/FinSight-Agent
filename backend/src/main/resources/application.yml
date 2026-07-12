@@ -68,7 +68,7 @@ finsight:
     api-key: ${TAVILY_API_KEY:}
   market:
     tushare:
-      enabled: false
+      enabled: true
       base-url: https://api.tushare.pro
       api-key: ${TUSHARE_API_KEY:}
       timeout: 10s
