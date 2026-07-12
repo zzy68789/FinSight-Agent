@@ -1,11 +1,11 @@
 <template>
-  <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm shadow-slate-950/20" aria-labelledby="agent-flow-title">
-    <div class="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-5 py-4">
+  <section class="overflow-hidden rounded-lg border border-slate-700 bg-blue-950 shadow-sm shadow-slate-950/20" aria-labelledby="agent-flow-title">
+    <div class="flex items-center justify-between gap-3 border-b border-slate-700 bg-blue-900 px-5 py-4">
       <div>
         <h2 id="agent-flow-title" class="text-sm font-semibold text-white">Agent 执行轨迹</h2>
         <p class="mt-1 text-xs text-slate-400">{{ flowSubtitle }}</p>
       </div>
-      <span class="rounded-md border border-blue-300/30 bg-blue-300/10 px-2 py-1 text-xs font-medium text-blue-100">
+      <span class="rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1 font-mono text-[11px] font-medium tracking-wide text-amber-200">
         {{ statusLabel }}
       </span>
     </div>
@@ -130,19 +130,19 @@ const getStepState = (step, index) => {
 };
 
 const getMarkerStyles = (step, index) => {
-  if (isActive(step)) return 'border-blue-300 bg-blue-300 text-blue-950 shadow-sm shadow-blue-900/40';
+  if (isActive(step)) return 'border-amber-300 bg-amber-300 text-slate-950 shadow-sm shadow-slate-950/40';
   if (isCompleted(step, index)) return 'border-emerald-600 bg-emerald-600 text-white';
   return 'border-slate-700 bg-slate-900 text-slate-500';
 };
 
 const getTitleStyles = (step, index) => {
-  if (isActive(step)) return 'text-blue-100';
+  if (isActive(step)) return 'text-amber-100';
   if (isCompleted(step, index)) return 'text-white';
   return 'text-slate-500';
 };
 
 const getStateStyles = (step, index) => {
-  if (isActive(step)) return 'text-blue-200';
+  if (isActive(step)) return 'text-amber-200';
   if (isCompleted(step, index)) return 'text-emerald-300';
   if (step.optional) return 'text-slate-400';
   return 'text-slate-500';

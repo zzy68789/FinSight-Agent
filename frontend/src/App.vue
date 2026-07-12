@@ -20,28 +20,28 @@
   </transition>
 
   <div class="app-shell min-h-screen text-slate-950 selection:bg-blue-100 selection:text-blue-950">
-    <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/95 shadow-sm shadow-slate-950/20 backdrop-blur">
+    <header class="app-header sticky top-0 z-40 border-b border-slate-800/80 shadow-sm shadow-slate-950/20 backdrop-blur">
       <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div class="flex items-center gap-3">
-          <div class="flex h-11 w-11 items-center justify-center rounded-lg border border-blue-300/30 bg-blue-500/15 text-blue-100 shadow-sm shadow-blue-950/30">
+          <div class="brand-mark flex h-11 w-11 items-center justify-center rounded-lg border border-amber-300/40 bg-slate-900 text-amber-200 shadow-sm shadow-slate-950/30">
             <BotIcon class="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
-            <p class="text-xs font-semibold uppercase text-blue-300">research agent workspace</p>
-            <h1 class="font-display text-xl font-semibold text-white sm:text-2xl">
+            <p class="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200/90">A-share intelligence desk</p>
+            <h1 class="font-display text-xl font-semibold tracking-tight text-white sm:text-2xl">
               FinSight 深度研究助手
             </h1>
           </div>
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <nav v-if="authUser" class="flex rounded-lg border border-slate-700 bg-slate-900 p-1" aria-label="工作区">
+          <nav v-if="authUser" class="workspace-nav flex rounded-lg border border-slate-700 bg-slate-900/80 p-1" aria-label="工作区">
             <button
               v-for="tab in workspaceTabs"
               :key="tab.id"
               type="button"
               class="flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 focus:ring-offset-slate-950"
-              :class="activeWorkspace === tab.id ? 'bg-blue-100 text-blue-950 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
+              :class="activeWorkspace === tab.id ? 'bg-amber-200 text-slate-950 shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'"
               @click="setWorkspace(tab.id)"
             >
               <component :is="tab.icon" class="h-4 w-4" aria-hidden="true" />
@@ -59,7 +59,7 @@
       </div>
     </header>
 
-    <main v-if="!authUser" class="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_28rem] lg:px-8">
+    <main v-if="!authUser" class="auth-stage mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_28rem] lg:px-8">
       <section class="max-w-2xl">
         <p class="text-sm font-semibold text-blue-700">FinSight research agent</p>
         <h2 class="mt-3 font-display text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
@@ -87,8 +87,8 @@
         </div>
       </section>
 
-      <section class="w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/70">
-        <div class="h-1 bg-blue-700"></div>
+      <section class="auth-card w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/70">
+        <div class="h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-blue-700"></div>
         <div class="p-6">
           <div class="mb-6">
             <h2 class="text-lg font-semibold text-blue-950">{{ authMode === 'login' ? '登录工作区' : '创建账号' }}</h2>
@@ -123,7 +123,7 @@
       </section>
     </main>
 
-    <main v-else-if="activeWorkspace === 'run'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+    <main v-else-if="activeWorkspace === 'run'" class="workspace-main mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <aside class="space-y-5 lg:col-span-4">
         <section class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
           <div class="border-b border-blue-100 bg-blue-50/70 px-5 py-4">
@@ -486,7 +486,7 @@
               </div>
             </div>
 
-            <article v-else class="report-content prose prose-slate max-w-none">
+            <article v-else class="research-paper report-content prose prose-slate max-w-none">
               <div v-html="renderedReport"></div>
               <span v-if="isTyping" class="ml-1 inline-block h-5 w-2 animate-pulse bg-blue-700 align-middle"></span>
             </article>
@@ -567,7 +567,7 @@
       </section>
     </main>
 
-    <main v-else-if="activeWorkspace === 'tasks'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+    <main v-else-if="activeWorkspace === 'tasks'" class="workspace-main mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <section class="lg:col-span-5">
         <div class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
           <div class="border-b border-blue-100 bg-blue-50/70 px-5 py-4">
@@ -690,7 +690,7 @@
       </section>
     </main>
 
-    <main v-else-if="activeWorkspace === 'reports'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+    <main v-else-if="activeWorkspace === 'reports'" class="workspace-main mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <section class="lg:col-span-4">
         <div class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
           <div class="border-b border-blue-100 bg-blue-50/70 px-5 py-4">
@@ -798,7 +798,7 @@
             </div>
           </div>
           <div class="p-5 sm:p-6">
-            <article v-if="selectedReport" class="report-content prose prose-slate max-w-none">
+            <article v-if="selectedReport" class="research-paper report-content prose prose-slate max-w-none">
               <div v-html="md.render(selectedReport.content || '')"></div>
             </article>
             <div v-else class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center text-sm text-slate-500">
@@ -809,7 +809,7 @@
       </section>
     </main>
 
-    <main v-else-if="activeWorkspace === 'admin'" class="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
+    <main v-else-if="activeWorkspace === 'admin'" class="workspace-main mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <section class="space-y-6 lg:col-span-4">
         <div class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
           <div class="flex items-center justify-between border-b border-blue-100 bg-blue-50/70 px-5 py-4">
@@ -949,7 +949,7 @@
       </section>
     </main>
 
-    <main v-else class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <main v-else class="workspace-main mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <section class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
         <div class="border-b border-blue-100 bg-blue-50/70 px-5 py-4">
           <h2 class="text-base font-semibold text-blue-950">系统配置</h2>
@@ -1854,11 +1854,13 @@ onMounted(async () => {
 }
 
 .report-content h1 {
-  @apply mb-6 border-b border-slate-200 pb-4 font-display text-3xl font-semibold text-slate-950;
+  @apply mb-6 border-b border-slate-200 pb-4 font-display text-3xl font-semibold tracking-tight text-blue-950;
+  border-bottom-color: rgba(178, 139, 73, 0.38);
 }
 
 .report-content h2 {
-  @apply mt-10 mb-4 border-l-4 border-blue-700 pl-3 font-display text-xl font-semibold text-slate-900;
+  @apply mt-10 mb-4 border-l-4 pl-3 font-display text-xl font-semibold text-blue-900;
+  border-left-color: #b28b49;
 }
 
 .report-content h3 {
@@ -1879,7 +1881,8 @@ onMounted(async () => {
 
 .report-content blockquote {
   font-style: normal;
-  @apply my-6 rounded-lg border-l-4 border-blue-700 bg-blue-50 px-5 py-4 text-slate-700;
+  @apply my-6 rounded-lg border-l-4 bg-blue-50 px-5 py-4 text-slate-700;
+  border-left-color: #b28b49;
 }
 
 .report-content ul {

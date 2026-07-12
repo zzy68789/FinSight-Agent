@@ -8,23 +8,23 @@ export default {
     extend: {
       colors: {
         blue: {
-          50: '#edfdfa',
-          100: '#ccfbf1',
-          200: '#99f6e4',
-          300: '#5eead4',
-          400: '#2dd4bf',
-          500: '#14b8a6',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
-          950: '#042f2e',
+          50: '#f2f7f8',
+          100: '#dce9eb',
+          200: '#b9d2d7',
+          300: '#8bafb8',
+          400: '#5d8995',
+          500: '#3b6c79',
+          600: '#285562',
+          700: '#1f4350',
+          800: '#193641',
+          900: '#142c36',
+          950: '#091a22',
         },
       },
       fontFamily: {
-        // 现代无衬线字体栈：优先系统默认，保证清晰
+        // 中文投研界面优先使用系统黑体，兼顾 Windows 与 macOS 的清晰度
         sans: [
-          'Inter', 
+          '"Aptos"',
           'system-ui', 
           '-apple-system', 
           'BlinkMacSystemFont', 
@@ -39,15 +39,15 @@ export default {
           '"WenQuanYi Micro Hei"', 
           'sans-serif'
         ],
-        // 产品标题与关键数字使用更紧实的工程化字体栈
-        display: ['"IBM Plex Sans"', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'Menlo', 'Consolas', '"Courier New"', 'monospace'],
+        // 标题与数据使用更窄、更像研究终端的字体栈
+        display: ['"Arial Narrow"', '"DIN Alternate"', '"Microsoft YaHei"', 'system-ui', 'sans-serif'],
+        mono: ['"Cascadia Mono"', '"JetBrains Mono"', 'Menlo', 'Consolas', 'monospace'],
       },
       typography: {
         DEFAULT: {
           css: {
             maxWidth: 'none',
-            color: '#374151', // Gray-700，比纯黑柔和
+            color: '#33444a',
             // 基础行高设置
             p: {
               marginTop: '1.2em',
@@ -57,21 +57,21 @@ export default {
             },
             // 标题设置
             h1: {
-              color: '#111827', // Gray-900
+              color: '#12272f',
               fontWeight: '800',
               marginTop: '0',
               marginBottom: '0.8em',
               lineHeight: '1.2',
             },
             h2: {
-              color: '#1f2937', // Gray-800
+              color: '#193641',
               fontWeight: '700',
               marginTop: '2em',
               marginBottom: '1em',
               lineHeight: '1.3',
             },
             h3: {
-              color: '#1f2937',
+              color: '#193641',
               fontWeight: '600',
               marginTop: '1.5em',
               marginBottom: '0.6em',
