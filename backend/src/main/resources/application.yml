@@ -49,8 +49,8 @@ finsight:
     api-key: ${API_KEY:}
     fast-model: qwen3.7-plus
     smart-model: qwen3.7-max
-    timeout: 30s
-    max-attempts: 2
+    timeout: 90s
+    max-attempts: 1
     provider-max-retries: 0
     log-requests: false
     log-responses: false
