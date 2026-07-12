@@ -13,21 +13,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ConfigurationPlaceholderTest {
 
     @Test
-    void applicationConfigOnlyUsesProjectScopedApiKeyEnvironmentVariables() throws IOException {
+    void applicationConfigOnlyUsesApiKeyEnvironmentVariables() throws IOException {
         String applicationYaml = readResource("/application.yml");
 
-        assertThat(applicationYaml).contains("FINSIGHT_LLM_API_KEY");
-        assertThat(applicationYaml).contains("FINSIGHT_TAVILY_API_KEY");
-        assertThat(applicationYaml).contains("FINSIGHT_TUSHARE_API_KEY");
+        assertThat(applicationYaml).contains("API_KEY");
+        assertThat(applicationYaml).contains("TAVILY_API_KEY");
+        assertThat(applicationYaml).contains("TUSHARE_API_KEY");
         List<String> placeholders = Pattern.compile("\\$\\{([^}:]+)")
                 .matcher(applicationYaml)
                 .results()
                 .map(result -> result.group(1))
                 .toList();
         assertThat(placeholders).containsExactlyInAnyOrder(
-                "FINSIGHT_LLM_API_KEY",
-                "FINSIGHT_TAVILY_API_KEY",
-                "FINSIGHT_TUSHARE_API_KEY"
+                "API_KEY",
+                "TAVILY_API_KEY",
+                "TUSHARE_API_KEY"
         );
         assertThat(applicationYaml).doesNotContain("OPENAI_API_KEY");
         assertThat(applicationYaml).doesNotContain("OPENAI_API_BASE");

@@ -180,15 +180,19 @@ http://localhost:8000/api
 
 ## 环境变量
 
-只有 API Key 使用 `FINSIGHT_*` 环境变量，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。模型、地址、超时、启用开关、MySQL、Redis、ChromaDB、认证和 RAG 阈值等其他配置直接维护在 `application.yml`。
+只有 API Key 使用环境变量，不读取全局 `OPENAI_API_KEY`，避免影响用户的全局 OpenAI / cc-switch 配置。模型、地址、超时、启用开关、MySQL、Redis、ChromaDB、认证和 RAG 阈值等其他配置直接维护在 `application.yml`。
 
 API Key 配置：
 
 ```powershell
-$env:FINSIGHT_LLM_API_KEY="your_api_key"
-$env:FINSIGHT_TAVILY_API_KEY="your_tavily_key"
-$env:FINSIGHT_TUSHARE_API_KEY="your_tushare_token"
+$env:API_KEY="your_llm_api_key"
+$env:TAVILY_API_KEY="your_tavily_key"
+$env:TUSHARE_API_KEY="your_tushare_token"
 ```
+
+在同一个 PowerShell 窗口设置 Key 后再启动后端；如果通过 IntelliJ IDEA 启动，需要把 `API_KEY`、`TAVILY_API_KEY`、`TUSHARE_API_KEY` 加到对应 Spring Boot Run Configuration 的 Environment variables，然后重启后端。不要把真实 Key 写入 `application.yml`、README、Git 或前端代码。
+
+`InvestmentReportWriter` 会使用 SMART 模型增强确定性报告草稿。LLM 只能改写叙述，引用、指标公式和风险明细由 Java 覆盖回确定性内容；未配置 Key、请求失败或输出缺少必要章节时自动回退模板。报告源码中的 `FinSight generation-mode: llm` / `template-fallback` 可用于确认实际生成方式。
 
 使用 TuShare 时，还需要在 `application.yml` 中把 `finsight.market.tushare.enabled` 改为 `true`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
 

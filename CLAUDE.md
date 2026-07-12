@@ -45,7 +45,7 @@ npm.cmd run build
 
 ## Conventions
 
-- **环境变量隔离**：只有 API Key 使用项目专用环境变量 `FINSIGHT_LLM_API_KEY`、`FINSIGHT_TAVILY_API_KEY`、`FINSIGHT_TUSHARE_API_KEY`；其他配置直接维护在 `application.yml`，不额外包装环境变量占位符。**不要读取全局 `OPENAI_API_KEY`**——会影响用户的 `cc-switch` 等全局 OpenAI 配置。已有 `ConfigurationPlaceholderTest` 防回退。
+- **环境变量隔离**：只有 API Key 使用 `API_KEY`、`TAVILY_API_KEY`、`TUSHARE_API_KEY`；其他配置直接维护在 `application.yml`，不额外包装环境变量占位符。**不要读取全局 `OPENAI_API_KEY`**——会影响用户的 `cc-switch` 等全局 OpenAI 配置。已有 `ConfigurationPlaceholderTest` 防回退。
 - **金融数字确定性**：财务指标一律用 Java `BigDecimal` 计算，不让 LLM 算关键数字。缺输入标 `MISSING_INPUT`，公开数据源失败标 `DATA_MISSING`。
 - **投研报告合规**：报告必须标注"仅作研究辅助，不构成投资建议"；不做荐股、仓位、保证收益、自动交易、回测。最终报告需同时通过 `CitationReviewer` 和 `ComplianceReviewer`。
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。

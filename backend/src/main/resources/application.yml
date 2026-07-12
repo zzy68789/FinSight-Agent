@@ -46,7 +46,7 @@ finsight:
     token-ttl-seconds: 86400
   llm:
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api-key: ${FINSIGHT_LLM_API_KEY:}
+    api-key: ${API_KEY:}
     fast-model: qwen3.7-plus
     smart-model: qwen3.7-max
     timeout: 30s
@@ -65,12 +65,12 @@ finsight:
   rag:
     relevance-threshold: 0.2
   tavily:
-    api-key: ${FINSIGHT_TAVILY_API_KEY:}
+    api-key: ${TAVILY_API_KEY:}
   market:
     tushare:
       enabled: false
       base-url: https://api.tushare.pro
-      api-key: ${FINSIGHT_TUSHARE_API_KEY:}
+      api-key: ${TUSHARE_API_KEY:}
       timeout: 10s
   search:
     max-attempts: 2

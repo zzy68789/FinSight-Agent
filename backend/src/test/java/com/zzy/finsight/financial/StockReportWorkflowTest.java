@@ -17,7 +17,9 @@ class StockReportWorkflowTest {
             new FinancialSnapshotBuilder(List.of(), Runnable::run),
             new FinancialMetricEngine(),
             new FinancialRiskScoringService(),
-            new InvestmentReportWriter(),
+            new InvestmentReportWriter((prompt, modelType) -> {
+                throw new IllegalStateException("测试环境未配置 LLM");
+            }),
             new CitationReviewer(),
             new FinancialComplianceReviewer(),
             new FinancialEvaluationService(new ObjectMapper())
