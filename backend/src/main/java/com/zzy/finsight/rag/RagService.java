@@ -9,6 +9,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 负责文档入库、检索和向量存储降级。
+ */
 @Service
 public class RagService {
     private final PdfTextExtractor pdfTextExtractor;
@@ -30,6 +33,7 @@ public class RagService {
         this.textChunker = textChunker;
     }
 
+    /** 解析并索引上传的文档。 */
     public int process(List<MultipartFile> files) {
         clear();
         int stored = 0;
@@ -43,6 +47,7 @@ public class RagService {
         return stored;
     }
 
+    /** 检索与问题最相关的文档片段。 */
     public List<RagDocument> retrieve(String query, int topK) {
         if (query == null || query.isBlank()) {
             return List.of();
@@ -50,10 +55,12 @@ public class RagService {
         return hybridRagRetriever.retrieve(query, topK);
     }
 
+    /** 检索文档并返回完整追踪信息。 */
     public RagRetrievalResult retrieveWithTrace(String query, int topK) {
         return hybridRagRetriever.retrieveWithTrace(query, topK);
     }
 
+    /** 将指定来源的纯文本切片后写入索引。 */
     public int indexText(String source, String text) {
         if (text == null || text.isBlank()) {
             return 0;
@@ -68,6 +75,7 @@ public class RagService {
         return chunks.size();
     }
 
+    /** 清空当前 RAG 索引。 */
     public void clear() {
         hybridRagRetriever.clear();
     }

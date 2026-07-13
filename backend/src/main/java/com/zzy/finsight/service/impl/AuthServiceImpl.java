@@ -12,6 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * 实现用户注册、登录和令牌解析业务。
+ */
 @Service
 public class AuthServiceImpl implements AuthService {
     private final AppUserMapper userMapper;

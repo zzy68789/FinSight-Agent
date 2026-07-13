@@ -5,6 +5,9 @@ import com.zzy.finsight.domain.stock.reference.AShareCompanyDirectory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * 注册金融领域目录等无状态领域对象。
+ */
 @Configuration
 public class FinancialDomainConfig {
     @Bean

@@ -18,6 +18,9 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
+/**
+ * 并行聚合多个数据源并构建金融快照。
+ */
 @Component
 public class FinancialSnapshotBuilder {
     private final List<FinancialDataProvider> providers;
@@ -31,6 +34,7 @@ public class FinancialSnapshotBuilder {
         this.executor = executor;
     }
 
+    /** 调用适用数据源并构建不可变金融快照。 */
     public FinancialSnapshot build(StockSubject subject, String reportPeriod, String searchMode) {
         List<FinancialEvidenceItem> evidenceItems = new ArrayList<>();
         List<FinancialAgentStageResult> stageResults = new ArrayList<>();

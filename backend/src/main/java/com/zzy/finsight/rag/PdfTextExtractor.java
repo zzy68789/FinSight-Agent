@@ -7,6 +7,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
+/**
+ * 从上传的 PDF 文件中提取正文文本。
+ */
 @Component
 public class PdfTextExtractor {
     public String extract(byte[] bytes) {

@@ -4,16 +4,23 @@ package com.zzy.finsight.dto.stock;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 
+/**
+ * 表示股票或 ETF 报告生成请求。
+ */
 public class StockReportRequest {
+    /** 股票或 ETF 代码。 */
     @NotBlank
     private String ticker;
 
+    /** 会话标识。 */
     @JsonProperty("thread_id")
     private String threadId;
 
+    /** 报告期。 */
     @JsonProperty("report_period")
     private String reportPeriod = "latest";
 
+    /** 检索模式。 */
     @JsonProperty("search_mode")
     private String searchMode = "hybrid";
 

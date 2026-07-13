@@ -7,6 +7,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+/**
+ * 序列化和反序列化股票报告请求。
+ */
 @Component
 public class StockReportRequestCodec {
     private final ObjectMapper objectMapper;

@@ -16,6 +16,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.ExecutorService;
 
+/**
+ * 扫描并恢复心跳超时的股票报告任务。
+ */
 @Component
 public class StockReportRecoveryScheduler {
     private final ResearchTaskMapper taskMapper;
@@ -42,6 +45,7 @@ public class StockReportRecoveryScheduler {
     }
 
     @Scheduled(fixedDelayString = "${finsight.workflow.recovery-interval-ms:60000}")
+    /** 定期恢复长时间未更新的投研任务。 */
     public void recoverStaleTasks() {
         LocalDateTime cutoff = LocalDateTime.now().minus(staleAfter);
         for (WorkflowTaskExecutionRecord task : taskMapper.findStaleRunning(cutoff, 20)) {

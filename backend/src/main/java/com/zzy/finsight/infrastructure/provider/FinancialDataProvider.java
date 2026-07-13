@@ -7,11 +7,17 @@ import com.zzy.finsight.domain.stock.StockSubject;
 
 import java.util.List;
 
+/**
+ * 定义金融证据数据源的统一采集接口。
+ */
 public interface FinancialDataProvider {
+    /** 返回数据源名称。 */
     String name();
 
+    /** 按证券和报告期采集金融证据。 */
     List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode);
 
+    /** 采集证据并保留可选的检索追踪信息。 */
     default FinancialDataCollection collectWithTrace(StockSubject subject, String reportPeriod, String searchMode) {
         return FinancialDataCollection.evidenceOnly(collect(subject, reportPeriod, searchMode));
     }

@@ -9,6 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 
+/**
+ * 签发并校验项目内部访问令牌。
+ */
 @Component
 public class TokenService {
     private final String secret;

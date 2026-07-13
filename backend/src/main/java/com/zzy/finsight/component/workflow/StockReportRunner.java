@@ -33,6 +33,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 执行股票报告任务并持久化阶段、报告和状态。
+ */
 @Component
 public class StockReportRunner {
     private static final int MAX_WRITER_ATTEMPTS = 3;
@@ -73,6 +76,7 @@ public class StockReportRunner {
         this.meterRegistry = meterRegistry;
     }
 
+    /** 创建并同步执行新的投研任务。 */
     public long runNew(long ownerId, StockReportRequest request, StockReportProgressListener listener) {
         String threadId = threadId(request);
         long taskId = taskMapper.create(
@@ -86,6 +90,7 @@ public class StockReportRunner {
         return taskId;
     }
 
+    /** 从已持久化状态继续执行投研任务。 */
     public void runExisting(
             long ownerId,
             long taskId,

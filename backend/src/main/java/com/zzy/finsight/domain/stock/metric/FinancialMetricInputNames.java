@@ -1,6 +1,9 @@
 package com.zzy.finsight.domain.stock.metric;
 
 
+/**
+ * 集中定义金融指标输入字段名称。
+ */
 public final class FinancialMetricInputNames {
     public static final String OPERATING_REVENUE = "OPERATING_REVENUE";
     public static final String OPERATING_REVENUE_PRIOR = "OPERATING_REVENUE_PRIOR";

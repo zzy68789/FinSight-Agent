@@ -1,5 +1,8 @@
 package com.zzy.finsight.llm;
 
+/**
+ * 为大模型调用提供有限次数重试。
+ */
 public class RetryingLlmClient implements LlmClient {
     private final LlmClient delegate;
     private final int maxAttempts;

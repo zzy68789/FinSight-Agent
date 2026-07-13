@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 从检索文本中解析结构化金融证据。
+ */
 @Component
 public class FinancialEvidenceParser {
     private static final Map<String, Pattern> PATTERNS = Map.of(
@@ -29,6 +32,7 @@ public class FinancialEvidenceParser {
             FinancialMetricInputNames.OPERATING_CASH_FLOW, Pattern.compile("(经营活动产生的现金流量净额|经营现金流|经营性现金流)[^0-9\\-]{0,16}(-?\\d+(?:\\.\\d+)?)(亿元|万元|元)?")
     );
 
+    /** 将检索文本解析为带来源和口径的金融证据。 */
     public List<FinancialEvidenceItem> parse(
             String content,
             String sourceType,

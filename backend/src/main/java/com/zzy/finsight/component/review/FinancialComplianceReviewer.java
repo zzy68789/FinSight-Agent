@@ -13,10 +13,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 检查免责声明、保证收益和内幕信息等合规风险。
+ */
 @Component
 public class FinancialComplianceReviewer {
     public static final String POLICY_VERSION = "compliance-policy-v1";
 
+    /** 检查报告免责声明、禁用表达和引用结果。 */
     public FinancialComplianceReviewResult review(String report, CitationReviewResult citationReview) {
         List<FinancialComplianceIssue> issues = new ArrayList<>();
         String text = report == null ? "" : report;

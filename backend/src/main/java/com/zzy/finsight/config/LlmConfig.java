@@ -14,6 +14,9 @@ import org.springframework.lang.Nullable;
 
 import java.time.Duration;
 
+/**
+ * 配置快速模型、智能模型及其客户端。
+ */
 @Configuration
 public class LlmConfig {
 

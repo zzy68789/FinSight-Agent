@@ -2,6 +2,9 @@ package com.zzy.finsight.auth;
 
 import org.springframework.stereotype.Component;
 
+/**
+ * 保存当前请求对应的认证用户。
+ */
 @Component
 public class UserContext {
     private static final ThreadLocal<AuthenticatedUser> CURRENT = new ThreadLocal<>();

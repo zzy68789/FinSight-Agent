@@ -12,6 +12,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+/**
+ * 在金融快照对象与 JSON 字段之间转换。
+ */
 public class FinancialSnapshotJsonTypeHandler extends BaseTypeHandler<FinancialSnapshot> {
     private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().findAndAddModules().build();
 

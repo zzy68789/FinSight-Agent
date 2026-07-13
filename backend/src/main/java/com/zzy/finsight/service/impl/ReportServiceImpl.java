@@ -9,6 +9,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * 实现报告保存、查询和同用户复用业务。
+ */
 @Service
 public class ReportServiceImpl implements ReportService {
     private final ReportMapper reportMapper;

@@ -16,6 +16,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 从已上传报告的 RAG 结果中提取金融证据。
+ */
 @Component
 public class UploadedReportProvider implements FinancialDataProvider {
     private final RagService ragService;

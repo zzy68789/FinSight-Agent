@@ -4,6 +4,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 集中维护金融指标定义及目录版本。
+ */
 public class MetricDefinitionCatalog {
     public static final String CATALOG_VERSION = "financial-metrics-v1";
 

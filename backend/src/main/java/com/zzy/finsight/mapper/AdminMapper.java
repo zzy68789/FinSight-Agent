@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 定义管理员后台查询与维护的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface AdminMapper {
     List<AdminUserResponse> findUsers(@Param("keyword") String keyword);

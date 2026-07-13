@@ -7,6 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+/**
+ * 校验请求令牌并建立当前用户上下文。
+ */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
     private final AuthService authService;

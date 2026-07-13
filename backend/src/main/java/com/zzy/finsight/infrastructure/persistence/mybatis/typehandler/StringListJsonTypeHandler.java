@@ -13,6 +13,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
+/**
+ * 在字符串列表与 JSON 数组字段之间转换。
+ */
 public class StringListJsonTypeHandler extends BaseTypeHandler<List<String>> {
     private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().findAndAddModules().build();
 

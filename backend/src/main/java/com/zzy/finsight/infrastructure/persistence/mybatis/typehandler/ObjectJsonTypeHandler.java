@@ -11,6 +11,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+/**
+ * 将任意 Java 对象序列化为 JSON 字段。
+ */
 public class ObjectJsonTypeHandler extends BaseTypeHandler<Object> {
     private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder().findAndAddModules().build();
 

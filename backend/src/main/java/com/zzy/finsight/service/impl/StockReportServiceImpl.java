@@ -22,6 +22,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 实现股票报告异步执行、重试、回放和反馈业务。
+ */
 @Service
 public class StockReportServiceImpl implements StockReportService {
     private final StockReportRunner runner;

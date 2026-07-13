@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 定义报告版本、收藏和软删除的数据访问操作。
+ */
 @Mapper
 public interface ReportMapper {
     default void save(long ownerId, long taskId, String threadId, String content, String reviewStatus, String critique) {

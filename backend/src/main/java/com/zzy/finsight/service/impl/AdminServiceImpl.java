@@ -24,6 +24,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * 实现管理员后台查询、维护和审计业务。
+ */
 @Service
 public class AdminServiceImpl implements AdminService {
     private final AdminMapper adminMapper;

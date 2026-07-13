@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * 聚合搜索源并执行重试、去重和质量过滤。
+ */
 @Service
 public class EnhancedSearchService implements SearchService {
     private final List<SearchSource> searchSources;

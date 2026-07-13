@@ -2,6 +2,17 @@ package com.zzy.finsight.dto;
 
 import java.time.LocalDateTime;
 
+/**
+ * 表示管理员视角下的用户信息。
+ * @param id 主键标识。
+ * @param username 用户名。
+ * @param email 用户邮箱。
+ * @param role 用户角色。
+ * @param status 当前状态。
+ * @param createdAt 创建时间。
+ * @param updatedAt 更新时间。
+ * @param lastLoginAt 最近登录时间。
+ */
 public record AdminUserResponse(
         long id,
         String username,

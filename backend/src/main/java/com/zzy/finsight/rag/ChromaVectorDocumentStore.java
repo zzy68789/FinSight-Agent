@@ -13,6 +13,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 通过 ChromaDB 持久化和检索向量文档。
+ */
 @Service
 public class ChromaVectorDocumentStore implements VectorDocumentStore {
     private final RestClient restClient;
@@ -107,7 +110,7 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
-            // Clearing local state should not fail just because ChromaDB is offline.
+            // ChromaDB 离线时仍允许清理本地状态。
         } finally {
             collectionId = null;
             chromaAvailable = true;

@@ -2,6 +2,19 @@ package com.zzy.finsight.domain;
 
 import java.time.LocalDateTime;
 
+/**
+ * 表示持久化的 Agent 步骤日志。
+ * @param id 主键标识。
+ * @param taskId 关联任务标识。
+ * @param stepName 步骤名称。
+ * @param inputSnapshot 步骤输入快照。
+ * @param outputSnapshot 步骤输出快照。
+ * @param status 当前状态。
+ * @param errorMessage 错误信息。
+ * @param attemptNo 当前执行轮次。
+ * @param durationMs 执行耗时，单位毫秒。
+ * @param createdAt 创建时间。
+ */
 public record AgentStepLogRecord(
         long id,
         long taskId,

@@ -15,6 +15,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * 使用 Redis 并以内存降级保存任务运行状态。
+ */
 @Service
 public class TaskRuntimeStateServiceImpl implements TaskRuntimeStateService {
     private static final String TASK_STATUS_KEY = "finsight:task:%d:status";
@@ -97,7 +100,7 @@ public class TaskRuntimeStateServiceImpl implements TaskRuntimeStateService {
         try {
             redisTemplate.opsForValue().set(key, value, runtimeTtl);
         } catch (RuntimeException ignored) {
-            // Keep the workflow usable when Redis is unavailable in local development.
+            // 本地开发未启动 Redis 时降级到内存状态。
         }
     }
 

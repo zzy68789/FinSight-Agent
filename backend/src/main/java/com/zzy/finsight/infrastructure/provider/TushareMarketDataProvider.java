@@ -22,6 +22,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 从 TuShare 采集股票和 ETF 财务行情证据。
+ */
 @Component
 @Order(5)
 public class TushareMarketDataProvider implements FinancialDataProvider {

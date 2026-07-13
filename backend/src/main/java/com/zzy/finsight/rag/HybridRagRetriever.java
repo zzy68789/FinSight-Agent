@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * 融合关键词和向量结果完成混合检索。
+ */
 @Service
 public class HybridRagRetriever {
     private static final double BM25_K1 = 1.5d;

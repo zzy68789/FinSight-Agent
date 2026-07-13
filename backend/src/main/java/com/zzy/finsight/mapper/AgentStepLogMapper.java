@@ -7,6 +7,9 @@ import org.apache.ibatis.annotations.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 定义 Agent 步骤日志的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface AgentStepLogMapper {
     default void save(long taskId, String stepName, Object outputSnapshot) {

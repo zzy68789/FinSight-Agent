@@ -13,6 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 调用兼容 OpenAI 的接口生成文本向量。
+ */
 @Service
 public class OpenAiCompatibleEmbeddingClient implements EmbeddingClient {
     private static final int FALLBACK_DIMENSION = 128;

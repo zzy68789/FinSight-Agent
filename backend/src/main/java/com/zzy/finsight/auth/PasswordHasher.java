@@ -7,6 +7,9 @@ import javax.crypto.spec.PBEKeySpec;
 import java.security.SecureRandom;
 import java.util.Base64;
 
+/**
+ * 使用安全摘要校验和保存用户密码。
+ */
 @Component
 public class PasswordHasher {
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";

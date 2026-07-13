@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 定义金融快照、证据、指标和反馈的数据访问操作。
+ */
 @Mapper
 public interface FinancialSnapshotMapper {
     default long saveSnapshot(long ownerId, long taskId, String threadId, FinancialSnapshot snapshot, String status) {

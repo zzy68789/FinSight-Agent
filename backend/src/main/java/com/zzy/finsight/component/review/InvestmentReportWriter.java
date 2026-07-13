@@ -18,6 +18,9 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.StringJoiner;
 
+/**
+ * 基于确定性事实边界生成投研报告。
+ */
 @Component
 public class InvestmentReportWriter {
     public static final String WRITER_VERSION = "investment-report-writer-v2-llm";
@@ -29,6 +32,7 @@ public class InvestmentReportWriter {
         this.llmClient = llmClient;
     }
 
+    /** 根据快照、指标和风险评估生成投研报告。 */
     public String write(
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics,

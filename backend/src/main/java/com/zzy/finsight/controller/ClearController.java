@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 提供清理 RAG 文档的接口。
+ */
 @RestController
 @RequestMapping("/api")
 public class ClearController {
@@ -15,6 +18,7 @@ public class ClearController {
         this.ragService = ragService;
     }
 
+    /** 清空当前 RAG 知识库。 */
     @PostMapping("/clear")
     public ClearResponse clear() {
         ragService.clear();

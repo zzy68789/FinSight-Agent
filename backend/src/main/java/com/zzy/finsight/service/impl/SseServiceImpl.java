@@ -8,6 +8,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.Map;
 
+/**
+ * 实现股票工作流的 SSE 事件推送。
+ */
 @Service
 public class SseServiceImpl implements SseService {
     public void send(SseEmitter emitter, String step, Object data) throws IOException {

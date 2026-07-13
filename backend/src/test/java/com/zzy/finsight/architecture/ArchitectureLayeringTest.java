@@ -23,11 +23,21 @@ import com.zzy.finsight.service.impl.TaskQueryServiceImpl;
 import com.zzy.finsight.service.impl.TaskRuntimeStateServiceImpl;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ArchitectureLayeringTest {
+    private static final Pattern JAVADOC_PATTERN = Pattern.compile("/\\*\\*(.*?)\\*/", Pattern.DOTALL);
+    private static final Pattern CHINESE_PATTERN = Pattern.compile("[\\p{IsHan}]");
+
     @Test
     void serviceContractsAreInterfacesAndImplementationsStayInImplPackage() {
         List<Class<?>> contracts = List.of(
@@ -60,5 +70,33 @@ class ArchitectureLayeringTest {
         assertThat(StockReportWorkflow.class.getPackageName()).isEqualTo("com.zzy.finsight.component.workflow");
         assertThat(FinancialSnapshotJsonTypeHandler.class.getPackageName())
                 .isEqualTo("com.zzy.finsight.infrastructure.persistence.mybatis.typehandler");
+    }
+
+    @Test
+    void everyMainJavaFileHasChineseJavadoc() throws IOException {
+        Path sourceRoot = Path.of("src/main/java");
+        try (Stream<Path> paths = Files.walk(sourceRoot)) {
+            List<Path> missingComments = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> !containsChineseJavadoc(path))
+                    .toList();
+
+            assertThat(missingComments).isEmpty();
+        }
+    }
+
+    /** 判断源码中是否存在中文 Javadoc。 */
+    private boolean containsChineseJavadoc(Path path) {
+        try {
+            Matcher matcher = JAVADOC_PATTERN.matcher(Files.readString(path, StandardCharsets.UTF_8));
+            while (matcher.find()) {
+                if (CHINESE_PATTERN.matcher(matcher.group(1)).find()) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (IOException exception) {
+            throw new IllegalStateException("读取源码失败：" + path, exception);
+        }
     }
 }

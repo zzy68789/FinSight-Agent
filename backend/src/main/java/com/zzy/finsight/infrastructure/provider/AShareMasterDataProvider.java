@@ -12,6 +12,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 从本地主档提供 A 股公司基础证据。
+ */
 @Component
 @Order(0)
 public class AShareMasterDataProvider implements FinancialDataProvider {

@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 定义研究任务生命周期的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface ResearchTaskMapper {
     default long create(long ownerId, String threadId, String query, String searchMode) {

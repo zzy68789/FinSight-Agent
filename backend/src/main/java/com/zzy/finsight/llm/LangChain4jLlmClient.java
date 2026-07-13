@@ -2,6 +2,9 @@ package com.zzy.finsight.llm;
 
 import dev.langchain4j.model.chat.ChatModel;
 
+/**
+ * 通过 LangChain4j 调用兼容 OpenAI 的模型。
+ */
 public class LangChain4jLlmClient implements LlmClient {
     private final ChatModel fastChatModel;
     private final ChatModel smartChatModel;

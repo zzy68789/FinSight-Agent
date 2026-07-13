@@ -3,6 +3,9 @@ package com.zzy.finsight.rag;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 按长度和重叠窗口切分文档文本。
+ */
 public class TextChunker {
     private final int chunkSize;
     private final int overlap;

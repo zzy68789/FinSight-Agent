@@ -20,6 +20,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * 实现用户隔离的任务和报告查询管理业务。
+ */
 @Service
 public class TaskQueryServiceImpl implements TaskQueryService {
     private final ResearchTaskMapper taskMapper;

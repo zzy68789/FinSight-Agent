@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 通过 Tavily API 获取联网搜索结果。
+ */
 @Component
 public class TavilySearchSource implements SearchSource {
     private final RestClient restClient;

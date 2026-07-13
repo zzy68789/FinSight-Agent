@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+/**
+ * 按默认样例和规则评估金融报告质量。
+ */
 @Component
 public class FinancialEvaluator {
     public static final String POLICY_VERSION = "financial-evaluation-v2";
@@ -33,6 +36,7 @@ public class FinancialEvaluator {
         this.objectMapper = objectMapper;
     }
 
+    /** 加载内置金融报告评测集。 */
     public FinancialEvaluationSet loadDefaultSet() {
         try (InputStream input = Thread.currentThread()
                 .getContextClassLoader()
@@ -46,6 +50,7 @@ public class FinancialEvaluator {
         }
     }
 
+    /** 按指定用例评估报告的指标、引用和合规结果。 */
     public FinancialEvaluationResult evaluate(
             FinancialEvaluationCase evalCase,
             String report,
@@ -78,6 +83,7 @@ public class FinancialEvaluator {
         return new FinancialEvaluationResult(evalCase.ticker(), evalCase.name(), overall, status, scores, failedReasons);
     }
 
+    /** 使用内置用例评估报告，无匹配用例时返回空。 */
     public Optional<FinancialEvaluationResult> evaluateDefaultCase(
             String report,
             FinancialSnapshot snapshot,

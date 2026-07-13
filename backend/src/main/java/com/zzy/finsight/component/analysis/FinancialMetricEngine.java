@@ -16,6 +16,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 使用确定性公式计算股票和 ETF 指标。
+ */
 @Component
 public class FinancialMetricEngine {
     private static final int SCALE = 2;
@@ -29,6 +32,7 @@ public class FinancialMetricEngine {
         this.catalog = catalog;
     }
 
+    /** 依据固定公式计算可复核的金融指标。 */
     public List<FinancialMetricResult> compute(FinancialSnapshot snapshot) {
         Map<String, FinancialEvidenceItem> inputs = indexInputs(snapshot);
         if (snapshot != null && snapshot.subject() != null && snapshot.subject().isEtf()) {

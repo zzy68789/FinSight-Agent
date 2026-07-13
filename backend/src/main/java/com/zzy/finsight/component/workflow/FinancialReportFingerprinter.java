@@ -18,6 +18,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 
+/**
+ * 计算数据快照和报告生成上下文指纹。
+ */
 @Component
 public class FinancialReportFingerprinter {
     private final MetricDefinitionCatalog metricCatalog;
@@ -26,6 +29,7 @@ public class FinancialReportFingerprinter {
         this.metricCatalog = metricCatalog;
     }
 
+    /** 计算金融快照的稳定摘要。 */
     public String dataSnapshotHash(FinancialSnapshot snapshot) {
         if (snapshot == null || snapshot.subject() == null) {
             throw new IllegalArgumentException("金融快照和证券信息不能为空");
@@ -60,6 +64,7 @@ public class FinancialReportFingerprinter {
         return sha256(canonical.toString());
     }
 
+    /** 结合指标版本计算报告生成上下文摘要。 */
     public String generationContextHash(String dataSnapshotHash) {
         return sha256(String.join("|",
                 safe(dataSnapshotHash),

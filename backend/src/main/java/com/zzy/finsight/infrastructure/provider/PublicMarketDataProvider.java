@@ -13,6 +13,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 通过公开搜索补充行情和新闻证据。
+ */
 @Component
 public class PublicMarketDataProvider implements FinancialDataProvider {
     private final SearchService searchService;

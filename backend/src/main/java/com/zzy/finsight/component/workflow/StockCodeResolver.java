@@ -11,6 +11,9 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 解析证券代码并补充交易所和公司信息。
+ */
 @Component
 public class StockCodeResolver {
     private static final Pattern EXPLICIT_CODE = Pattern.compile("^(\\d{6})\\.(SH|SZ)$", Pattern.CASE_INSENSITIVE);
@@ -24,6 +27,7 @@ public class StockCodeResolver {
         this.companyDirectory = companyDirectory;
     }
 
+    /** 将股票名称或代码解析为标准证券标识。 */
     public StockSubject resolve(String input) {
         if (input == null || input.isBlank()) {
             throw new IllegalArgumentException("股票代码不能为空");

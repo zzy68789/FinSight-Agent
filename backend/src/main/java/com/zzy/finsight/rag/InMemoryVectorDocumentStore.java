@@ -4,6 +4,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * 在进程内存中保存和检索向量文档。
+ */
 public class InMemoryVectorDocumentStore implements VectorDocumentStore {
     private final EmbeddingClient embeddingClient;
     private final List<StoredChunk> chunks = new CopyOnWriteArrayList<>();

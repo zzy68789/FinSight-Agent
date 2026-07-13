@@ -26,6 +26,9 @@ import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * 实现 Markdown、PDF 和 Word 报告导出。
+ */
 @Service
 public class ReportExportServiceImpl implements ReportExportService {
     private static final float FONT_SIZE = 11f;
@@ -100,7 +103,7 @@ public class ReportExportServiceImpl implements ReportExportService {
                 try {
                     return new FontSelection(PDType0Font.load(document, candidate.toFile()), true);
                 } catch (IOException ignored) {
-                    // Try next installed font before falling back to a standard PDF font.
+                    // 当前字体不可用时继续尝试其他已安装字体。
                 }
             }
         }

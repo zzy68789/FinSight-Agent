@@ -9,6 +9,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 配置股票工作流和金融数据采集执行器。
+ */
 @Configuration
 public class AsyncExecutionConfig {
 

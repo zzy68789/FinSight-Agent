@@ -13,6 +13,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * 提供 PDF 文档上传和 RAG 入库接口。
+ */
 @RestController
 @RequestMapping("/api")
 public class UploadController {
@@ -22,6 +25,7 @@ public class UploadController {
         this.ragService = ragService;
     }
 
+    /** 上传 PDF 文档并建立 RAG 索引。 */
     @PostMapping("/upload")
     public UploadResponse upload(@RequestParam("files") List<MultipartFile> files) {
         if (files.size() > 5) {

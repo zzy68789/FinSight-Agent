@@ -5,6 +5,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 
+/**
+ * 定义工作流检查点的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface CheckpointMapper {
     default void save(String threadId, long taskId, Object state) {

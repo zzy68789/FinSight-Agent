@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+/**
+ * 根据指标和证据计算多维风险评分。
+ */
 @Component
 public class FinancialRiskScorer {
     private static final int FUNDAMENTAL_WEIGHT = 30;
@@ -23,6 +26,7 @@ public class FinancialRiskScorer {
     private static final int NEWS_WEIGHT = 15;
     private static final int MARKET_WEIGHT = 10;
 
+    /** 汇总指标和证据，生成五维风险评估。 */
     public FinancialRiskAssessment assess(List<FinancialMetricResult> metrics, List<FinancialEvidenceItem> evidenceItems) {
         List<FinancialRiskDimension> dimensions = List.of(
                 fundamentalRisk(metrics),

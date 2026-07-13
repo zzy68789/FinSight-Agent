@@ -15,12 +15,16 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 检查报告引用、报告期和指标展示是否可信。
+ */
 @Component
 public class CitationReviewer {
     public static final String POLICY_VERSION = "citation-policy-v1";
     private static final BigDecimal ABSOLUTE_TOLERANCE = new BigDecimal("0.01");
     private static final BigDecimal RELATIVE_TOLERANCE = new BigDecimal("0.005");
 
+    /** 检查报告引用、报告期和指标展示是否可追溯。 */
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
         long effectiveEvidenceCount = snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count();
         if (effectiveEvidenceCount < 3) {
@@ -51,6 +55,7 @@ public class CitationReviewer {
         return CitationReviewResult.pass();
     }
 
+    /** 判断报告数值是否处于允许误差范围。 */
     public boolean withinTolerance(BigDecimal expected, BigDecimal actual) {
         if (expected == null || actual == null) {
             return false;

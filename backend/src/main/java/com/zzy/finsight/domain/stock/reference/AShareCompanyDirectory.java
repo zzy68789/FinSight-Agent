@@ -4,6 +4,9 @@ package com.zzy.finsight.domain.stock.reference;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 维护本地 A 股公司名称和行业主档。
+ */
 public class AShareCompanyDirectory {
     private final Map<String, AShareCompanyProfile> profiles = Map.ofEntries(
             Map.entry("600519", new AShareCompanyProfile("600519", "贵州茅台", "食品饮料")),
@@ -22,6 +25,12 @@ public class AShareCompanyDirectory {
         return Optional.ofNullable(profiles.get(ticker));
     }
 
+    /**
+     * 表示本地维护的 A 股公司档案。
+     * @param ticker 证券代码。
+     * @param companyName 公司名称。
+     * @param industry 所属行业。
+     */
     public record AShareCompanyProfile(String ticker, String companyName, String industry) {
     }
 }

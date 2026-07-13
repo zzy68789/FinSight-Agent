@@ -47,7 +47,7 @@ npm.cmd run build
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。
 - **结构化输出**：金融报告的引用审查、合规审查和评测输出保持结构化，非法结果 fail-closed，不得绕过最终门控。
 - **前端 SSE 契约**：不轻改 `/api/stock-reports` 的路径、请求体和 SSE 字段。后端字段使用 `finalReport`/`reviewStatus` 等既有命名。
-- **注释统一用中文**：所有代码注释（类/方法 Javadoc、行内注释）一律用中文，与现有代码保持一致。
+- **注释统一用中文**：所有代码注释（类/方法 Javadoc、行内注释）一律用中文。新增或修改公开类、接口、Controller 映射方法以及包含业务规则的非平凡方法时，必须补充简洁的中文 Javadoc；数据载体的每个字段都要说明含义，Java `record` 使用类级 `@param` 说明组件字段。不要给 getter、setter、构造器或显而易见的代码堆砌无意义注释。
 
 ## Progress Docs
 

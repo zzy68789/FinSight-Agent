@@ -23,6 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 聚合任务、快照、报告和步骤日志形成可信度轨迹。
+ */
 @Component
 public class StockReportTraceReader {
     private final ResearchTaskMapper taskMapper;
@@ -45,6 +48,7 @@ public class StockReportTraceReader {
         this.objectMapper = objectMapper;
     }
 
+    /** 查询当前用户可访问的投研任务追踪详情。 */
     public StockReportTraceResponse get(long ownerId, long taskId) {
         WorkflowTaskExecutionRecord task = taskMapper.findExecution(ownerId, taskId)
                 .orElseThrow(() -> new IllegalArgumentException("未找到股票报告任务"));

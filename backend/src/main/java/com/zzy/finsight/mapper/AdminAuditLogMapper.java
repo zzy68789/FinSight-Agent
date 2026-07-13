@@ -5,6 +5,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 
+/**
+ * 定义管理员审计日志的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface AdminAuditLogMapper {
     default void save(long adminUserId, String action, String targetType, long targetId, String detail) {

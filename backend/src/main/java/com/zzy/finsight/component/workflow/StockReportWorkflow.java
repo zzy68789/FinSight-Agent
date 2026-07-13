@@ -22,6 +22,9 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 编排证券解析、指标、审查和评测组件。
+ */
 @Component
 public class StockReportWorkflow {
     private final StockCodeResolver stockCodeResolver;
@@ -53,22 +56,27 @@ public class StockReportWorkflow {
         this.evaluator = evaluator;
     }
 
+    /** 解析请求中的证券代码或名称。 */
     public StockSubject resolve(StockReportRequest request) {
         return stockCodeResolver.resolve(request.getTicker());
     }
 
+    /** 采集并冻结本次报告使用的金融数据。 */
     public FinancialSnapshot snapshot(StockSubject subject, StockReportRequest request) {
         return snapshotBuilder.build(subject, request.getReportPeriod(), request.getSearchMode());
     }
 
+    /** 计算金融快照对应的确定性指标。 */
     public List<FinancialMetricResult> metrics(FinancialSnapshot snapshot) {
         return metricEngine.compute(snapshot);
     }
 
+    /** 基于指标与证据评估金融风险。 */
     public FinancialRiskAssessment riskAssessment(List<FinancialMetricResult> metrics, FinancialSnapshot snapshot) {
         return riskScorer.assess(metrics, snapshot.evidenceItems());
     }
 
+    /** 生成带证据引用的投研报告正文。 */
     public String write(
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics,
@@ -78,14 +86,17 @@ public class StockReportWorkflow {
         return reportWriter.write(snapshot, metrics, riskAssessment, previousReview);
     }
 
+    /** 审查报告中的引用和指标一致性。 */
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
         return citationReviewer.review(report, snapshot, metrics);
     }
 
+    /** 审查报告的金融合规表达。 */
     public FinancialComplianceReviewResult compliance(String report, CitationReviewResult citationReview) {
         return complianceReviewer.review(report, citationReview);
     }
 
+    /** 使用评测集对最终报告进行可选评估。 */
     public Optional<FinancialEvaluationResult> evaluation(
             String report,
             FinancialSnapshot snapshot,

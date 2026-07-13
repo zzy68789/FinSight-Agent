@@ -3,13 +3,19 @@ package com.zzy.finsight.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 
+/**
+ * 表示兼容保留的聊天请求参数。
+ */
 public class ChatRequest {
+    /** 用户研究问题。 */
     @NotBlank
     private String query;
 
+    /** 检索模式。 */
     @JsonProperty("search_mode")
     private String searchMode = "hybrid";
 
+    /** 会话标识。 */
     @NotBlank
     @JsonProperty("thread_id")
     private String threadId;

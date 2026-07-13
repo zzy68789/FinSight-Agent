@@ -9,6 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 定义应用用户的 MyBatis 数据访问操作。
+ */
 @Mapper
 public interface AppUserMapper {
     default AppUserRecord create(String username, String email, String passwordHash, String role) {
