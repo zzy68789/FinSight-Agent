@@ -8,7 +8,7 @@ import com.zzy.finsight.dto.ReportIndexResponse;
 import com.zzy.finsight.dto.ReportResponse;
 import com.zzy.finsight.dto.TaskDetailResponse;
 import com.zzy.finsight.dto.TaskSummaryResponse;
-import com.zzy.finsight.service.ExportedReport;
+import com.zzy.finsight.dto.report.ExportedReport;
 import com.zzy.finsight.service.ReportExportService;
 import com.zzy.finsight.service.TaskQueryService;
 import org.springframework.http.ContentDisposition;

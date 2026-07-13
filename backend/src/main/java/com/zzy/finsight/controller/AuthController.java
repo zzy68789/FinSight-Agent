@@ -1,11 +1,11 @@
 package com.zzy.finsight.controller;
 
 import com.zzy.finsight.auth.AuthenticatedUser;
-import com.zzy.finsight.auth.AuthService;
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.ApiResponse;
 import com.zzy.finsight.dto.AuthRequest;
 import com.zzy.finsight.dto.AuthResponse;
+import com.zzy.finsight.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

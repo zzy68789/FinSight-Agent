@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.ResearchTaskMapper">
+    <resultMap id="taskResult" type="com.zzy.finsight.domain.ResearchTaskRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="query" javaType="string"/>
+            <arg column="search_mode" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="revision_number" javaType="_int"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="executionResult" type="com.zzy.finsight.domain.WorkflowTaskExecutionRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="owner_id" javaType="_long"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="stage" javaType="string"/>
+            <arg column="attempt_count" javaType="_int"/>
+            <arg column="request_payload" javaType="string"/>
+            <arg column="last_error" javaType="string"/>
+            <arg column="heartbeat_at" javaType="java.time.LocalDateTime"/>
+            <arg column="lease_owner" javaType="string"/>
+            <arg column="lease_until" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertTask" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO research_task(
+          owner_id, thread_id, query, search_mode, status, revision_number,
+          stage, attempt_count, request_payload, created_at, updated_at
+        )
+        VALUES (
+          #{ownerId}, #{threadId}, #{query}, #{searchMode}, 'CREATED', 0,
+          'CREATED', 0, #{requestPayload}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE research_task SET status = #{status}, updated_at = #{now} WHERE id = #{taskId}
+    </update>
+
+    <update id="acquireAttempt">
+        UPDATE research_task
+        SET status = 'RUNNING', attempt_count = attempt_count + 1,
+            heartbeat_at = #{now}, lease_owner = #{leaseOwner}, lease_until = #{leaseUntil},
+            last_error = NULL, updated_at = #{now}
+        WHERE id = #{taskId}
+          AND attempt_count &lt; 3
+          AND status IN ('CREATED', 'RETRYING')
+          AND (lease_until IS NULL OR lease_until &lt; #{now} OR lease_owner = #{leaseOwner})
+    </update>
+
+    <update id="updateRunningStage">
+        UPDATE research_task
+        SET stage = #{stage}, heartbeat_at = #{now}, lease_until = #{leaseUntil}, updated_at = #{now}
+        WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
+    </update>
+
+    <update id="finish">
+        UPDATE research_task
+        SET status = #{status}, stage = #{stage}, last_error = #{error},
+            heartbeat_at = #{now}, lease_owner = NULL, lease_until = NULL, updated_at = #{now}
+        WHERE id = #{taskId}
+    </update>
+
+    <update id="updateRetrying">
+        UPDATE research_task
+        SET status = 'RETRYING', stage = 'RETRYING', lease_owner = NULL, lease_until = NULL, updated_at = #{now}
+        WHERE id = #{taskId} AND status = #{expectedStatus} AND attempt_count &lt; 3
+    </update>
+
+    <update id="updateStaleRetrying">
+        UPDATE research_task
+        SET status = 'RETRYING', stage = 'RETRYING', lease_owner = NULL, lease_until = NULL, updated_at = #{now}
+        WHERE id = #{taskId}
+          AND status = 'RUNNING'
+          AND attempt_count &lt; 3
+          AND COALESCE(heartbeat_at, updated_at) &lt; #{heartbeatBefore}
+    </update>
+
+    <select id="findExecution" resultMap="executionResult">
+        SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
+               last_error, heartbeat_at, lease_owner, lease_until, updated_at
+        FROM research_task
+        WHERE owner_id = #{ownerId} AND id = #{taskId}
+    </select>
+
+    <select id="findStaleRunning" resultMap="executionResult">
+        SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
+               last_error, heartbeat_at, lease_owner, lease_until, updated_at
+        FROM research_task
+        WHERE status = 'RUNNING'
+          AND search_mode LIKE 'stock-%'
+          AND COALESCE(heartbeat_at, updated_at) &lt; #{heartbeatBefore}
+        ORDER BY updated_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectPage" resultMap="taskResult">
+        SELECT id, thread_id, query, search_mode, status, revision_number, created_at, updated_at
+        FROM research_task
+        <where>
+            owner_id = #{ownerId}
+            <if test="status != null and status != ''">AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (query LIKE CONCAT('%', #{keyword}, '%') OR thread_id LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY updated_at DESC, id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM research_task
+        <where>
+            owner_id = #{ownerId}
+            <if test="status != null and status != ''">AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (query LIKE CONCAT('%', #{keyword}, '%') OR thread_id LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <select id="findById" resultMap="taskResult">
+        SELECT id, thread_id, query, search_mode, status, revision_number, created_at, updated_at
+        FROM research_task
+        WHERE owner_id = #{ownerId} AND id = #{taskId}
+    </select>
+</mapper>

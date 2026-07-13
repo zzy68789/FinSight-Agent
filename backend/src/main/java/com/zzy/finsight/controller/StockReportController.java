@@ -2,11 +2,11 @@ package com.zzy.finsight.controller;
 
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.ApiResponse;
-import com.zzy.finsight.financial.StockBadCaseFeedbackRequest;
-import com.zzy.finsight.financial.StockReportReplayResponse;
-import com.zzy.finsight.financial.StockReportRequest;
-import com.zzy.finsight.financial.StockReportService;
-import com.zzy.finsight.financial.StockReportTraceResponse;
+import com.zzy.finsight.dto.stock.StockBadCaseFeedbackRequest;
+import com.zzy.finsight.dto.stock.StockReportReplayResponse;
+import com.zzy.finsight.dto.stock.StockReportRequest;
+import com.zzy.finsight.service.StockReportService;
+import com.zzy.finsight.dto.stock.StockReportTraceResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

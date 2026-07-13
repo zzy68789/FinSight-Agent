@@ -1,16 +1,16 @@
 package com.zzy.finsight;
 
-import com.zzy.finsight.auth.AuthService;
+import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.ClearResponse;
-import com.zzy.finsight.financial.FinancialSnapshotRepository;
-import com.zzy.finsight.repository.AgentStepLogRepository;
-import com.zzy.finsight.repository.AdminAuditLogRepository;
-import com.zzy.finsight.repository.AdminRepository;
-import com.zzy.finsight.repository.AppUserRepository;
-import com.zzy.finsight.repository.CheckpointRepository;
-import com.zzy.finsight.repository.ReportRepository;
-import com.zzy.finsight.repository.ResearchTaskRepository;
+import com.zzy.finsight.mapper.FinancialSnapshotMapper;
+import com.zzy.finsight.mapper.AgentStepLogMapper;
+import com.zzy.finsight.mapper.AdminAuditLogMapper;
+import com.zzy.finsight.mapper.AdminMapper;
+import com.zzy.finsight.mapper.AppUserMapper;
+import com.zzy.finsight.mapper.CheckpointMapper;
+import com.zzy.finsight.mapper.ReportMapper;
+import com.zzy.finsight.mapper.ResearchTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,16 +42,16 @@ class ApplicationSmokeTest {
     TestRestTemplate restTemplate;
 
     @MockitoBean
-    ResearchTaskRepository taskRepository;
+    ResearchTaskMapper taskMapper;
 
     @MockitoBean
-    AgentStepLogRepository stepLogRepository;
+    AgentStepLogMapper stepLogMapper;
 
     @MockitoBean
-    CheckpointRepository checkpointRepository;
+    CheckpointMapper checkpointMapper;
 
     @MockitoBean
-    ReportRepository reportRepository;
+    ReportMapper reportMapper;
 
     @MockitoBean
     UserContext userContext;
@@ -60,22 +60,22 @@ class ApplicationSmokeTest {
     AuthService authService;
 
     @MockitoBean
-    AppUserRepository appUserRepository;
+    AppUserMapper appUserMapper;
 
     @MockitoBean
-    AdminRepository adminRepository;
+    AdminMapper adminMapper;
 
     @MockitoBean
-    AdminAuditLogRepository adminAuditLogRepository;
+    AdminAuditLogMapper adminAuditLogMapper;
 
     @MockitoBean
-    FinancialSnapshotRepository financialSnapshotRepository;
+    FinancialSnapshotMapper financialSnapshotMapper;
 
     @BeforeEach
     void setUp() {
         when(userContext.currentUserId()).thenReturn(7L);
-        when(taskRepository.create(org.mockito.ArgumentMatchers.eq(7L), anyString(), anyString(), anyString())).thenReturn(1L);
-        when(reportRepository.findLatestByThread(org.mockito.ArgumentMatchers.eq(7L), anyString())).thenReturn(Optional.empty());
+        when(taskMapper.create(org.mockito.ArgumentMatchers.eq(7L), anyString(), anyString(), anyString())).thenReturn(1L);
+        when(reportMapper.findLatestByThread(org.mockito.ArgumentMatchers.eq(7L), anyString())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -85,7 +85,7 @@ class ApplicationSmokeTest {
 
         assertThat(response).containsEntry("status", "running");
         assertThat(response).containsEntry("backend", "java");
-        assertThat(response).containsEntry("workflow", "langgraph4j");
+        assertThat(response).containsEntry("workflow", "stock-report-pipeline");
     }
 
     @Test

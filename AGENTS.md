@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project
 
-FinSight 是基于 **Spring Boot 3.4.3 (Java 17) + LangGraph4j + Vue 3** 的 Multi-Agent 深度调研报告生成系统。核心是两条独立的 Agent 工作流 + RAG 检索 + SSE 流式推送，外加一条 A股/ETF 投研报告链路。
+FinSight 是基于 **Spring Boot 3.4.3 (Java 17) + MyBatis + Vue 3** 的 A股/ETF 投研报告生成系统。核心是证券代码研究工作流 + RAG 检索 + SSE 流式推送。
 
 环境为 **Windows / PowerShell**，命令用 `mvn.cmd`、`npm.cmd`（带 `.cmd` 后缀）。后端无 Maven wrapper，直接用 `mvn.cmd`。
 
@@ -26,22 +26,18 @@ npm.cmd run dev
 npm.cmd run build
 ```
 
-后端端口 **8000**；健康检查 `curl http://localhost:8000/` 返回 `{"status":"running","backend":"java","workflow":"langgraph4j"}`。
+后端端口 **8000**；健康检查 `curl http://localhost:8000/` 返回 `{"status":"running","backend":"java","workflow":"stock-report-pipeline"}`。
 
 ## Architecture
 
-**两条互相独立的 Agent 工作流**（改动其一不要污染另一条）：
-
-- 通用调研链路 —— `agent/graph/ResearchGraphFactory.java`
-  `Router → Planner → Researcher → Writer → Reviewer`；Reviewer PASS 结束、FAIL 回 Planner 最多 3 轮；修改指令走 Refiner。
-- 证券代码研究链路 —— `financial/StockReportWorkflow.java`
+**证券代码研究链路** —— `component/workflow/StockReportWorkflow.java`
   `StockResolve → DataSnapshot → MetricEngine → RiskAssessment → EvidenceCollect → InvestmentWriter → CitationReviewer + ComplianceReviewer → Evaluation`。
 
-**后端分层**（`backend/src/main/java/com/zzy/finsight/`）：`controller` → `service` → `repository`(JDBC)，`agent`(通用工作流/节点/状态)、`financial`(投研报告/证据/指标/回放)、`rag`(PDF 解析·切片·embedding·ChromaDB)、`llm`、`search`。
+**后端分层**（`backend/src/main/java/com/zzy/finsight/`）：`controller` → `service` 接口 → `service.impl` 实现 → `mapper`(MyBatis XML)。业务计算、数据采集、审查和工作流分别位于 `component.analysis`、`component.marketdata`、`component.review`、`component.workflow`；金融模型位于 `domain.stock`，请求响应位于 `dto`，Provider、MyBatis TypeHandler 和序列化适配位于 `infrastructure`。另有 `rag`、`llm`、`search` 基础模块。
 
 **外部依赖与降级**：MySQL 长期持久化；Redis 存运行态（未启动降级为进程内内存）；ChromaDB 向量检索（未启动降级为进程内向量库，重启丢失）；LLM / Tavily / TuShare 未配置 key 时走本地 fallback，可跑通完整流程。RAG 默认 `BM25 + vector` 融合 + 相关性阈值。
 
-**数据库**：`backend/src/main/resources/db/schema.sql` 由 Spring Boot 启动时按 `spring.sql.init.schema-locations` 自动执行（首次需先手动建 `finsight` 库）。旧库需手动跑 `db/upgrade-*.sql`。schema 变更时新增 `db/upgrade-<feature>.sql`，所有字段带中文 `COMMENT`。
+**数据库**：Flyway 负责正式迁移，`backend/src/main/resources/db/schema.sql` 仅保留完整结构参考；MyBatis SQL 位于 `backend/src/main/resources/mapper/`。schema 变更时新增 Flyway migration，并同步完整 schema 与必要的手动升级 SQL，所有字段带中文 `COMMENT`。
 
 ## Conventions
 
@@ -49,8 +45,8 @@ npm.cmd run build
 - **金融数字确定性**：财务指标一律用 Java `BigDecimal` 计算，不让 LLM 算关键数字。缺输入标 `MISSING_INPUT`，公开数据源失败标 `DATA_MISSING`。
 - **投研报告合规**：报告必须标注"仅作研究辅助，不构成投资建议"；不做荐股、仓位、保证收益、自动交易、回测。最终报告需同时通过 `CitationReviewer` 和 `ComplianceReviewer`。
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。
-- **结构化输出**：Planner 解析 JSON array，Reviewer 强制解析 `{"status":"PASS|FAIL","feedback":""}`，非法输出 fail-closed。
-- **前端 SSE 契约**：不轻改 `/api/chat`、`/api/stock-reports` 的路径、请求体和 SSE 字段。后端字段用 `finalReport`/`searchResults`/`reviewStatus`，前端兼容两种命名。
+- **结构化输出**：金融报告的引用审查、合规审查和评测输出保持结构化，非法结果 fail-closed，不得绕过最终门控。
+- **前端 SSE 契约**：不轻改 `/api/stock-reports` 的路径、请求体和 SSE 字段。后端字段使用 `finalReport`/`reviewStatus` 等既有命名。
 - **注释统一用中文**：所有代码注释（类/方法 Javadoc、行内注释）一律用中文，与现有代码保持一致。
 
 ## Progress Docs

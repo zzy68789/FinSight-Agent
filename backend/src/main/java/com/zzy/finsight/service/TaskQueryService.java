@@ -1,165 +1,30 @@
 package com.zzy.finsight.service;
 
-import com.zzy.finsight.domain.AgentStepLogRecord;
-import com.zzy.finsight.domain.ReportRecord;
-import com.zzy.finsight.domain.ResearchTaskRecord;
 import com.zzy.finsight.dto.AgentStepLogResponse;
 import com.zzy.finsight.dto.PageResponse;
 import com.zzy.finsight.dto.ReportIndexResponse;
 import com.zzy.finsight.dto.ReportResponse;
 import com.zzy.finsight.dto.TaskDetailResponse;
 import com.zzy.finsight.dto.TaskSummaryResponse;
-import com.zzy.finsight.rag.RagService;
-import com.zzy.finsight.repository.AgentStepLogRepository;
-import com.zzy.finsight.repository.ReportRepository;
-import com.zzy.finsight.repository.ResearchTaskRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
-@Service
-public class TaskQueryService {
-    private final ResearchTaskRepository taskRepository;
-    private final AgentStepLogRepository stepLogRepository;
-    private final ReportRepository reportRepository;
-    private final RagService ragService;
+public interface TaskQueryService {
+    PageResponse<TaskSummaryResponse> listTasks(long ownerId, int page, int size, String status, String keyword);
 
-    public TaskQueryService(
-            ResearchTaskRepository taskRepository,
-            AgentStepLogRepository stepLogRepository,
-            ReportRepository reportRepository,
-            RagService ragService
-    ) {
-        this.taskRepository = taskRepository;
-        this.stepLogRepository = stepLogRepository;
-        this.reportRepository = reportRepository;
-        this.ragService = ragService;
-    }
+    TaskDetailResponse getTask(long ownerId, long taskId);
 
-    public PageResponse<TaskSummaryResponse> listTasks(long ownerId, int page, int size, String status, String keyword) {
-        int normalizedPage = Math.max(page, 1);
-        int normalizedSize = Math.min(Math.max(size, 1), 100);
-        List<TaskSummaryResponse> items = taskRepository.findPage(ownerId, normalizedPage, normalizedSize, normalize(status), normalize(keyword))
-                .stream()
-                .map(this::toSummary)
-                .toList();
-        long total = taskRepository.count(ownerId, normalize(status), normalize(keyword));
-        return new PageResponse<>(items, normalizedPage, normalizedSize, total);
-    }
+    List<AgentStepLogResponse> getTaskLogs(long ownerId, long taskId);
 
-    public TaskDetailResponse getTask(long ownerId, long taskId) {
-        return taskRepository.findById(ownerId, taskId)
-                .map(this::toDetail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found"));
-    }
+    List<ReportResponse> getThreadReports(long ownerId, String threadId);
 
-    public List<AgentStepLogResponse> getTaskLogs(long ownerId, long taskId) {
-        getTask(ownerId, taskId);
-        return stepLogRepository.findByTaskId(taskId).stream()
-                .map(this::toStepLog)
-                .toList();
-    }
+    List<ReportResponse> listReports(long ownerId, String keyword, boolean favoriteOnly);
 
-    public List<ReportResponse> getThreadReports(long ownerId, String threadId) {
-        return reportRepository.findReportsByThread(ownerId, threadId).stream()
-                .map(this::toReport)
-                .toList();
-    }
+    ReportResponse getReport(long ownerId, long reportId);
 
-    public List<ReportResponse> listReports(long ownerId, String keyword, boolean favoriteOnly) {
-        return reportRepository.findReports(ownerId, normalize(keyword), favoriteOnly).stream()
-                .map(this::toReport)
-                .toList();
-    }
+    ReportResponse updateFavorite(long ownerId, long reportId, boolean favorite);
 
-    public ReportResponse getReport(long ownerId, long reportId) {
-        return reportRepository.findReportById(ownerId, reportId)
-                .map(this::toReport)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
-    }
+    void deleteReport(long ownerId, long reportId);
 
-    public ReportResponse updateFavorite(long ownerId, long reportId, boolean favorite) {
-        getReport(ownerId, reportId);
-        reportRepository.updateFavorite(ownerId, reportId, favorite);
-        return getReport(ownerId, reportId);
-    }
-
-    public void deleteReport(long ownerId, long reportId) {
-        getReport(ownerId, reportId);
-        reportRepository.softDelete(ownerId, reportId);
-    }
-
-    public ReportIndexResponse indexReportToKnowledgeBase(long ownerId, long reportId) {
-        ReportRecord report = reportRepository.findReportById(ownerId, reportId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
-        int chunksStored = ragService.indexText(reportSource(report), report.content());
-        reportRepository.markIndexed(ownerId, reportId);
-        return new ReportIndexResponse(reportId, chunksStored, "indexed");
-    }
-
-    private TaskSummaryResponse toSummary(ResearchTaskRecord task) {
-        return new TaskSummaryResponse(
-                task.id(),
-                task.threadId(),
-                task.query(),
-                task.searchMode(),
-                task.status(),
-                task.revisionNumber(),
-                task.createdAt(),
-                task.updatedAt()
-        );
-    }
-
-    private TaskDetailResponse toDetail(ResearchTaskRecord task) {
-        return new TaskDetailResponse(
-                task.id(),
-                task.threadId(),
-                task.query(),
-                task.searchMode(),
-                task.status(),
-                task.revisionNumber(),
-                task.createdAt(),
-                task.updatedAt()
-        );
-    }
-
-    private AgentStepLogResponse toStepLog(AgentStepLogRecord log) {
-        return new AgentStepLogResponse(
-                log.id(),
-                log.taskId(),
-                log.stepName(),
-                log.inputSnapshot(),
-                log.outputSnapshot(),
-                log.status(),
-                log.errorMessage(),
-                log.attemptNo(),
-                log.durationMs(),
-                log.createdAt()
-        );
-    }
-
-    private ReportResponse toReport(ReportRecord report) {
-        return new ReportResponse(
-                report.id(),
-                report.taskId(),
-                report.threadId(),
-                report.content(),
-                report.version(),
-                report.reviewStatus(),
-                report.critique(),
-                report.createdAt(),
-                report.favorite(),
-                report.indexedAt()
-        );
-    }
-
-    private String reportSource(ReportRecord report) {
-        return "report-%s-v%d.md".formatted(report.threadId(), report.version());
-    }
-
-    private String normalize(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
-    }
+    ReportIndexResponse indexReportToKnowledgeBase(long ownerId, long reportId);
 }

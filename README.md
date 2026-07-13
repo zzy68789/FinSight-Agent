@@ -15,9 +15,9 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，相同上下文只复用同一用户下已通过评审的报告。
 - **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
-- **风险评分**：`FinancialRiskScoringService` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
+- **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 检查证据数量、报告期、指标引用和指标值展示；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
-- **自动评测门控**：`FinancialEvaluationService` 加载 `financial-eval-set.json`，对默认样例输出 claim/citation/numeric/keypoint 评测结果。
+- **自动评测门控**：`FinancialEvaluator` 加载 `financial-eval-set.json`，对默认样例输出 claim/citation/numeric/keypoint 评测结果。
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
 - **报告库与导出**：支持报告列表、版本查看、Markdown/PDF/Word 导出、收藏、软删除和加入 RAG。
 - **本地可演示降级**：未配置 LLM、Tavily、TuShare、Redis 或 ChromaDB 时，仍可通过本地 fallback 跑通核心流程。
@@ -25,7 +25,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 ## 当前重构状态
 
 - 后端通用 deep-research 文件已从本仓库移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService` 和 `/api/chat` 控制器。
-- 金融投研链路保留在 `backend/src/main/java/com/zzy/finsight/financial/`，公开入口为 `/api/stock-reports`。
+- 金融投研链路已按严格 Spring MVC 职责拆分：`controller` 只依赖 `service` 接口，具体实现位于 `service/impl`；计算、采集、审查和工作流位于 `component`；MyBatis 类型转换、数据源和序列化适配位于 `infrastructure`。公开入口仍为 `/api/stock-reports`。
 - RAG、搜索、报告库、用户、管理员后台等基础设施继续复用，但定位为金融投研链路的支撑能力。
 - 前端仍有部分通用研究模式 UI/调用需要后续清理，路线图见 `docs/待实现功能.md`。
 
@@ -35,7 +35,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 
 - Java 17
 - Spring Boot 3.4.3
-- Spring Web / Validation / JDBC
+- Spring Web / Validation / MyBatis 3.0.4
 - LangChain4j OpenAI-compatible ChatModel
 - PDFBox
 - MySQL
@@ -90,19 +90,22 @@ FinSight-Agent/
 │   ├── pom.xml
 │   └── src/main/
 │       ├── java/com/zzy/finsight/
-│       │   ├── auth/              # 注册、登录、Bearer Token、用户上下文
+│       │   ├── auth/              # Bearer Token、密码和用户上下文支撑
+│       │   ├── component/         # analysis/marketdata/review/workflow 业务组件
 │       │   ├── config/            # CORS、LLM、异步执行器等配置
 │       │   ├── controller/        # REST API 与 SSE 接口
-│       │   ├── dto/               # 请求 / 响应 DTO
-│       │   ├── financial/         # A股/ETF 投研报告、证据、指标、合规、回放
+│       │   ├── domain/stock/      # 股票领域模型、metric 指标定义和 reference 主档
+│       │   ├── dto/               # API 请求响应、股票报告和导出 DTO
+│       │   ├── infrastructure/    # Provider、MyBatis TypeHandler、序列化适配
 │       │   ├── llm/               # OpenAI-compatible LLM 封装
+│       │   ├── mapper/            # 纯 MyBatis Mapper 接口
 │       │   ├── rag/               # PDF 解析、切片、embedding、ChromaDB 向量检索
-│       │   ├── repository/        # JDBC 持久化
 │       │   ├── search/            # Tavily 搜索封装
-│       │   └── service/           # 报告、任务查询、SSE、管理员服务
+│       │   └── service/           # Controller 面向的服务接口及 impl 实现
 │       └── resources/
 │           ├── application.yml
 │           ├── financial-eval-set.json
+│           ├── mapper/            # MyBatis XML SQL 与结果映射
 │           └── db/                # Flyway 迁移、完整 schema 与手动升级脚本
 ├── frontend/                      # Vue 3 前端
 ├── docs/                          # 路线图、已实现能力、遗留问题、踩坑日志
@@ -160,7 +163,7 @@ curl http://localhost:8000/
 {
   "status": "running",
   "backend": "java",
-  "workflow": "langgraph4j"
+  "workflow": "stock-report-pipeline"
 }
 ```
 

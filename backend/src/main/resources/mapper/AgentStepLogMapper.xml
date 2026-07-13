@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.AgentStepLogMapper">
+    <resultMap id="stepLogResult" type="com.zzy.finsight.domain.AgentStepLogRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="task_id" javaType="_long"/>
+            <arg column="step_name" javaType="string"/>
+            <arg column="input_snapshot" javaType="string"/>
+            <arg column="output_snapshot" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="error_message" javaType="string"/>
+            <arg column="attempt_no" javaType="_int"/>
+            <arg column="duration_ms" javaType="_long"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertSuccess">
+        INSERT INTO agent_step_log(
+          task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+          attempt_no, duration_ms, created_at
+        )
+        VALUES (
+          #{taskId}, #{stepName}, NULL,
+          #{outputSnapshot,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
+          'SUCCESS', NULL, #{attemptNo}, #{durationMs}, #{createdAt}
+        )
+    </insert>
+
+    <insert id="insertError">
+        INSERT INTO agent_step_log(
+          task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+          attempt_no, duration_ms, created_at
+        )
+        VALUES (#{taskId}, #{stepName}, NULL, NULL, 'FAILED', #{errorMessage}, 1, 0, #{createdAt})
+    </insert>
+
+    <select id="findByTaskId" resultMap="stepLogResult">
+        SELECT id, task_id, step_name, input_snapshot, output_snapshot, status, error_message,
+               attempt_no, duration_ms, created_at
+        FROM agent_step_log
+        WHERE task_id = #{taskId}
+        ORDER BY id ASC
+    </select>
+</mapper>

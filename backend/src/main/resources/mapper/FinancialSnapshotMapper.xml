@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.FinancialSnapshotMapper">
+    <resultMap id="persistedSnapshotResult" type="com.zzy.finsight.domain.stock.PersistedFinancialSnapshot">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="snapshot_json" javaType="com.zzy.finsight.domain.stock.FinancialSnapshot"
+                 typeHandler="com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.FinancialSnapshotJsonTypeHandler"/>
+            <arg column="data_snapshot_hash" javaType="string"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="metricResult" type="com.zzy.finsight.domain.stock.FinancialMetricResult">
+        <constructor>
+            <arg column="metric_name" javaType="string"/>
+            <arg column="metric_value" javaType="java.math.BigDecimal"/>
+            <arg column="display_value" javaType="string"/>
+            <arg column="formula" javaType="string"/>
+            <arg column="formula_version" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="reason" javaType="string"/>
+            <arg column="evidence_refs" javaType="java.util.List"
+                 typeHandler="com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.StringListJsonTypeHandler"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertSnapshot" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO stock_analysis_snapshot(
+          owner_id, task_id, thread_id, ticker, exchange_code, company_name, industry,
+          report_period, search_mode, snapshot_json, data_snapshot_hash, status, created_at, updated_at
+        )
+        VALUES (
+          #{ownerId}, #{taskId}, #{threadId}, #{ticker}, #{exchangeCode}, #{companyName}, #{industry},
+          #{reportPeriod}, #{searchMode},
+          #{snapshot,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.FinancialSnapshotJsonTypeHandler},
+          #{dataSnapshotHash}, #{status}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <insert id="insertEvidence" parameterType="map">
+        INSERT INTO stock_evidence_item(
+          snapshot_id, task_id, source_type, source_name, url, page_number, report_period,
+          metric_name, raw_value, normalized_value, excerpt, confidence, as_of_time,
+          issue_code, created_at
+        )
+        VALUES (
+          #{snapshotId}, #{taskId}, #{sourceType}, #{sourceName}, #{url}, #{pageNumber}, #{reportPeriod},
+          #{metricName}, #{rawValue}, #{normalizedValue}, #{excerpt}, #{confidence}, #{asOfTime},
+          #{issueCode}, #{createdAt}
+        )
+    </insert>
+
+    <select id="countMetrics" resultType="int">
+        SELECT COUNT(*) FROM stock_metric_result WHERE task_id = #{taskId}
+    </select>
+
+    <insert id="insertMetric" parameterType="map">
+        INSERT INTO stock_metric_result(
+          snapshot_id, task_id, metric_name, formula, formula_version, metric_value, display_value,
+          status, reason, evidence_refs, created_at
+        )
+        VALUES (
+          #{snapshotId}, #{taskId}, #{metricName}, #{formula}, #{formulaVersion}, #{metricValue}, #{displayValue},
+          #{status}, #{reason},
+          #{evidenceRefs,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.StringListJsonTypeHandler},
+          #{createdAt}
+        )
+    </insert>
+
+    <select id="findSnapshot" resultMap="persistedSnapshotResult">
+        SELECT id, snapshot_json, data_snapshot_hash
+        FROM stock_analysis_snapshot
+        WHERE owner_id = #{ownerId} AND task_id = #{taskId}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findMetrics" resultMap="metricResult">
+        SELECT metric_name, formula, formula_version, metric_value, display_value,
+               status, reason, evidence_refs
+        FROM stock_metric_result
+        WHERE task_id = #{taskId}
+        ORDER BY id ASC
+    </select>
+
+    <insert id="insertFeedback">
+        INSERT INTO stock_bad_case_feedback(
+          owner_id, task_id, feedback_type, detail, replay_snapshot_json, created_at
+        )
+        VALUES (#{ownerId}, #{taskId}, #{feedbackType}, #{detail}, #{replaySnapshotJson}, #{createdAt})
+    </insert>
+
+    <select id="findLatestSnapshotJson" resultType="string">
+        SELECT snapshot_json
+        FROM stock_analysis_snapshot
+        WHERE owner_id = #{ownerId} AND task_id = #{taskId}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findEvidenceJson" resultType="string">
+        SELECT JSON_OBJECT(
+          'sourceType', source_type,
+          'sourceName', source_name,
+          'url', url,
+          'reportPeriod', report_period,
+          'metricName', metric_name,
+          'rawValue', raw_value,
+          'normalizedValue', normalized_value,
+          'excerpt', excerpt,
+          'confidence', confidence,
+          'issueCode', issue_code
+        )
+        FROM stock_evidence_item
+        WHERE task_id = #{taskId}
+        ORDER BY id ASC
+    </select>
+
+    <select id="findMetricJson" resultType="string">
+        SELECT JSON_OBJECT(
+          'metricName', metric_name,
+          'formula', formula,
+          'formulaVersion', formula_version,
+          'value', metric_value,
+          'displayValue', display_value,
+          'status', status,
+          'reason', reason,
+          'evidenceRefs', evidence_refs
+        )
+        FROM stock_metric_result
+        WHERE task_id = #{taskId}
+        ORDER BY id ASC
+    </select>
+</mapper>

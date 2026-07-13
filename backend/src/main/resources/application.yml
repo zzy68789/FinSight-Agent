@@ -39,6 +39,12 @@ spring:
       max-file-size: 20MB
       max-request-size: 50MB
 
+mybatis:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    jdbc-type-for-null: 'NULL'
+
 finsight:
   auth:
     enabled: true

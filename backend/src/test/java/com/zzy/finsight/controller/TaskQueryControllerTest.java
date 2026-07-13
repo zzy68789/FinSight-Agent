@@ -1,7 +1,7 @@
 package com.zzy.finsight.controller;
 
 import com.zzy.finsight.auth.UserContext;
-import com.zzy.finsight.auth.AuthService;
+import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.dto.ApiResponse;
 import com.zzy.finsight.dto.AgentStepLogResponse;
 import com.zzy.finsight.dto.PageResponse;
@@ -9,7 +9,7 @@ import com.zzy.finsight.dto.ReportResponse;
 import com.zzy.finsight.dto.ReportIndexResponse;
 import com.zzy.finsight.dto.TaskDetailResponse;
 import com.zzy.finsight.dto.TaskSummaryResponse;
-import com.zzy.finsight.service.ExportedReport;
+import com.zzy.finsight.dto.report.ExportedReport;
 import com.zzy.finsight.service.ReportExportService;
 import com.zzy.finsight.service.TaskQueryService;
 import org.junit.jupiter.api.Test;

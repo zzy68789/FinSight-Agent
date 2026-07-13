@@ -1,10 +1,11 @@
 package com.zzy.finsight.controller;
 
-import com.zzy.finsight.auth.AuthService;
+import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.auth.UserContext;
-import com.zzy.finsight.financial.StockReportRequest;
-import com.zzy.finsight.financial.StockReportService;
+import com.zzy.finsight.dto.stock.StockReportRequest;
+import com.zzy.finsight.service.StockReportService;
 import com.zzy.finsight.service.SseService;
+import com.zzy.finsight.service.impl.SseServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,7 +69,7 @@ class StockReportControllerTest {
         when(userContext.currentUserId()).thenReturn(7L);
         doAnswer(invocation -> {
             SseEmitter emitter = invocation.getArgument(2);
-            new SseService().error(emitter, new IllegalArgumentException("当前仅支持沪深 A 股普通股票代码"));
+            new SseServiceImpl().error(emitter, new IllegalArgumentException("当前仅支持沪深 A 股普通股票代码"));
             return null;
         }).when(stockReportService).run(any(Long.class), any(StockReportRequest.class), any(SseEmitter.class));
 

@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.ReportMapper">
+    <resultMap id="reportResult" type="com.zzy.finsight.domain.ReportRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="task_id" javaType="java.lang.Long"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="content" javaType="string"/>
+            <arg column="version" javaType="_int"/>
+            <arg column="review_status" javaType="string"/>
+            <arg column="critique" javaType="string"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="favorite" javaType="_boolean"/>
+            <arg column="indexed_at" javaType="java.time.LocalDateTime"/>
+            <arg column="snapshot_id" javaType="java.lang.Long"/>
+            <arg column="data_snapshot_hash" javaType="string"/>
+            <arg column="generation_context_hash" javaType="string"/>
+            <arg column="reused_from_report_id" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="reusableReportResult" type="com.zzy.finsight.domain.ReusableReportRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="content" javaType="string"/>
+            <arg column="review_status" javaType="string"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="reportColumns">
+        id, task_id, thread_id, content, version, review_status, critique, created_at, favorite, indexed_at,
+        snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id
+    </sql>
+
+    <select id="findLatestVersion" resultType="int">
+        SELECT COALESCE(MAX(version), 0)
+        FROM report
+        WHERE owner_id = #{ownerId} AND thread_id = #{threadId}
+    </select>
+
+    <insert id="insertReport" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO report(
+          owner_id, task_id, thread_id, content, version, review_status, critique, favorite,
+          snapshot_id, data_snapshot_hash, generation_context_hash, reused_from_report_id, created_at
+        )
+        VALUES (
+          #{ownerId}, #{taskId}, #{threadId}, #{content}, #{version}, #{reviewStatus}, #{critique}, false,
+          #{snapshotId}, #{dataSnapshotHash}, #{generationContextHash}, #{reusedFromReportId}, #{createdAt}
+        )
+    </insert>
+
+    <select id="findReusable" resultMap="reusableReportResult">
+        SELECT id, content, review_status
+        FROM report
+        WHERE owner_id = #{ownerId}
+          AND generation_context_hash = #{generationContextHash}
+          AND review_status = 'PASS'
+          AND deleted_at IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findByTask" resultMap="reusableReportResult">
+        SELECT id, content, review_status
+        FROM report
+        WHERE owner_id = #{ownerId} AND task_id = #{taskId} AND deleted_at IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findReportByTask" resultMap="reportResult">
+        SELECT <include refid="reportColumns"/>
+        FROM report
+        WHERE owner_id = #{ownerId} AND task_id = #{taskId} AND deleted_at IS NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findLatestByThread" resultType="string">
+        SELECT content
+        FROM report
+        WHERE owner_id = #{ownerId} AND thread_id = #{threadId} AND deleted_at IS NULL
+        ORDER BY version DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findReportsByThread" resultMap="reportResult">
+        SELECT <include refid="reportColumns"/>
+        FROM report
+        WHERE owner_id = #{ownerId} AND thread_id = #{threadId} AND deleted_at IS NULL
+        ORDER BY version DESC, id DESC
+    </select>
+
+    <select id="findReportById" resultMap="reportResult">
+        SELECT <include refid="reportColumns"/>
+        FROM report
+        WHERE owner_id = #{ownerId} AND id = #{reportId} AND deleted_at IS NULL
+    </select>
+
+    <select id="findReports" resultMap="reportResult">
+        SELECT <include refid="reportColumns"/>
+        FROM report
+        <where>
+            owner_id = #{ownerId}
+            AND deleted_at IS NULL
+            <if test="favoriteOnly">AND favorite = true</if>
+            <if test="keyword != null and keyword != ''">
+                AND (thread_id LIKE CONCAT('%', #{keyword}, '%') OR content LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY created_at DESC, id DESC
+        LIMIT 100
+    </select>
+
+    <update id="updateFavorite">
+        UPDATE report SET favorite = #{favorite}
+        WHERE owner_id = #{ownerId} AND id = #{reportId} AND deleted_at IS NULL
+    </update>
+
+    <update id="updateDeletedAt">
+        UPDATE report SET deleted_at = #{deletedAt}
+        WHERE owner_id = #{ownerId} AND id = #{reportId} AND deleted_at IS NULL
+    </update>
+
+    <update id="updateIndexedAt">
+        UPDATE report SET indexed_at = #{indexedAt}
+        WHERE owner_id = #{ownerId} AND id = #{reportId} AND deleted_at IS NULL
+    </update>
+</mapper>

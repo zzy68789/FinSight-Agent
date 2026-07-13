@@ -12,7 +12,7 @@ public class HealthController {
         return Map.of(
                 "status", "running",
                 "backend", "java",
-                "workflow", "langgraph4j"
+                "workflow", "stock-report-pipeline"
         );
     }
 }

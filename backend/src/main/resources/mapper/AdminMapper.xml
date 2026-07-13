@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.AdminMapper">
+    <resultMap id="adminUserResult" type="com.zzy.finsight.dto.AdminUserResponse">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="username" javaType="string"/>
+            <arg column="email" javaType="string"/>
+            <arg column="role" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+            <arg column="last_login_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="adminTaskResult" type="com.zzy.finsight.dto.AdminTaskResponse">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="owner_id" javaType="_long"/>
+            <arg column="owner_username" javaType="string"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="query" javaType="string"/>
+            <arg column="search_mode" javaType="string"/>
+            <arg column="status" javaType="string"/>
+            <arg column="revision_number" javaType="_int"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+            <arg column="updated_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="adminReportResult" type="com.zzy.finsight.dto.AdminReportResponse">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="owner_id" javaType="_long"/>
+            <arg column="owner_username" javaType="string"/>
+            <arg column="task_id" javaType="java.lang.Long"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="content" javaType="string"/>
+            <arg column="version" javaType="_int"/>
+            <arg column="review_status" javaType="string"/>
+            <arg column="favorite" javaType="_boolean"/>
+            <arg column="indexed_at" javaType="java.time.LocalDateTime"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findUsers" resultMap="adminUserResult">
+        SELECT id, username, email, role, status, created_at, updated_at, last_login_at
+        FROM app_user
+        <where>
+            <if test="keyword != null and keyword != ''">
+                username LIKE CONCAT('%', #{keyword}, '%') OR email LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY created_at DESC, id DESC
+        LIMIT 100
+    </select>
+
+    <update id="updateRole">
+        UPDATE app_user SET role = #{role}, updated_at = #{updatedAt} WHERE id = #{userId}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE app_user SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{userId}
+    </update>
+
+    <select id="findUser" resultMap="adminUserResult">
+        SELECT id, username, email, role, status, created_at, updated_at, last_login_at
+        FROM app_user
+        WHERE id = #{userId}
+    </select>
+
+    <select id="findTasks" resultMap="adminTaskResult">
+        SELECT t.id, t.owner_id, COALESCE(u.username, 'unknown') AS owner_username,
+               t.thread_id, t.query, t.search_mode, t.status, t.revision_number,
+               t.created_at, t.updated_at
+        FROM research_task t
+        LEFT JOIN app_user u ON u.id = t.owner_id
+        <where>
+            <if test="status != null and status != ''">AND t.status = #{status}</if>
+            <if test="ownerId != null">AND t.owner_id = #{ownerId}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (t.query LIKE CONCAT('%', #{keyword}, '%')
+                  OR t.thread_id LIKE CONCAT('%', #{keyword}, '%')
+                  OR u.username LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY t.updated_at DESC, t.id DESC
+        LIMIT 100
+    </select>
+
+    <select id="findReports" resultMap="adminReportResult">
+        SELECT r.id, r.owner_id, COALESCE(u.username, 'unknown') AS owner_username,
+               r.task_id, r.thread_id, r.content, r.version, r.review_status,
+               r.favorite, r.indexed_at, r.created_at
+        FROM report r
+        LEFT JOIN app_user u ON u.id = r.owner_id
+        <where>
+            r.deleted_at IS NULL
+            <if test="ownerId != null">AND r.owner_id = #{ownerId}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (r.content LIKE CONCAT('%', #{keyword}, '%')
+                  OR r.thread_id LIKE CONCAT('%', #{keyword}, '%')
+                  OR u.username LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT 100
+    </select>
+
+    <update id="updateReportDeletedAt">
+        UPDATE report SET deleted_at = #{deletedAt}
+        WHERE id = #{reportId} AND deleted_at IS NULL
+    </update>
+</mapper>

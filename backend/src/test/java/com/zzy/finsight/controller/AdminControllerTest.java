@@ -1,6 +1,6 @@
 package com.zzy.finsight.controller;
 
-import com.zzy.finsight.auth.AuthService;
+import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.auth.AuthenticatedUser;
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.AdminReportResponse;
