@@ -9,8 +9,9 @@ import com.zzy.finsight.infrastructure.provider.FinancialDataProvider;
 import com.zzy.finsight.rag.RagRetrievalResult;
 
 
-import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -25,13 +26,24 @@ import java.util.concurrent.Executor;
 public class FinancialSnapshotBuilder {
     private final List<FinancialDataProvider> providers;
     private final Executor executor;
+    private final FinancialEvidenceValidator evidenceValidator;
 
     public FinancialSnapshotBuilder(
             List<FinancialDataProvider> providers,
             @Qualifier("financialProviderExecutor") Executor executor
     ) {
+        this(providers, executor, new FinancialEvidenceValidator());
+    }
+
+    @Autowired
+    public FinancialSnapshotBuilder(
+            List<FinancialDataProvider> providers,
+            @Qualifier("financialProviderExecutor") Executor executor,
+            FinancialEvidenceValidator evidenceValidator
+    ) {
         this.providers = providers == null ? List.of() : providers;
         this.executor = executor;
+        this.evidenceValidator = evidenceValidator;
     }
 
     /** 调用适用数据源并构建不可变金融快照。 */
@@ -54,7 +66,16 @@ public class FinancialSnapshotBuilder {
                 retrievalResults.add(result.retrievalResult());
             }
         }
-        return new FinancialSnapshot(subject, reportPeriod, searchMode, evidenceItems, stageResults, retrievalResults, LocalDateTime.now());
+        FinancialSnapshot snapshot = new FinancialSnapshot(
+                subject,
+                reportPeriod,
+                searchMode,
+                evidenceItems,
+                stageResults,
+                retrievalResults,
+                LocalDateTime.now()
+        );
+        return evidenceValidator.validate(snapshot);
     }
 
     private ProviderResult collectProvider(FinancialDataProvider provider, StockSubject subject, String reportPeriod, String searchMode) {

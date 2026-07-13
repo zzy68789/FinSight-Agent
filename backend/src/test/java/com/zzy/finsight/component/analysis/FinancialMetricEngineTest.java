@@ -27,7 +27,8 @@ class FinancialMetricEngineTest {
                 evidence(FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, "100"),
                 evidence(FinancialMetricInputNames.GROSS_PROFIT, "60"),
                 evidence(FinancialMetricInputNames.NET_PROFIT, "24"),
-                evidence(FinancialMetricInputNames.AVERAGE_EQUITY, "80"),
+                evidence(FinancialMetricInputNames.BEGINNING_EQUITY, "70"),
+                evidence(FinancialMetricInputNames.ENDING_EQUITY, "90"),
                 evidence(FinancialMetricInputNames.TOTAL_LIABILITIES, "50"),
                 evidence(FinancialMetricInputNames.TOTAL_ASSETS, "200"),
                 evidence(FinancialMetricInputNames.OPERATING_CASH_FLOW, "36")
@@ -39,6 +40,7 @@ class FinancialMetricEngineTest {
         assertThat(metric(results, "毛利率").value()).isEqualByComparingTo("50.00");
         assertThat(metric(results, "净利率").value()).isEqualByComparingTo("20.00");
         assertThat(metric(results, "ROE").value()).isEqualByComparingTo("30.00");
+        assertThat(metric(results, "ROE").formulaVersion()).isEqualTo("v2");
         assertThat(metric(results, "资产负债率").value()).isEqualByComparingTo("25.00");
         assertThat(metric(results, "经营现金流 / 净利润").value()).isEqualByComparingTo("1.50");
         assertThat(results).allMatch(result -> "OK".equals(result.status()));

@@ -1,6 +1,7 @@
 package com.zzy.finsight.component.review;
 
 import com.zzy.finsight.domain.stock.CitationReviewResult;
+import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
@@ -56,6 +57,25 @@ class CitationReviewerTest {
         assertThat(result.reason()).isBlank();
     }
 
+    @Test
+    void failsClosedWhenEvidenceHasCriticalSemanticIssue() {
+        List<FinancialEvidenceItem> evidenceItems = List.of(
+                evidence("营业收入"),
+                evidence("净利润"),
+                evidence("经营现金流"),
+                evidence("上年同期营业收入", FinancialEvidenceIssueCodes.PRIOR_PERIOD_MISMATCH)
+        );
+
+        CitationReviewResult result = reviewer.review(
+                "## 报告\n\n## 引用与数据快照",
+                snapshot(evidenceItems),
+                List.of()
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.reason()).contains("EVIDENCE_SEMANTIC_INVALID", "PRIOR_PERIOD_MISMATCH");
+    }
+
     private FinancialSnapshot snapshot(List<FinancialEvidenceItem> evidenceItems) {
         return new FinancialSnapshot(
                 new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
@@ -67,6 +87,10 @@ class CitationReviewerTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName) {
+        return evidence(metricName, "");
+    }
+
+    private FinancialEvidenceItem evidence(String metricName, String issueCode) {
         return new FinancialEvidenceItem(
                 "FINANCIAL_REPORT",
                 "年报",
@@ -79,7 +103,7 @@ class CitationReviewerTest {
                 metricName + " 10",
                 new BigDecimal("0.9"),
                 LocalDateTime.of(2026, 7, 3, 10, 0),
-                ""
+                issueCode
         );
     }
 

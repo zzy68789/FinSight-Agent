@@ -1,6 +1,7 @@
 package com.zzy.finsight.component.review;
 
 import com.zzy.finsight.domain.stock.CitationReviewResult;
+import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -20,12 +22,21 @@ import java.util.stream.Collectors;
  */
 @Component
 public class CitationReviewer {
-    public static final String POLICY_VERSION = "citation-policy-v1";
+    public static final String POLICY_VERSION = "citation-policy-v2-semantic-evidence";
     private static final BigDecimal ABSOLUTE_TOLERANCE = new BigDecimal("0.01");
     private static final BigDecimal RELATIVE_TOLERANCE = new BigDecimal("0.005");
 
     /** 检查报告引用、报告期和指标展示是否可追溯。 */
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
+        Optional<FinancialEvidenceItem> criticalIssue = snapshot.evidenceItems().stream()
+                .filter(item -> FinancialEvidenceIssueCodes.critical(item.issueCode()))
+                .findFirst();
+        if (criticalIssue.isPresent()) {
+            FinancialEvidenceItem item = criticalIssue.orElseThrow();
+            return CitationReviewResult.fail(
+                    "EVIDENCE_SEMANTIC_INVALID: " + item.metricName() + " 存在 " + item.issueCode()
+            );
+        }
         long effectiveEvidenceCount = snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count();
         if (effectiveEvidenceCount < 3) {
             return CitationReviewResult.fail("EVIDENCE_INSUFFICIENT: 有效证据少于 3 条");

@@ -33,7 +33,8 @@ public record FinancialEvidenceItem(
         LocalDateTime asOf,
         String issueCode
 ) {
+    /** 只有没有任何问题编码的证据才可参与指标和审查。 */
     public boolean effective() {
-        return issueCode == null || issueCode.isBlank() || !"DATA_MISSING".equalsIgnoreCase(issueCode);
+        return issueCode == null || issueCode.isBlank();
     }
 }

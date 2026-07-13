@@ -8,7 +8,7 @@ import java.util.Map;
  * 集中维护金融指标定义及目录版本。
  */
 public class MetricDefinitionCatalog {
-    public static final String CATALOG_VERSION = "financial-metrics-v1";
+    public static final String CATALOG_VERSION = "financial-metrics-v2-period-aligned";
 
     private final Map<String, MetricDefinition> definitions;
 
@@ -22,7 +22,11 @@ public class MetricDefinitionCatalog {
                 FinancialMetricInputNames.OPERATING_REVENUE, FinancialMetricInputNames.OPERATING_COST);
         register(items, "net_margin", "净利率", "净利润 / 营业收入",
                 FinancialMetricInputNames.NET_PROFIT, FinancialMetricInputNames.OPERATING_REVENUE);
-        register(items, "roe", "ROE", "净利润 / 平均净资产",
+        registerVersioned(items, "roe", "ROE", "净利润 / ((年初归母权益 + 期末归母权益) / 2)", "v2",
+                FinancialMetricInputNames.NET_PROFIT,
+                FinancialMetricInputNames.BEGINNING_EQUITY,
+                FinancialMetricInputNames.ENDING_EQUITY);
+        registerVersioned(items, "roe_average", "ROE", "净利润 / 平均净资产", "v1",
                 FinancialMetricInputNames.NET_PROFIT, FinancialMetricInputNames.AVERAGE_EQUITY);
         register(items, "debt_ratio", "资产负债率", "总负债 / 总资产",
                 FinancialMetricInputNames.TOTAL_LIABILITIES, FinancialMetricInputNames.TOTAL_ASSETS);
@@ -48,5 +52,16 @@ public class MetricDefinitionCatalog {
 
     private void register(Map<String, MetricDefinition> items, String code, String name, String formula, String... dependencies) {
         items.put(code, new MetricDefinition(code, name, formula, "v1", List.of(dependencies)));
+    }
+
+    private void registerVersioned(
+            Map<String, MetricDefinition> items,
+            String code,
+            String name,
+            String formula,
+            String formulaVersion,
+            String... dependencies
+    ) {
+        items.put(code, new MetricDefinition(code, name, formula, formulaVersion, List.of(dependencies)));
     }
 }

@@ -103,13 +103,41 @@ public class FinancialMetricEngine {
         );
     }
 
+    /** 优先使用年初和期末权益计算平均净资产，并兼容直接披露平均净资产的上传报告。 */
     private FinancialMetricResult roe(Map<String, FinancialEvidenceItem> inputs) {
-        return ratio(
-                catalog.get("roe"),
-                inputs,
-                true,
-                values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
-        );
+        MetricDefinition definition = catalog.get("roe");
+        List<String> required = definition.dependencies();
+        boolean hasBeginningEquity = hasValue(inputs, FinancialMetricInputNames.BEGINNING_EQUITY);
+        boolean hasEndingEquity = hasValue(inputs, FinancialMetricInputNames.ENDING_EQUITY);
+        if ((!hasBeginningEquity || !hasEndingEquity) && hasValue(inputs, FinancialMetricInputNames.AVERAGE_EQUITY)) {
+            return ratio(
+                    catalog.get("roe_average"),
+                    inputs,
+                    true,
+                    values -> values.get(0).divide(values.get(1), 8, RoundingMode.HALF_UP)
+            );
+        }
+        List<String> missing = required.stream().filter(key -> !hasValue(inputs, key)).toList();
+        if (!missing.isEmpty()) {
+            return result(definition, null, "数据缺失", "MISSING_INPUT", "缺少输入：" + String.join(", ", missing));
+        }
+
+        BigDecimal netProfit = inputs.get(FinancialMetricInputNames.NET_PROFIT).normalizedValue();
+        BigDecimal beginningEquity = inputs.get(FinancialMetricInputNames.BEGINNING_EQUITY).normalizedValue();
+        BigDecimal endingEquity = inputs.get(FinancialMetricInputNames.ENDING_EQUITY).normalizedValue();
+        BigDecimal averageEquity = beginningEquity.add(endingEquity)
+                .divide(BigDecimal.valueOf(2), 8, RoundingMode.HALF_UP);
+        if (BigDecimal.ZERO.compareTo(averageEquity) == 0) {
+            return result(definition, null, "数据缺失", "INVALID_DENOMINATOR", "平均净资产为 0，无法计算");
+        }
+        BigDecimal value = netProfit.divide(averageEquity, 8, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(SCALE, RoundingMode.HALF_UP);
+        return result(definition, value, value.toPlainString() + "%", "OK", "");
+    }
+
+    private boolean hasValue(Map<String, FinancialEvidenceItem> inputs, String key) {
+        return inputs.containsKey(key) && inputs.get(key).normalizedValue() != null;
     }
 
     private FinancialMetricResult debtRatio(Map<String, FinancialEvidenceItem> inputs) {

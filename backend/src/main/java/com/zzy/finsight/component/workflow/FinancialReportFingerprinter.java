@@ -8,6 +8,7 @@ import com.zzy.finsight.component.review.CitationReviewer;
 import com.zzy.finsight.component.review.FinancialComplianceReviewer;
 import com.zzy.finsight.component.review.FinancialEvaluator;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
+import com.zzy.finsight.component.marketdata.FinancialEvidenceValidator;
 
 
 import org.springframework.stereotype.Component;
@@ -68,6 +69,7 @@ public class FinancialReportFingerprinter {
     public String generationContextHash(String dataSnapshotHash) {
         return sha256(String.join("|",
                 safe(dataSnapshotHash),
+                FinancialEvidenceValidator.POLICY_VERSION,
                 metricCatalog.catalogVersion(),
                 InvestmentReportWriter.WRITER_VERSION,
                 CitationReviewer.POLICY_VERSION,

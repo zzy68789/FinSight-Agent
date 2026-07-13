@@ -23,7 +23,7 @@ import java.util.StringJoiner;
  */
 @Component
 public class InvestmentReportWriter {
-    public static final String WRITER_VERSION = "investment-report-writer-v2-llm";
+    public static final String WRITER_VERSION = "investment-report-writer-v3-period-aligned";
     private static final Logger log = LoggerFactory.getLogger(InvestmentReportWriter.class);
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private final LlmClient llmClient;
@@ -77,7 +77,7 @@ public class InvestmentReportWriter {
         report.append("- 股票代码：").append(subject.fullCode()).append("\n");
         report.append("- 公司名称：").append(subject.companyName()).append("\n");
         report.append("- 所属行业：").append(subject.industry()).append("\n");
-        report.append("- 报告期口径：").append(snapshot.reportPeriod()).append("\n\n");
+        report.append("- 报告期口径：").append(reportPeriodSummary(snapshot)).append("\n\n");
 
         report.append("## 2. 核心业务与行业位置\n\n");
         report.append(evidenceSentence(snapshot, "LOCAL_CONTEXT", "当前上传报告或公开资料不足以稳定抽取核心业务描述，需结合原始年报复核。")).append("\n\n");
@@ -177,7 +177,7 @@ public class InvestmentReportWriter {
                 """.formatted(
                 snapshot.subject().fullCode(),
                 snapshot.subject().assetType(),
-                snapshot.reportPeriod(),
+                reportPeriodSummary(snapshot),
                 deterministicReport
         );
     }
@@ -242,7 +242,7 @@ public class InvestmentReportWriter {
         report.append("- 基金代码：").append(subject.fullCode()).append("\n");
         report.append("- 资产类型：ETF\n");
         report.append("- 识别名称：").append(subject.companyName()).append("\n");
-        report.append("- 报告期口径：").append(snapshot.reportPeriod()).append("\n\n");
+        report.append("- 报告期口径：").append(reportPeriodSummary(snapshot)).append("\n\n");
 
         report.append("## 2. 跟踪标的与产品信息\n\n");
         report.append(evidenceSentence(snapshot, "LOCAL_CONTEXT", "当前公开资料或上传材料不足以稳定识别跟踪指数、基金管理人、费率和持仓结构，需结合基金招募说明书或定期报告复核。")).append("\n\n");
@@ -372,5 +372,52 @@ public class InvestmentReportWriter {
 
     private String blankToDash(String value) {
         return value == null || value.isBlank() ? "-" : value;
+    }
+
+    /** 分别展示财务报告期和行情数据日，避免以 latest 掩盖混合时点。 */
+    private String reportPeriodSummary(FinancialSnapshot snapshot) {
+        String financialPeriod = snapshot.evidenceItems().stream()
+                .filter(FinancialEvidenceItem::effective)
+                .filter(item -> List.of(
+                        FinancialMetricInputNames.OPERATING_REVENUE,
+                        FinancialMetricInputNames.OPERATING_COST,
+                        FinancialMetricInputNames.NET_PROFIT,
+                        FinancialMetricInputNames.TOTAL_ASSETS,
+                        FinancialMetricInputNames.TOTAL_LIABILITIES,
+                        FinancialMetricInputNames.ENDING_EQUITY,
+                        FinancialMetricInputNames.OPERATING_CASH_FLOW
+                ).contains(item.metricName()))
+                .map(FinancialEvidenceItem::reportPeriod)
+                .filter(this::concretePeriod)
+                .max(String::compareTo)
+                .orElse("");
+        String marketPeriod = snapshot.evidenceItems().stream()
+                .filter(FinancialEvidenceItem::effective)
+                .filter(item -> List.of(
+                        "PE_TTM",
+                        "PB",
+                        "TOTAL_MARKET_VALUE",
+                        FinancialMetricInputNames.ETF_CLOSE,
+                        FinancialMetricInputNames.ETF_PCT_CHANGE,
+                        FinancialMetricInputNames.ETF_AMOUNT
+                ).contains(item.metricName()))
+                .map(FinancialEvidenceItem::reportPeriod)
+                .filter(this::concretePeriod)
+                .max(String::compareTo)
+                .orElse("");
+        if (!financialPeriod.isBlank() && !marketPeriod.isBlank()) {
+            return "财务报告期 " + financialPeriod + "；行情数据日 " + marketPeriod;
+        }
+        if (!financialPeriod.isBlank()) {
+            return "财务报告期 " + financialPeriod;
+        }
+        if (!marketPeriod.isBlank()) {
+            return "行情数据日 " + marketPeriod;
+        }
+        return blankToDash(snapshot.reportPeriod());
+    }
+
+    private boolean concretePeriod(String period) {
+        return period != null && period.matches("\\d{8}");
     }
 }

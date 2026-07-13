@@ -66,39 +66,43 @@ class TushareMarketDataProviderTest {
         );
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
-        expectApi(server, "income", "ts_code,end_date,revenue,oper_cost,n_income_attr_p", """
+        expectApi(server, "income", "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,revenue,oper_cost,n_income_attr_p", """
                 {
                   "code": 0,
                   "msg": "",
                   "data": {
-                    "fields": ["ts_code", "end_date", "revenue", "oper_cost", "n_income_attr_p"],
+                    "fields": ["ts_code", "ann_date", "f_ann_date", "end_date", "report_type", "update_flag", "revenue", "oper_cost", "n_income_attr_p"],
                     "items": [
-                      ["600519.SH", "20241231", 174144691800.00, 16326101000.00, 85731240000.00],
-                      ["600519.SH", "20231231", 150560097600.00, 14126002000.00, 74734000000.00]
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "0", 53000000000.00, 5500000000.00, 27000000000.00],
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "1", 53909252220.51, 5520729200.32, 27242512886.45],
+                      ["600519.SH", "20250430", "20250430", "20250331", "1", "1", 50600957885.78, 4061430550.43, 26847474238.76]
                     ]
                   }
                 }
                 """);
-        expectApi(server, "balancesheet", "ts_code,end_date,total_assets,total_liab,total_hldr_eqy_exc_min_int", """
+        expectApi(server, "balancesheet", "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,total_assets,total_liab,total_hldr_eqy_exc_min_int", """
                 {
                   "code": 0,
                   "msg": "",
                   "data": {
-                    "fields": ["ts_code", "end_date", "total_assets", "total_liab", "total_hldr_eqy_exc_min_int"],
+                    "fields": ["ts_code", "ann_date", "f_ann_date", "end_date", "report_type", "update_flag", "total_assets", "total_liab", "total_hldr_eqy_exc_min_int"],
                     "items": [
-                      ["600519.SH", "20241231", 279207546000.00, 47893417000.00, 231314129000.00]
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "0", 310000000000.00, 38000000000.00, 260000000000.00],
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "1", 319918844905.58, 38782958469.89, 270894035676.27],
+                      ["600519.SH", "20260417", "20260417", "20251231", "1", "1", 303834844021.44, 49875590112.37, 244637811032.18]
                     ]
                   }
                 }
                 """);
-        expectApi(server, "cashflow", "ts_code,end_date,n_cashflow_act", """
+        expectApi(server, "cashflow", "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,n_cashflow_act", """
                 {
                   "code": 0,
                   "msg": "",
                   "data": {
-                    "fields": ["ts_code", "end_date", "n_cashflow_act"],
+                    "fields": ["ts_code", "ann_date", "f_ann_date", "end_date", "report_type", "update_flag", "n_cashflow_act"],
                     "items": [
-                      ["600519.SH", "20241231", 93614400000.00]
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "0", 25000000000.00],
+                      ["600519.SH", "20260425", "20260425", "20260331", "1", "1", 26909891269.13]
                     ]
                   }
                 }
@@ -126,7 +130,8 @@ class TushareMarketDataProviderTest {
                         FinancialMetricInputNames.NET_PROFIT,
                         FinancialMetricInputNames.TOTAL_ASSETS,
                         FinancialMetricInputNames.TOTAL_LIABILITIES,
-                        FinancialMetricInputNames.AVERAGE_EQUITY,
+                        FinancialMetricInputNames.BEGINNING_EQUITY,
+                        FinancialMetricInputNames.ENDING_EQUITY,
                         FinancialMetricInputNames.OPERATING_CASH_FLOW,
                         "PE_TTM",
                         "PB",
@@ -139,7 +144,13 @@ class TushareMarketDataProviderTest {
                 .filter(item -> FinancialMetricInputNames.OPERATING_REVENUE.equals(item.metricName()))
                 .findFirst()
                 .orElseThrow()
-                .normalizedValue()).isEqualByComparingTo("1741.446918");
+                .normalizedValue()).isEqualByComparingTo("539.092522");
+        FinancialEvidenceItem priorRevenue = items.stream()
+                .filter(item -> FinancialMetricInputNames.OPERATING_REVENUE_PRIOR.equals(item.metricName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(priorRevenue.reportPeriod()).isEqualTo("20250331");
+        assertThat(priorRevenue.normalizedValue()).isEqualByComparingTo("506.009579");
         server.verify();
     }
 

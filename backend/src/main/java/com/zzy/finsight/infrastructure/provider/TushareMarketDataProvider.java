@@ -1,6 +1,7 @@
 package com.zzy.finsight.infrastructure.provider;
 
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
+import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 
@@ -15,12 +16,15 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 从 TuShare 采集股票和 ETF 财务行情证据。
@@ -34,6 +38,7 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
     private static final BigDecimal CONFIDENCE = new BigDecimal("0.90");
     private static final BigDecimal YUAN_PER_YI = new BigDecimal("100000000");
     private static final BigDecimal WAN_PER_YI = new BigDecimal("10000");
+    private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final RestClient restClient;
     private final boolean enabled;
@@ -103,61 +108,100 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
         return items;
     }
 
+    /** 选择唯一财报版本，并严格匹配相差一年的上年同期利润表。 */
     private List<FinancialEvidenceItem> incomeEvidence(StockSubject subject, String reportPeriod) {
+        String fields = "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,revenue,oper_cost,n_income_attr_p";
         List<Map<String, JsonNode>> rows = query(
                 "income",
                 subject,
                 reportPeriod,
-                "ts_code,end_date,revenue,oper_cost,n_income_attr_p"
+                fields
         );
-        rows = sortByDate(rows, "end_date");
-        if (rows.isEmpty()) {
+        Optional<Map<String, JsonNode>> currentRow = selectFinancialRow(rows, concretePeriod(reportPeriod));
+        if (currentRow.isEmpty()) {
             return List.of();
         }
         List<FinancialEvidenceItem> items = new ArrayList<>();
-        Map<String, JsonNode> latest = rows.get(0);
+        Map<String, JsonNode> latest = currentRow.orElseThrow();
         String period = text(latest, "end_date", reportPeriod);
         addMoney(items, period, FinancialMetricInputNames.OPERATING_REVENUE, latest, "revenue", "营业收入");
         addMoney(items, period, FinancialMetricInputNames.OPERATING_COST, latest, "oper_cost", "营业成本");
         addMoney(items, period, FinancialMetricInputNames.NET_PROFIT, latest, "n_income_attr_p", "归母净利润");
-        if (rows.size() > 1) {
-            Map<String, JsonNode> prior = rows.get(1);
-            addMoney(items, text(prior, "end_date", reportPeriod), FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, prior, "revenue", "上年同期营业收入");
+
+        String priorPeriod = priorYearPeriod(period);
+        if (!priorPeriod.isBlank()) {
+            List<Map<String, JsonNode>> priorRows = isConcreteReportPeriod(reportPeriod)
+                    ? query("income", subject, priorPeriod, fields)
+                    : rows;
+            Optional<Map<String, JsonNode>> priorRow = selectFinancialRow(priorRows, priorPeriod);
+            if (priorRow.isPresent()) {
+                addMoney(items, priorPeriod, FinancialMetricInputNames.OPERATING_REVENUE_PRIOR,
+                        priorRow.orElseThrow(), "revenue", "上年同期营业收入");
+            } else {
+                items.add(metricMissing(
+                        priorPeriod,
+                        FinancialMetricInputNames.OPERATING_REVENUE_PRIOR,
+                        "TuShare Pro 未返回与本期严格对应的上年同期营业收入。"
+                ));
+            }
         }
         return items;
     }
 
+    /** 采集期末资产负债和当前财年年初权益，供 ROE 使用。 */
     private List<FinancialEvidenceItem> balanceSheetEvidence(StockSubject subject, String reportPeriod) {
-        List<Map<String, JsonNode>> rows = sortByDate(query(
+        String fields = "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,total_assets,total_liab,total_hldr_eqy_exc_min_int";
+        List<Map<String, JsonNode>> rows = query(
                 "balancesheet",
                 subject,
                 reportPeriod,
-                "ts_code,end_date,total_assets,total_liab,total_hldr_eqy_exc_min_int"
-        ), "end_date");
-        if (rows.isEmpty()) {
+                fields
+        );
+        Optional<Map<String, JsonNode>> currentRow = selectFinancialRow(rows, concretePeriod(reportPeriod));
+        if (currentRow.isEmpty()) {
             return List.of();
         }
         List<FinancialEvidenceItem> items = new ArrayList<>();
-        Map<String, JsonNode> latest = rows.get(0);
+        Map<String, JsonNode> latest = currentRow.orElseThrow();
         String period = text(latest, "end_date", reportPeriod);
         addMoney(items, period, FinancialMetricInputNames.TOTAL_ASSETS, latest, "total_assets", "资产总额");
         addMoney(items, period, FinancialMetricInputNames.TOTAL_LIABILITIES, latest, "total_liab", "负债总额");
-        addMoney(items, period, FinancialMetricInputNames.AVERAGE_EQUITY, latest, "total_hldr_eqy_exc_min_int", "期末归母权益近似平均净资产");
+        addMoney(items, period, FinancialMetricInputNames.ENDING_EQUITY, latest,
+                "total_hldr_eqy_exc_min_int", "期末归母权益");
+
+        String beginningPeriod = beginningOfFiscalYearPeriod(period);
+        if (!beginningPeriod.isBlank()) {
+            List<Map<String, JsonNode>> beginningRows = isConcreteReportPeriod(reportPeriod)
+                    ? query("balancesheet", subject, beginningPeriod, fields)
+                    : rows;
+            Optional<Map<String, JsonNode>> beginningRow = selectFinancialRow(beginningRows, beginningPeriod);
+            if (beginningRow.isPresent()) {
+                addMoney(items, beginningPeriod, FinancialMetricInputNames.BEGINNING_EQUITY,
+                        beginningRow.orElseThrow(), "total_hldr_eqy_exc_min_int", "年初归母权益");
+            } else {
+                items.add(metricMissing(
+                        beginningPeriod,
+                        FinancialMetricInputNames.BEGINNING_EQUITY,
+                        "TuShare Pro 未返回当前财年年初归母权益。"
+                ));
+            }
+        }
         return items;
     }
 
     private List<FinancialEvidenceItem> cashFlowEvidence(StockSubject subject, String reportPeriod) {
-        List<Map<String, JsonNode>> rows = sortByDate(query(
+        List<Map<String, JsonNode>> rows = query(
                 "cashflow",
                 subject,
                 reportPeriod,
-                "ts_code,end_date,n_cashflow_act"
-        ), "end_date");
-        if (rows.isEmpty()) {
+                "ts_code,ann_date,f_ann_date,end_date,report_type,update_flag,n_cashflow_act"
+        );
+        Optional<Map<String, JsonNode>> currentRow = selectFinancialRow(rows, concretePeriod(reportPeriod));
+        if (currentRow.isEmpty()) {
             return List.of();
         }
         List<FinancialEvidenceItem> items = new ArrayList<>();
-        Map<String, JsonNode> latest = rows.get(0);
+        Map<String, JsonNode> latest = currentRow.orElseThrow();
         addMoney(items, text(latest, "end_date", reportPeriod), FinancialMetricInputNames.OPERATING_CASH_FLOW, latest, "n_cashflow_act", "经营活动产生的现金流量净额");
         return items;
     }
@@ -233,6 +277,61 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
                 .toList();
     }
 
+    /** 按报告期、标准合并报表、更新标记和公告日期选择唯一财报版本。 */
+    private Optional<Map<String, JsonNode>> selectFinancialRow(List<Map<String, JsonNode>> rows, String requestedPeriod) {
+        String targetPeriod = requestedPeriod;
+        if (targetPeriod == null || targetPeriod.isBlank()) {
+            targetPeriod = rows.stream()
+                    .map(row -> text(row, "end_date", ""))
+                    .filter(value -> !value.isBlank())
+                    .max(String::compareTo)
+                    .orElse("");
+        }
+        if (targetPeriod.isBlank()) {
+            return Optional.empty();
+        }
+        String finalTargetPeriod = targetPeriod;
+        List<Map<String, JsonNode>> candidates = rows.stream()
+                .filter(row -> finalTargetPeriod.equals(text(row, "end_date", "")))
+                .toList();
+        List<Map<String, JsonNode>> standardReports = candidates.stream()
+                .filter(row -> "1".equals(text(row, "report_type", "")))
+                .toList();
+        List<Map<String, JsonNode>> eligible = standardReports.isEmpty() ? candidates : standardReports;
+        return eligible.stream()
+                .max(Comparator
+                        .comparingInt((Map<String, JsonNode> row) -> integer(row, "update_flag"))
+                        .thenComparing(row -> text(row, "f_ann_date", ""))
+                        .thenComparing(row -> text(row, "ann_date", "")));
+    }
+
+    private String concretePeriod(String reportPeriod) {
+        return isConcreteReportPeriod(reportPeriod) ? reportPeriod : "";
+    }
+
+    /** 将当前报告期映射到严格的上年同期。 */
+    private String priorYearPeriod(String period) {
+        LocalDate date = parsePeriod(period);
+        return date == null ? "" : date.minusYears(1).format(BASIC_DATE);
+    }
+
+    /** 将报告期映射到当前财年的年初权益时点。 */
+    private String beginningOfFiscalYearPeriod(String period) {
+        LocalDate date = parsePeriod(period);
+        return date == null ? "" : LocalDate.of(date.getYear() - 1, 12, 31).format(BASIC_DATE);
+    }
+
+    private LocalDate parsePeriod(String period) {
+        if (!isConcreteReportPeriod(period)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(period, BASIC_DATE);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
     private void addMoney(List<FinancialEvidenceItem> items, String period, String metricName, Map<String, JsonNode> row, String field, String label) {
         BigDecimal raw = decimal(row, field);
         if (raw == null) {
@@ -285,19 +384,23 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
     }
 
     private FinancialEvidenceItem dataMissing(String reportPeriod, String excerpt) {
+        return metricMissing(reportPeriod, "DATA_MISSING", excerpt);
+    }
+
+    private FinancialEvidenceItem metricMissing(String reportPeriod, String metricName, String excerpt) {
         return new FinancialEvidenceItem(
                 SOURCE_TYPE,
                 SOURCE_NAME,
                 SOURCE_URL,
                 null,
                 reportPeriod,
-                "DATA_MISSING",
+                metricName,
                 null,
                 null,
                 excerpt,
                 BigDecimal.ZERO,
                 LocalDateTime.now(),
-                "DATA_MISSING"
+                FinancialEvidenceIssueCodes.DATA_MISSING
         );
     }
 
@@ -315,6 +418,11 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
             return fallback;
         }
         return value.asText();
+    }
+
+    private int integer(Map<String, JsonNode> row, String field) {
+        JsonNode value = row.get(field);
+        return value == null || value.isNull() ? 0 : value.asInt(0);
     }
 
     private boolean isConcreteReportPeriod(String reportPeriod) {
