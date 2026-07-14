@@ -35,8 +35,6 @@ class InvestmentReportWriterTest {
             return """
                     # 588200.SH ETF研究报告
 
-                    > 仅作研究辅助，不构成投资建议。
-
                     ## 1. 基金概况
                     LLM 生成的基金概况。
                     ## 2. 跟踪标的与产品信息
@@ -53,8 +51,6 @@ class InvestmentReportWriterTest {
                     关注跟踪误差和流动性风险。
                     ## 8. 结论与后续观察点
                     补齐证据后继续观察。后续应持续核对基金定期报告、指数资料和交易所公开信息，所有判断必须回到证据原文复核。当前信息不足以形成方向性判断，也不能据此给出买卖或仓位建议。
-                    ## 引用与数据快照
-                    - [E1] LLM 不应控制最终引用附录。
                     """;
         });
         FinancialSnapshot snapshot = etfSnapshot();
@@ -63,20 +59,39 @@ class InvestmentReportWriterTest {
 
         assertThat(capturedModel.get()).isEqualTo(LlmClient.ModelType.SMART);
         assertThat(capturedPrompt.get()).contains("588200.SH", "只允许使用给定事实", "确定性报告草稿");
+        assertThat(capturedPrompt.get())
+                .contains("最终引用附录由系统确定性覆盖", "八章节正文总长度不超过 2500 个中文字符")
+                .doesNotContain("[E1] AUTHORIZED_MARKET / TuShare Pro", "### 指标计算公式", "### 风险评分明细");
         assertThat(report).contains("LLM 生成的基金概况");
+        assertThat(report).contains("仅作研究辅助，不构成投资建议");
         assertThat(report).contains("<!-- FinSight generation-mode: llm -->");
         assertThat(report).contains("[E1] AUTHORIZED_MARKET / TuShare Pro");
-        assertThat(report).doesNotContain("LLM 不应控制最终引用附录");
     }
 
     @Test
     void fallsBackToDeterministicTemplateWhenLlmFails() {
+        InvestmentReportWriter timeoutWriter = new InvestmentReportWriter((prompt, modelType) -> {
+            throw new IllegalStateException("request timed out");
+        });
         FinancialSnapshot snapshot = etfSnapshot();
 
-        String report = writer.write(snapshot, etfMetrics(), risk(snapshot), null);
+        String report = timeoutWriter.write(snapshot, etfMetrics(), risk(snapshot), null);
 
         assertThat(report).contains("<!-- FinSight generation-mode: template-fallback -->");
+        assertThat(report).contains("<!-- FinSight fallback-reason: LLM_TIMEOUT -->");
+        assertThat(InvestmentReportWriter.generationMode(report)).isEqualTo("template-fallback");
+        assertThat(InvestmentReportWriter.fallbackReason(report)).isEqualTo("LLM_TIMEOUT");
         assertThat(report).contains("588200.SH ETF研究报告");
+    }
+
+    @Test
+    void recordsInvalidStructureAsFallbackReason() {
+        InvestmentReportWriter invalidWriter = new InvestmentReportWriter((prompt, modelType) -> "内容过短");
+        FinancialSnapshot snapshot = etfSnapshot();
+
+        String report = invalidWriter.write(snapshot, etfMetrics(), risk(snapshot), null);
+
+        assertThat(report).contains("<!-- FinSight fallback-reason: LLM_INVALID_STRUCTURE -->");
     }
 
     @Test

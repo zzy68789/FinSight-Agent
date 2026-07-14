@@ -30,11 +30,15 @@ public class LlmConfig {
             @Value("${finsight.llm.api-key:}") String apiKey,
             @Value("${finsight.llm.fast-model:qwen3-max}") String fastModel,
             @Value("${finsight.llm.timeout:30s}") Duration timeout,
+            @Value("${finsight.llm.max-output-tokens:4096}") int maxOutputTokens,
             @Value("${finsight.llm.provider-max-retries:0}") int providerMaxRetries,
             @Value("${finsight.llm.log-requests:false}") boolean logRequests,
             @Value("${finsight.llm.log-responses:false}") boolean logResponses
     ) {
-        return buildModel(baseUrl, apiKey, fastModel, 0.7d, timeout, providerMaxRetries, logRequests, logResponses);
+        return buildModel(
+                baseUrl, apiKey, fastModel, 0.7d, timeout, maxOutputTokens,
+                providerMaxRetries, logRequests, logResponses
+        );
     }
 
     /**
@@ -47,11 +51,15 @@ public class LlmConfig {
             @Value("${finsight.llm.api-key:}") String apiKey,
             @Value("${finsight.llm.smart-model:deepseek-r1}") String smartModel,
             @Value("${finsight.llm.timeout:30s}") Duration timeout,
+            @Value("${finsight.llm.max-output-tokens:4096}") int maxOutputTokens,
             @Value("${finsight.llm.provider-max-retries:0}") int providerMaxRetries,
             @Value("${finsight.llm.log-requests:false}") boolean logRequests,
             @Value("${finsight.llm.log-responses:false}") boolean logResponses
     ) {
-        return buildModel(baseUrl, apiKey, smartModel, 0.0d, timeout, providerMaxRetries, logRequests, logResponses);
+        return buildModel(
+                baseUrl, apiKey, smartModel, 0.0d, timeout, maxOutputTokens,
+                providerMaxRetries, logRequests, logResponses
+        );
     }
 
     @Bean
@@ -77,6 +85,7 @@ public class LlmConfig {
             String modelName,
             double temperature,
             Duration timeout,
+            int maxOutputTokens,
             int maxRetries,
             boolean logRequests,
             boolean logResponses
@@ -90,6 +99,7 @@ public class LlmConfig {
                 .modelName(modelName)
                 .temperature(temperature)
                 .timeout(timeout)
+                .maxTokens(Math.max(256, maxOutputTokens))
                 .maxRetries(maxRetries)
                 .logRequests(logRequests)
                 .logResponses(logResponses)

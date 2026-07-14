@@ -1772,7 +1772,20 @@ const handleStockEvent = (event) => {
         financialProviderStages.value = payload.stageResults || payload.stage_results || [];
         logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
     } else if (event.step === 'writer') {
-        logs.value.push(`[撰写] 正在生成第 ${payload.attempt || 1} 版证券研究报告...`);
+        const generationMode = payload.generation_mode || payload.generationMode || '';
+        const fallbackReason = payload.fallback_reason || payload.fallbackReason || '';
+        if (generationMode === 'template-fallback') {
+            const reasonLabels = {
+                LLM_TIMEOUT: 'LLM 请求超时',
+                LLM_INVALID_STRUCTURE: 'LLM 输出结构不完整',
+                LLM_NOT_CONFIGURED: 'LLM 未配置',
+                LLM_EMPTY_RESPONSE: 'LLM 返回空内容',
+                LLM_CALL_FAILED: 'LLM 调用失败'
+            };
+            logs.value.push(`[撰写] ${reasonLabels[fallbackReason] || 'LLM 不可用'}，已使用确定性模板。`);
+        } else {
+            logs.value.push(`[撰写] 第 ${payload.attempt || 1} 版证券研究报告已由 LLM 生成。`);
+        }
         const finalReport = payload.final_report || payload.finalReport;
         if (finalReport) {
             displayedReport.value = '';

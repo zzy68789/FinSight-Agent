@@ -16,7 +16,7 @@
         </constructor>
     </resultMap>
 
-    <insert id="insertSuccess">
+    <insert id="insertStep">
         INSERT INTO agent_step_log(
           task_id, step_name, input_snapshot, output_snapshot, status, error_message,
           attempt_no, duration_ms, created_at
@@ -24,7 +24,7 @@
         VALUES (
           #{taskId}, #{stepName}, NULL,
           #{outputSnapshot,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
-          'SUCCESS', NULL, #{attemptNo}, #{durationMs}, #{createdAt}
+          #{status}, #{errorMessage}, #{attemptNo}, #{durationMs}, #{createdAt}
         )
     </insert>
 

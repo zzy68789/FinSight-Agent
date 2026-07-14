@@ -9,6 +9,7 @@ import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.PersistedFinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.component.review.InvestmentReportWriter;
 import com.zzy.finsight.dto.stock.StockReportRequest;
 import com.zzy.finsight.infrastructure.serialization.StockReportRequestCodec;
 import com.zzy.finsight.mapper.FinancialSnapshotMapper;
@@ -200,10 +201,16 @@ public class StockReportRunner {
                 writerAttempts = attempt;
                 startedAt = System.nanoTime();
                 report = workflow.write(snapshot, metrics, riskAssessment, attempt == 1 ? null : review);
+                String generationMode = InvestmentReportWriter.generationMode(report);
+                String fallbackReason = InvestmentReportWriter.fallbackReason(report);
                 publish(taskId, threadId, progress, "writer", mapOf(
                         "attempt", attempt,
-                        "finalReport", report
-                ), elapsedMs(startedAt), attempt);
+                        "finalReport", report,
+                        "generationMode", generationMode,
+                        "fallbackReason", fallbackReason
+                ), elapsedMs(startedAt), attempt,
+                        "template-fallback".equals(generationMode) ? "DEGRADED" : "SUCCESS",
+                        fallbackReason);
 
                 startedAt = System.nanoTime();
                 review = workflow.review(report, snapshot, metrics);
@@ -280,7 +287,22 @@ public class StockReportRunner {
             long durationMs,
             int attemptNo
     ) {
-        stepLogMapper.save(taskId, step, data, attemptNo, durationMs);
+        publish(taskId, threadId, listener, step, data, durationMs, attemptNo, "SUCCESS", null);
+    }
+
+    /** 持久化步骤状态后推送进度，降级完成不会被误记为普通成功。 */
+    private void publish(
+            long taskId,
+            String threadId,
+            StockReportProgressListener listener,
+            String step,
+            Object data,
+            long durationMs,
+            int attemptNo,
+            String status,
+            String errorMessage
+    ) {
+        stepLogMapper.save(taskId, step, data, attemptNo, durationMs, status, errorMessage);
         Timer.builder("finsight.stock.workflow.stage.duration")
                 .tag("stage", step)
                 .register(meterRegistry)

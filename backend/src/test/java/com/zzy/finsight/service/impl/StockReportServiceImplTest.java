@@ -29,8 +29,11 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -188,6 +191,43 @@ class StockReportServiceImplTest {
 
         verify(taskMapper).markCompleted(11L);
         verify(taskMapper, never()).markFailed(11L);
+    }
+
+    @Test
+    void persistsWriterFallbackAsDegradedStep() {
+        when(workflow.write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any())).thenReturn("""
+                <!-- FinSight generation-mode: template-fallback -->
+                <!-- FinSight fallback-reason: LLM_TIMEOUT -->
+                报告正文
+                """);
+        when(workflow.review(anyString(), eq(snapshot), eq(metrics))).thenReturn(CitationReviewResult.pass());
+        AtomicReference<Object> writerEvent = new AtomicReference<>();
+        StockReportProgressListener listener = new StockReportProgressListener() {
+            @Override
+            public void onStep(String step, Object data) {
+                if ("writer".equals(step)) {
+                    writerEvent.set(data);
+                }
+            }
+
+            @Override
+            public void onDone() {
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+        };
+
+        runner.runNew(7L, request, listener);
+
+        verify(stepLogMapper).save(
+                eq(11L), eq("writer"), any(), eq(1), anyLong(), eq("DEGRADED"), eq("LLM_TIMEOUT")
+        );
+        assertThat(writerEvent.get()).isInstanceOf(Map.class);
+        Map<?, ?> writerPayload = (Map<?, ?>) writerEvent.get();
+        assertThat(writerPayload.get("generationMode")).isEqualTo("template-fallback");
+        assertThat(writerPayload.get("fallbackReason")).isEqualTo("LLM_TIMEOUT");
     }
 
     @Test
