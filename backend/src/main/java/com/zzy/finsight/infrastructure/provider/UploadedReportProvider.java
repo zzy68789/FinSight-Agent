@@ -7,8 +7,8 @@ import com.zzy.finsight.component.marketdata.FinancialEvidenceParser;
 
 
 import com.zzy.finsight.rag.RagDocument;
-import com.zzy.finsight.rag.RagService;
 import com.zzy.finsight.rag.RagRetrievalResult;
+import com.zzy.finsight.service.RagService;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

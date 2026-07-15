@@ -9,6 +9,7 @@ import com.zzy.finsight.service.AdminService;
 import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.service.ReportExportService;
 import com.zzy.finsight.service.ReportService;
+import com.zzy.finsight.service.RagService;
 import com.zzy.finsight.service.SseService;
 import com.zzy.finsight.service.StockReportService;
 import com.zzy.finsight.service.TaskQueryService;
@@ -17,6 +18,7 @@ import com.zzy.finsight.service.impl.AdminServiceImpl;
 import com.zzy.finsight.service.impl.AuthServiceImpl;
 import com.zzy.finsight.service.impl.ReportExportServiceImpl;
 import com.zzy.finsight.service.impl.ReportServiceImpl;
+import com.zzy.finsight.service.impl.RagServiceImpl;
 import com.zzy.finsight.service.impl.SseServiceImpl;
 import com.zzy.finsight.service.impl.StockReportServiceImpl;
 import com.zzy.finsight.service.impl.TaskQueryServiceImpl;
@@ -45,6 +47,7 @@ class ArchitectureLayeringTest {
                 AuthService.class,
                 ReportExportService.class,
                 ReportService.class,
+                RagService.class,
                 SseService.class,
                 StockReportService.class,
                 TaskQueryService.class,
@@ -56,6 +59,7 @@ class ArchitectureLayeringTest {
         assertThat(AuthService.class).isAssignableFrom(AuthServiceImpl.class);
         assertThat(ReportExportService.class).isAssignableFrom(ReportExportServiceImpl.class);
         assertThat(ReportService.class).isAssignableFrom(ReportServiceImpl.class);
+        assertThat(RagService.class).isAssignableFrom(RagServiceImpl.class);
         assertThat(SseService.class).isAssignableFrom(SseServiceImpl.class);
         assertThat(StockReportService.class).isAssignableFrom(StockReportServiceImpl.class);
         assertThat(TaskQueryService.class).isAssignableFrom(TaskQueryServiceImpl.class);

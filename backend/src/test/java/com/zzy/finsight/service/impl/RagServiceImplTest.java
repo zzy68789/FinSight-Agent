@@ -1,5 +1,11 @@
-package com.zzy.finsight.rag;
+package com.zzy.finsight.service.impl;
 
+import com.zzy.finsight.rag.PdfTextExtractor;
+import com.zzy.finsight.rag.RagDocument;
+import com.zzy.finsight.rag.RagDocumentChunk;
+import com.zzy.finsight.rag.TextChunker;
+import com.zzy.finsight.rag.VectorDocumentStore;
+import com.zzy.finsight.service.RagService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -15,13 +21,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class RagServiceTest {
+class RagServiceImplTest {
 
     @Test
     void processStoresPdfChunksInVectorStore() {
         PdfTextExtractor pdfTextExtractor = mock(PdfTextExtractor.class);
         VectorDocumentStore vectorDocumentStore = mock(VectorDocumentStore.class);
-        RagService ragService = new RagService(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
+        RagService ragService = new RagServiceImpl(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
         MockMultipartFile file = new MockMultipartFile(
                 "files",
                 "agent.pdf",
@@ -45,7 +51,7 @@ class RagServiceTest {
     void retrieveDelegatesToVectorStore() {
         PdfTextExtractor pdfTextExtractor = mock(PdfTextExtractor.class);
         VectorDocumentStore vectorDocumentStore = mock(VectorDocumentStore.class);
-        RagService ragService = new RagService(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
+        RagService ragService = new RagServiceImpl(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
         when(vectorDocumentStore.query(eq("agent"), anyInt()))
                 .thenReturn(List.of(new RagDocument("agent.pdf", "agent content", 0.95)));
 
@@ -58,7 +64,7 @@ class RagServiceTest {
     void indexTextAppendsReportChunksWithoutClearingVectorStore() {
         PdfTextExtractor pdfTextExtractor = mock(PdfTextExtractor.class);
         VectorDocumentStore vectorDocumentStore = mock(VectorDocumentStore.class);
-        RagService ragService = new RagService(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
+        RagService ragService = new RagServiceImpl(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
 
         int stored = ragService.indexText("report-thread-1-v2.md", "agent report content");
 

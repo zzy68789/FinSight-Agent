@@ -1,7 +1,7 @@
 package com.zzy.finsight.controller;
 
 import com.zzy.finsight.dto.ClearResponse;
-import com.zzy.finsight.rag.RagService;
+import com.zzy.finsight.service.RagService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;

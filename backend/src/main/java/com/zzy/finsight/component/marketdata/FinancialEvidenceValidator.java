@@ -12,6 +12,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -62,11 +63,7 @@ public class FinancialEvidenceValidator {
                 continue;
             }
             String issueCode = "";
-            String evidenceKey = String.join("|",
-                    safe(item.sourceType()),
-                    safe(item.sourceName()),
-                    safe(item.reportPeriod()),
-                    safe(item.metricName()));
+            String evidenceKey = evidenceKey(item);
             if (!evidenceKeys.add(evidenceKey)) {
                 issueCode = FinancialEvidenceIssueCodes.DUPLICATE_PERIOD;
             } else if (isFuturePeriod(item.reportPeriod())) {
@@ -143,12 +140,57 @@ public class FinancialEvidenceValidator {
         if (!"NEWS_SUMMARY".equals(item.metricName())) {
             return false;
         }
-        String excerpt = safe(item.excerpt()).toLowerCase();
+        String excerpt = safe(item.excerpt()).toLowerCase(Locale.ROOT);
+        String compact = excerpt.replaceAll("\\s+", "");
+        int navigationHits = countContaining(excerpt, List.of(
+                "行情首页", "财务分析指标", "业绩预告", "业绩快报", "申购状况",
+                "大宗交易", "融资融券", "股东统计", "基金持仓", "分红派息"
+        ));
+        int quotePageHits = countContaining(excerpt, List.of(
+                "最新实时行情", "历史走势图", "未来股价预测", "分析师评级", "股票价格", "股票行情"
+        ));
+        int markdownLinkCount = countOccurrences(excerpt, "](");
         return excerpt.isBlank()
+                || ("PUBLIC_MARKET".equals(item.sourceType()) && compact.length() < 60)
                 || excerpt.contains("查看「」的全部搜索结果")
                 || excerpt.contains("@open@")
                 || excerpt.contains("@volume@")
-                || (excerpt.contains("[登录]") && excerpt.contains("公司简介"));
+                || (excerpt.contains("[登录]") && excerpt.contains("公司简介"))
+                || navigationHits >= 4
+                || quotePageHits >= 4
+                || (markdownLinkCount >= 6 && markdownLinkCount * 25 > compact.length())
+                || (excerpt.contains("概览") && excerpt.contains("行情") && excerpt.contains("财报全文"));
+    }
+
+    private String evidenceKey(FinancialEvidenceItem item) {
+        if ("NEWS_SUMMARY".equals(item.metricName()) && item.url() != null && !item.url().isBlank()) {
+            return "url|" + item.url().trim().toLowerCase(Locale.ROOT);
+        }
+        return String.join("|",
+                safe(item.sourceType()),
+                safe(item.sourceName()),
+                safe(item.reportPeriod()),
+                safe(item.metricName()));
+    }
+
+    private int countContaining(String text, List<String> tokens) {
+        int hits = 0;
+        for (String token : tokens) {
+            if (text.contains(token.toLowerCase(Locale.ROOT))) {
+                hits++;
+            }
+        }
+        return hits;
+    }
+
+    private int countOccurrences(String text, String token) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = text.indexOf(token, offset)) >= 0) {
+            count++;
+            offset += token.length();
+        }
+        return count;
     }
 
     private LocalDate parsePeriod(String period) {

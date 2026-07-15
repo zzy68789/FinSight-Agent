@@ -73,6 +73,9 @@ finsight:
     relevance-threshold: 0.2
   tavily:
     api-key: ${TAVILY_API_KEY:}
+    extract-max-urls: 3
+    extract-timeout-seconds: 10
+    extract-max-attempts: 2
   market:
     tushare:
       enabled: true

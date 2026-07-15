@@ -1,5 +1,13 @@
-package com.zzy.finsight.rag;
+package com.zzy.finsight.service.impl;
 
+import com.zzy.finsight.rag.HybridRagRetriever;
+import com.zzy.finsight.rag.PdfTextExtractor;
+import com.zzy.finsight.rag.RagDocument;
+import com.zzy.finsight.rag.RagDocumentChunk;
+import com.zzy.finsight.rag.RagRetrievalResult;
+import com.zzy.finsight.rag.TextChunker;
+import com.zzy.finsight.rag.VectorDocumentStore;
+import com.zzy.finsight.service.RagService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -10,30 +18,30 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 负责文档入库、检索和向量存储降级。
+ * 负责 RAG 文档入库、检索和向量存储降级的业务实现。
  */
 @Service
-public class RagService {
+public class RagServiceImpl implements RagService {
     private final PdfTextExtractor pdfTextExtractor;
     private final HybridRagRetriever hybridRagRetriever;
     private final TextChunker textChunker;
 
     @Autowired
-    public RagService(PdfTextExtractor pdfTextExtractor, HybridRagRetriever hybridRagRetriever) {
+    public RagServiceImpl(PdfTextExtractor pdfTextExtractor, HybridRagRetriever hybridRagRetriever) {
         this(pdfTextExtractor, hybridRagRetriever, new TextChunker(500, 50));
     }
 
-    RagService(PdfTextExtractor pdfTextExtractor, VectorDocumentStore vectorDocumentStore, TextChunker textChunker) {
+    RagServiceImpl(PdfTextExtractor pdfTextExtractor, VectorDocumentStore vectorDocumentStore, TextChunker textChunker) {
         this(pdfTextExtractor, new HybridRagRetriever(vectorDocumentStore, 0.2), textChunker);
     }
 
-    RagService(PdfTextExtractor pdfTextExtractor, HybridRagRetriever hybridRagRetriever, TextChunker textChunker) {
+    RagServiceImpl(PdfTextExtractor pdfTextExtractor, HybridRagRetriever hybridRagRetriever, TextChunker textChunker) {
         this.pdfTextExtractor = pdfTextExtractor;
         this.hybridRagRetriever = hybridRagRetriever;
         this.textChunker = textChunker;
     }
 
-    /** 解析并索引上传的文档。 */
+    @Override
     public int process(List<MultipartFile> files) {
         clear();
         int stored = 0;
@@ -47,7 +55,7 @@ public class RagService {
         return stored;
     }
 
-    /** 检索与问题最相关的文档片段。 */
+    @Override
     public List<RagDocument> retrieve(String query, int topK) {
         if (query == null || query.isBlank()) {
             return List.of();
@@ -55,12 +63,12 @@ public class RagService {
         return hybridRagRetriever.retrieve(query, topK);
     }
 
-    /** 检索文档并返回完整追踪信息。 */
+    @Override
     public RagRetrievalResult retrieveWithTrace(String query, int topK) {
         return hybridRagRetriever.retrieveWithTrace(query, topK);
     }
 
-    /** 将指定来源的纯文本切片后写入索引。 */
+    @Override
     public int indexText(String source, String text) {
         if (text == null || text.isBlank()) {
             return 0;
@@ -75,16 +83,18 @@ public class RagService {
         return chunks.size();
     }
 
-    /** 清空当前 RAG 索引。 */
+    @Override
     public void clear() {
         hybridRagRetriever.clear();
     }
 
+    /** 解析单个 PDF 并保留原始文件名作为切片来源。 */
     private List<RagDocumentChunk> processOne(MultipartFile file) {
         if (file.isEmpty()) {
             return List.of();
         }
-        if (file.getOriginalFilename() == null || !file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+        if (file.getOriginalFilename() == null
+                || !file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
             throw new IllegalArgumentException("MVP only supports PDF files");
         }
         try {
@@ -95,8 +105,8 @@ public class RagService {
                 chunks.add(new RagDocumentChunk(file.getOriginalFilename(), i, rawChunks.get(i)));
             }
             return chunks;
-        } catch (IOException e) {
-            throw new IllegalArgumentException("Failed to read uploaded file: " + e.getMessage(), e);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("Failed to read uploaded file: " + exception.getMessage(), exception);
         }
     }
 }

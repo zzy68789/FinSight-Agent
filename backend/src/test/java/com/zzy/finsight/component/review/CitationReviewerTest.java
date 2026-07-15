@@ -48,13 +48,77 @@ class CitationReviewerTest {
         );
 
         CitationReviewResult result = reviewer.review(
-                "## 报告\n营收同比：20.00%\n\n## 引用与数据快照\n- 营业收入\n- 净利润\n- 经营现金流",
+                "## 报告\n营收同比：20.00% [E1]\n\n## 引用与数据快照\n- [E1] 营业收入\n- [E2] 净利润\n- [E3] 经营现金流",
                 snapshot(evidenceItems),
                 List.of(metric("营收同比", "20.00", "OK"))
         );
 
         assertThat(result.status()).isEqualTo("PASS");
         assertThat(result.reason()).isBlank();
+    }
+
+    @Test
+    void failsWhenMetricAppearsOnlyInAppendixWithoutBodyCitation() {
+        List<FinancialEvidenceItem> evidenceItems = List.of(
+                evidence("营业收入"),
+                evidence("净利润"),
+                evidence("经营现金流")
+        );
+
+        CitationReviewResult result = reviewer.review(
+                "## 报告\n营收同比：20.00%\n\n## 引用与数据快照\n- [E1] 营业收入 20.00%",
+                snapshot(evidenceItems),
+                List.of(metric("营收同比", "20.00", "OK"))
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.reason()).contains("BODY_CITATION_MISSING");
+    }
+
+    @Test
+    void failsWhenInterimRoeDoesNotDeclareUnannualizedPeriod() {
+        List<FinancialEvidenceItem> evidenceItems = List.of(
+                evidence("NET_PROFIT", "", "20260331"),
+                evidence("BEGINNING_EQUITY", "", "20260331"),
+                evidence("ENDING_EQUITY", "", "20260331")
+        );
+        FinancialMetricResult roe = new FinancialMetricResult(
+                "ROE",
+                new BigDecimal("10.57"),
+                "10.57%",
+                "ROE公式",
+                "OK",
+                "",
+                List.of("NET_PROFIT", "BEGINNING_EQUITY", "ENDING_EQUITY")
+        );
+
+        CitationReviewResult result = reviewer.review(
+                "## 报告\nROE：10.57% [E1][E2][E3]\n\n## 引用与数据快照\n- [E1] 净利润",
+                snapshot(evidenceItems),
+                List.of(roe)
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.reason()).contains("PERIOD_SEMANTIC_INVALID");
+    }
+
+    @Test
+    void rejectsMixedTurnoverSnapshots() {
+        List<FinancialEvidenceItem> evidenceItems = List.of(
+                evidence("NEWS_SUMMARY"),
+                evidence("PE_TTM"),
+                evidence("PB")
+        );
+
+        CitationReviewResult result = reviewer.review(
+                "## 报告\n成交额分别为50亿元、20亿元，对应换手率为0.3%、0.1% [E1]\n\n"
+                        + "## 引用与数据快照\n- [E1] 行情",
+                snapshot(evidenceItems),
+                List.of()
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.reason()).contains("MARKET_SNAPSHOT_MIXED");
     }
 
     @Test
@@ -91,12 +155,16 @@ class CitationReviewerTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String issueCode) {
+        return evidence(metricName, issueCode, "2025");
+    }
+
+    private FinancialEvidenceItem evidence(String metricName, String issueCode, String period) {
         return new FinancialEvidenceItem(
                 "FINANCIAL_REPORT",
                 "年报",
                 "",
                 1,
-                "2025",
+                period,
                 metricName,
                 BigDecimal.TEN,
                 BigDecimal.TEN,
@@ -115,7 +183,7 @@ class CitationReviewerTest {
                 name + "公式",
                 status,
                 "",
-                List.of(name)
+                "营收同比".equals(name) ? List.of("营业收入") : List.of(name)
         );
     }
 }

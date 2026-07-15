@@ -49,6 +49,22 @@ class FinancialRiskScorerTest {
                 .allMatch(reason -> reason.contains("缺少") || reason.contains("指标"));
     }
 
+    @Test
+    void doesNotCompareInterimRoeWithAnnualThreshold() {
+        List<FinancialMetricResult> metrics = List.of(
+                metric("ROE", "30.00", "OK"),
+                metric("资产负债率", "25.00", "OK"),
+                metric("经营现金流 / 净利润", "1.50", "OK")
+        );
+
+        FinancialRiskAssessment assessment = service.assess(metrics, List.of(
+                evidence("OPERATING_REVENUE", "20260331", "一季度营业收入 100 亿元。")
+        ));
+
+        assertThat(assessment.dimensions().get(0).reason()).contains("阶段性ROE未年化");
+        assertThat(assessment.dimensions().get(0).score()).isEqualTo(3);
+    }
+
     private FinancialMetricResult metric(String name, String value, String status) {
         return new FinancialMetricResult(
                 name,
@@ -62,12 +78,16 @@ class FinancialRiskScorerTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String excerpt) {
+        return evidence(metricName, "latest", excerpt);
+    }
+
+    private FinancialEvidenceItem evidence(String metricName, String period, String excerpt) {
         return new FinancialEvidenceItem(
                 "PUBLIC_MARKET",
                 "公开资料",
                 "",
                 null,
-                "latest",
+                period,
                 metricName,
                 null,
                 null,

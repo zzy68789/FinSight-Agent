@@ -27,14 +27,20 @@ class FinancialEvaluatorTest {
     void loadsDefaultFinancialEvaluationSetFromClasspath() {
         FinancialEvaluationSet evalSet = service.loadDefaultSet();
 
-        assertThat(evalSet.name()).isEqualTo("A股投研报告评测集 v1");
+        assertThat(evalSet.name()).isEqualTo("A股投研报告评测集 v2");
         assertThat(evalSet.metrics()).containsExactly(
                 "claim_support_rate",
                 "unsupported_claim_rate",
                 "contradiction_rate",
                 "numeric_consistency_rate",
                 "citation_hit_rate",
-                "keypoint_coverage"
+                "body_citation_coverage",
+                "source_quality_rate",
+                "period_semantic_consistency",
+                "directional_claim_support_rate",
+                "low_quality_evidence_rate",
+                "keypoint_coverage",
+                "evidence_effective_rate"
         );
         assertThat(evalSet.cases()).hasSize(10);
         assertThat(evalSet.cases())
@@ -55,8 +61,8 @@ class FinancialEvaluatorTest {
                 List.of("公司概况", "财务表现", "主要风险")
         );
         FinancialSnapshot snapshot = snapshot(
-                evidence("NEWS_SUMMARY", "公司经营平稳，未见重大利空。"),
-                evidence("TECHNICAL_SIGNAL", "RSI 52，均线震荡。")
+                evidence("ROE", "ROE来自净利润和股东权益。"),
+                evidence("资产负债率", "资产负债率来自总负债和总资产。")
         );
         List<FinancialMetricResult> metrics = List.of(
                 metric("ROE", "30.00%"),
@@ -68,17 +74,17 @@ class FinancialEvaluatorTest {
                 > 仅作研究辅助，不构成投资建议。
 
                 ## 1. 公司概况
-                贵州茅台是本次评测样例公司。
+                贵州茅台是本次评测样例公司。[E1]
 
                 ## 3. 财务表现
-                ROE：30.00%。资产负债率：25.00%。
+                ROE：30.00% [E1]。资产负债率：25.00% [E2]。
 
                 ## 7. 主要风险
-                主要风险来自数据缺口和市场波动。
+                主要风险来自数据缺口和市场波动。[E1][E2]
 
                 ## 引用与数据快照
-                - [E1] PUBLIC_MARKET / 新闻 / latest / NEWS_SUMMARY / OK：公司经营平稳，未见重大利空。
-                - [E2] PUBLIC_MARKET / 技术 / latest / TECHNICAL_SIGNAL / OK：RSI 52，均线震荡。
+                - [E1] PUBLIC_MARKET / 财务 / latest / ROE / OK：ROE来自净利润和股东权益。
+                - [E2] PUBLIC_MARKET / 财务 / latest / 资产负债率 / OK：资产负债率来自总负债和总资产。
                 """;
 
         FinancialEvaluationResult result = service.evaluate(evalCase, report, snapshot, metrics);
@@ -151,16 +157,16 @@ class FinancialEvaluatorTest {
                         LocalDateTime.of(2026, 7, 3, 10, 0),
                         "DATA_MISSING"
                 ),
-                evidence("NEWS_SUMMARY", "公司经营平稳。"),
+                evidence("ROE", "公司经营平稳。"),
                 evidence("TECHNICAL_SIGNAL", "RSI 52，均线震荡。")
         );
         String report = """
                 ## 公司概况
-                贵州茅台。
+                贵州茅台。[E2]
                 ## 财务表现
-                ROE：30.00%。
+                ROE：30.00% [E2]。
                 ## 主要风险
-                数据缺口和市场波动。
+                数据缺口和市场波动。[E3]
                 ## 引用与数据快照
                 - [E2] PUBLIC_MARKET / 新闻 / latest / NEWS_SUMMARY / OK：公司经营平稳。
                 - [E3] PUBLIC_MARKET / 技术 / latest / TECHNICAL_SIGNAL / OK：RSI 52，均线震荡。
@@ -169,6 +175,33 @@ class FinancialEvaluatorTest {
         FinancialEvaluationResult result = service.evaluate(evalCase, report, snapshot, List.of(metric("ROE", "30.00%")));
 
         assertThat(score(result, "citation_hit_rate")).isEqualByComparingTo("1.00");
+    }
+
+    @Test
+    void appendixOnlyCitationsDoNotIncreaseBodyCitationScore() {
+        FinancialEvaluationCase evalCase = new FinancialEvaluationCase(
+                "600519",
+                "贵州茅台",
+                "latest",
+                List.of("公司概况", "财务表现", "主要风险")
+        );
+        FinancialSnapshot snapshot = snapshot(evidence("ROE", "ROE来自净利润和股东权益。"));
+        String report = """
+                ## 公司概况
+                贵州茅台。
+                ## 财务表现
+                ROE：30.00%。
+                ## 主要风险
+                关注市场波动。
+                ## 引用与数据快照
+                - [E1] PUBLIC_MARKET / 财务 / latest / ROE / OK：ROE来自净利润和股东权益。
+                """;
+
+        FinancialEvaluationResult result = service.evaluate(evalCase, report, snapshot, List.of(metric("ROE", "30.00%")));
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(score(result, "citation_hit_rate")).isEqualByComparingTo("0.00");
+        assertThat(score(result, "body_citation_coverage")).isEqualByComparingTo("0.00");
     }
 
     @Test

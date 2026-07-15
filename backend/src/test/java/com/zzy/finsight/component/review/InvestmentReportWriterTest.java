@@ -60,7 +60,12 @@ class InvestmentReportWriterTest {
         assertThat(capturedModel.get()).isEqualTo(LlmClient.ModelType.SMART);
         assertThat(capturedPrompt.get()).contains("588200.SH", "只允许使用给定事实", "确定性报告草稿");
         assertThat(capturedPrompt.get())
-                .contains("最终引用附录由系统确定性覆盖", "八章节正文总长度不超过 2500 个中文字符")
+                .contains(
+                        "最终引用附录由系统确定性覆盖",
+                        "八章节正文总长度不超过 2500 个中文字符",
+                        "可用证据索引",
+                        "[E1] ETF收盘价"
+                )
                 .doesNotContain("[E1] AUTHORIZED_MARKET / TuShare Pro", "### 指标计算公式", "### 风险评分明细");
         assertThat(report).contains("LLM 生成的基金概况");
         assertThat(report).contains("仅作研究辅助，不构成投资建议");
@@ -108,6 +113,44 @@ class InvestmentReportWriterTest {
         assertThat(report).doesNotContain("毛利率");
     }
 
+    @Test
+    void marksInterimRoeAsUnannualizedAndAddsDeterministicCitations() {
+        FinancialSnapshot snapshot = aShareSnapshot();
+        List<FinancialMetricResult> metrics = List.of(
+                metric("营收同比", "6.54%", List.of(
+                        FinancialMetricInputNames.OPERATING_REVENUE,
+                        FinancialMetricInputNames.OPERATING_REVENUE_PRIOR
+                )),
+                metric("净利率", "50.53%", List.of(
+                        FinancialMetricInputNames.NET_PROFIT,
+                        FinancialMetricInputNames.OPERATING_REVENUE
+                )),
+                metric("毛利率", "89.76%", List.of(
+                        FinancialMetricInputNames.OPERATING_REVENUE,
+                        FinancialMetricInputNames.OPERATING_COST
+                )),
+                metric("ROE", "10.57%", List.of(
+                        FinancialMetricInputNames.NET_PROFIT,
+                        FinancialMetricInputNames.BEGINNING_EQUITY,
+                        FinancialMetricInputNames.ENDING_EQUITY
+                )),
+                metric("经营现金流 / 净利润", "0.99", List.of(
+                        FinancialMetricInputNames.OPERATING_CASH_FLOW,
+                        FinancialMetricInputNames.NET_PROFIT
+                )),
+                metric("资产负债率", "12.12%", List.of(
+                        FinancialMetricInputNames.TOTAL_LIABILITIES,
+                        FinancialMetricInputNames.TOTAL_ASSETS
+                ))
+        );
+
+        String report = writer.write(snapshot, metrics, new FinancialRiskScorer().assess(metrics, snapshot.evidenceItems()), null);
+
+        assertThat(report).contains("2026年一季度口径；ROE未年化");
+        assertThat(report).contains("ROE：10.57%（2026年一季度口径，未年化");
+        assertThat(report).contains("[E1]", "[E2]", "本次结构化财务指标未发现");
+    }
+
     private FinancialSnapshot etfSnapshot() {
         return new FinancialSnapshot(
                 new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF),
@@ -130,6 +173,26 @@ class InvestmentReportWriterTest {
         );
     }
 
+    private FinancialSnapshot aShareSnapshot() {
+        return new FinancialSnapshot(
+                new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
+                "20260331",
+                "hybrid",
+                List.of(
+                        evidence(FinancialMetricInputNames.OPERATING_REVENUE, "20260331", "营业收入 539.09 亿元"),
+                        evidence(FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, "20250331", "上年同期营业收入 506.01 亿元"),
+                        evidence(FinancialMetricInputNames.OPERATING_COST, "20260331", "营业成本 55.21 亿元"),
+                        evidence(FinancialMetricInputNames.NET_PROFIT, "20260331", "归母净利润 272.43 亿元"),
+                        evidence(FinancialMetricInputNames.BEGINNING_EQUITY, "20251231", "年初归母权益 2446.38 亿元"),
+                        evidence(FinancialMetricInputNames.ENDING_EQUITY, "20260331", "期末归母权益 2708.94 亿元"),
+                        evidence(FinancialMetricInputNames.OPERATING_CASH_FLOW, "20260331", "经营现金流 269.10 亿元"),
+                        evidence(FinancialMetricInputNames.TOTAL_ASSETS, "20260331", "总资产 3199.19 亿元"),
+                        evidence(FinancialMetricInputNames.TOTAL_LIABILITIES, "20260331", "总负债 387.83 亿元")
+                ),
+                LocalDateTime.of(2026, 7, 15, 10, 0)
+        );
+    }
+
     private FinancialRiskAssessment risk(FinancialSnapshot snapshot) {
         return new FinancialRiskScorer().assess(List.of(), snapshot.evidenceItems());
     }
@@ -138,13 +201,29 @@ class InvestmentReportWriterTest {
         return new FinancialMetricResult(name, null, displayValue, name + "来自ETF行情证据", "OK", "", List.of(name));
     }
 
+    private FinancialMetricResult metric(String name, String displayValue, List<String> evidenceRefs) {
+        return new FinancialMetricResult(
+                name,
+                new BigDecimal(displayValue.replace("%", "")),
+                displayValue,
+                name + "确定性公式",
+                "OK",
+                "",
+                evidenceRefs
+        );
+    }
+
     private FinancialEvidenceItem evidence(String metricName, String excerpt) {
+        return evidence(metricName, "latest", excerpt);
+    }
+
+    private FinancialEvidenceItem evidence(String metricName, String period, String excerpt) {
         return new FinancialEvidenceItem(
                 "AUTHORIZED_MARKET",
                 "TuShare Pro",
                 "https://tushare.pro",
                 null,
-                "latest",
+                period,
                 metricName,
                 BigDecimal.ONE,
                 BigDecimal.ONE,

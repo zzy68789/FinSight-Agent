@@ -18,7 +18,7 @@ import java.util.Locale;
  */
 @Component
 public class FinancialComplianceReviewer {
-    public static final String POLICY_VERSION = "compliance-policy-v1";
+    public static final String POLICY_VERSION = "compliance-policy-v2-directional-claims";
 
     /** 检查报告免责声明、禁用表达和引用结果。 */
     public FinancialComplianceReviewResult review(String report, CitationReviewResult citationReview) {
@@ -40,6 +40,22 @@ public class FinancialComplianceReviewer {
                     "regulatory",
                     "报告包含收益保证或绝对化表述",
                     "删除保证性收益承诺，改为风险提示和观察点"
+            ));
+        }
+        if (containsDirectRecommendation(text)) {
+            issues.add(new FinancialComplianceIssue(
+                    "critical",
+                    "recommendation",
+                    "报告包含直接荐股、仓位或交易指令",
+                    "删除直接买卖和仓位表达，改为基于证据的风险与观察点"
+            ));
+        }
+        if (containsUnsupportedDirectionalClaim(text)) {
+            issues.add(new FinancialComplianceIssue(
+                    "critical",
+                    "unsupported_direction",
+                    "报告包含缺少审慎边界的股价方向性表述",
+                    "删除股价方向判断，改为可复核事件、影响路径和不确定性说明"
             ));
         }
         if (text.contains("内幕") || normalized.contains("insider")) {
@@ -76,5 +92,22 @@ public class FinancialComplianceReviewer {
                 || text.contains("收益100%")
                 || normalized.contains("guaranteed return")
                 || normalized.contains("risk-free return");
+    }
+
+    private boolean containsDirectRecommendation(String text) {
+        return text.contains("建议买入")
+                || text.contains("直接买入")
+                || text.contains("建议卖出")
+                || text.contains("直接卖出")
+                || text.contains("建议加仓")
+                || text.contains("建议减仓")
+                || text.contains("仓位建议");
+    }
+
+    private boolean containsUnsupportedDirectionalClaim(String text) {
+        return text.contains("股价修复可期")
+                || text.contains("上涨空间明确")
+                || text.contains("分红托底")
+                || text.contains("下跌空间有限");
     }
 }

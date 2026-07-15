@@ -1,7 +1,7 @@
 package com.zzy.finsight.controller;
 
 import com.zzy.finsight.dto.UploadResponse;
-import com.zzy.finsight.rag.RagService;
+import com.zzy.finsight.service.RagService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

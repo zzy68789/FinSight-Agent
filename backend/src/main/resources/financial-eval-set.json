@@ -1,12 +1,18 @@
 {
-  "name": "A股投研报告评测集 v1",
+  "name": "A股投研报告评测集 v2",
   "metrics": [
     "claim_support_rate",
     "unsupported_claim_rate",
     "contradiction_rate",
     "numeric_consistency_rate",
     "citation_hit_rate",
-    "keypoint_coverage"
+    "body_citation_coverage",
+    "source_quality_rate",
+    "period_semantic_consistency",
+    "directional_claim_support_rate",
+    "low_quality_evidence_rate",
+    "keypoint_coverage",
+    "evidence_effective_rate"
   ],
   "cases": [
     {

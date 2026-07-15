@@ -63,4 +63,16 @@ class FinancialComplianceReviewerTest {
         assertThat(result.status()).isEqualTo("FAIL");
         assertThat(result.issues()).extracting(FinancialComplianceIssue::category).contains("citation");
     }
+
+    @Test
+    void rejectsUnsupportedSharePriceDirectionLanguage() {
+        FinancialComplianceReviewResult result = reviewer.review(
+                "仅作研究辅助，不构成投资建议。市场页面认为分红托底，股价修复可期。",
+                CitationReviewResult.pass()
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.issues()).extracting(FinancialComplianceIssue::category)
+                .contains("unsupported_direction");
+    }
 }

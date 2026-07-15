@@ -4,6 +4,7 @@ import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialRiskDimension;
+import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 
 
 import org.springframework.stereotype.Component;
@@ -29,7 +30,7 @@ public class FinancialRiskScorer {
     /** 汇总指标和证据，生成五维风险评估。 */
     public FinancialRiskAssessment assess(List<FinancialMetricResult> metrics, List<FinancialEvidenceItem> evidenceItems) {
         List<FinancialRiskDimension> dimensions = List.of(
-                fundamentalRisk(metrics),
+                fundamentalRisk(metrics, evidenceItems),
                 evidenceRisk("技术面风险", TECHNICAL_WEIGHT, evidenceItems, "TECHNICAL_SIGNAL", "缺少技术指标证据，按中性偏谨慎处理。"),
                 evidenceRisk("情绪面风险", SENTIMENT_WEIGHT, evidenceItems, "SENTIMENT_SIGNAL", "缺少情绪面证据，按中性偏谨慎处理。"),
                 evidenceRisk("消息面风险", NEWS_WEIGHT, evidenceItems, "NEWS_SUMMARY", "缺少新闻摘要证据，按中性偏谨慎处理。"),
@@ -48,7 +49,10 @@ public class FinancialRiskScorer {
         return new FinancialRiskAssessment(finalScore, riskLevel(finalScore), dimensions, warnings);
     }
 
-    private FinancialRiskDimension fundamentalRisk(List<FinancialMetricResult> metrics) {
+    private FinancialRiskDimension fundamentalRisk(
+            List<FinancialMetricResult> metrics,
+            List<FinancialEvidenceItem> evidenceItems
+    ) {
         Optional<BigDecimal> debtRatio = metricValue(metrics, "资产负债率");
         Optional<BigDecimal> roe = metricValue(metrics, "ROE");
         Optional<BigDecimal> cashFlowRatio = metricValue(metrics, "经营现金流 / 净利润");
@@ -70,7 +74,9 @@ public class FinancialRiskScorer {
                 reasons.add("资产负债率低于40%");
             }
         }
-        if (roe.isPresent()) {
+        if (roe.isPresent() && interimFinancialPeriod(evidenceItems)) {
+            reasons.add("阶段性ROE未年化，不与全年阈值比较");
+        } else if (roe.isPresent()) {
             BigDecimal value = roe.get();
             if (value.compareTo(new BigDecimal("15")) >= 0) {
                 score -= 1;
@@ -98,6 +104,25 @@ public class FinancialRiskScorer {
                 reasons.isEmpty() ? "已有部分财务指标，但信号有限。" : String.join("；", reasons),
                 "ROE,资产负债率,经营现金流 / 净利润"
         );
+    }
+
+    /** 判断当前结构化财务证据是否采用未覆盖完整年度的阶段性口径。 */
+    private boolean interimFinancialPeriod(List<FinancialEvidenceItem> evidenceItems) {
+        return evidenceItems.stream()
+                .filter(FinancialEvidenceItem::effective)
+                .filter(item -> List.of(
+                        FinancialMetricInputNames.OPERATING_REVENUE,
+                        FinancialMetricInputNames.OPERATING_COST,
+                        FinancialMetricInputNames.NET_PROFIT,
+                        FinancialMetricInputNames.TOTAL_ASSETS,
+                        FinancialMetricInputNames.TOTAL_LIABILITIES,
+                        FinancialMetricInputNames.OPERATING_CASH_FLOW
+                ).contains(item.metricName()))
+                .map(FinancialEvidenceItem::reportPeriod)
+                .filter(period -> period != null && period.matches("\\d{8}"))
+                .max(String::compareTo)
+                .map(period -> period.endsWith("0331") || period.endsWith("0630") || period.endsWith("0930"))
+                .orElse(false);
     }
 
     private FinancialRiskDimension evidenceRisk(

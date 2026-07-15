@@ -49,6 +49,38 @@ class FinancialEvidenceValidatorTest {
                 );
     }
 
+    @Test
+    void marksNavigationQuotePagesAndDuplicateUrlsAsLowQualityOrDuplicate() {
+        FinancialEvidenceItem navigation = publicEvidence(
+                "https://quote.example.com/600519",
+                "概览 行情首页 财务分析指标 业绩预告 业绩快报 大宗交易 融资融券 股东统计 基金持仓 财报全文"
+        );
+        FinancialEvidenceItem duplicate = publicEvidence(
+                "https://quote.example.com/600519",
+                "公司发布正式公告，正文包含经营变化、风险提示、报告日期和可复核的数据来源。"
+        );
+
+        FinancialSnapshot validated = validator.validate(snapshot(List.of(navigation, duplicate)));
+
+        assertThat(validated.evidenceItems()).extracting(FinancialEvidenceItem::issueCode)
+                .containsExactly(
+                        FinancialEvidenceIssueCodes.LOW_QUALITY_CONTENT,
+                        FinancialEvidenceIssueCodes.DUPLICATE_PERIOD
+                );
+    }
+
+    @Test
+    void keepsSubstantivePublicNewsEffective() {
+        FinancialEvidenceItem news = publicEvidence(
+                "https://www.sse.com.cn/news/600519",
+                "公司发布经营公告，正文说明报告期收入变化、渠道调整、现金流影响及相关风险，内容可回到公告原文复核。"
+        );
+
+        FinancialSnapshot validated = validator.validate(snapshot(List.of(news)));
+
+        assertThat(validated.evidenceItems().get(0).effective()).isTrue();
+    }
+
     private FinancialSnapshot snapshot(List<FinancialEvidenceItem> items) {
         return new FinancialSnapshot(
                 new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
@@ -72,6 +104,23 @@ class FinancialEvidenceValidatorTest {
                 number,
                 excerpt,
                 new BigDecimal("0.90"),
+                LocalDateTime.of(2026, 7, 13, 20, 0),
+                ""
+        );
+    }
+
+    private FinancialEvidenceItem publicEvidence(String url, String excerpt) {
+        return new FinancialEvidenceItem(
+                "PUBLIC_MARKET",
+                "公开网页",
+                url,
+                null,
+                "latest",
+                "NEWS_SUMMARY",
+                null,
+                null,
+                excerpt,
+                new BigDecimal("0.80"),
                 LocalDateTime.of(2026, 7, 13, 20, 0),
                 ""
         );

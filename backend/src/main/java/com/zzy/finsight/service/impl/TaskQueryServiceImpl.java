@@ -9,7 +9,7 @@ import com.zzy.finsight.dto.ReportIndexResponse;
 import com.zzy.finsight.dto.ReportResponse;
 import com.zzy.finsight.dto.TaskDetailResponse;
 import com.zzy.finsight.dto.TaskSummaryResponse;
-import com.zzy.finsight.rag.RagService;
+import com.zzy.finsight.service.RagService;
 import com.zzy.finsight.mapper.AgentStepLogMapper;
 import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
