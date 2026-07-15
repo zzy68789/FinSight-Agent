@@ -13,6 +13,7 @@ import com.zzy.finsight.rag.EmbeddingClient;
 import com.zzy.finsight.rag.HybridRagRetriever;
 import com.zzy.finsight.rag.InMemoryVectorDocumentStore;
 import com.zzy.finsight.rag.RagDocumentChunk;
+import com.zzy.finsight.rag.RagKnowledgeSpace;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -169,8 +170,9 @@ public class FinancialEvaluationRunner {
         for (int index = 0; index < chunks.size(); index++) {
             grades.put(chunks.get(index).chunkId(), fixture.corpus().get(index).relevanceGrade());
         }
-        retriever.index(chunks);
-        return retrievalEvaluator.evaluate(fixture.query(), retriever.retrieve(fixture.query(), 5), grades);
+        RagKnowledgeSpace space = RagKnowledgeSpace.named("evaluation-" + fixture.caseId());
+        retriever.index(space, chunks);
+        return retrievalEvaluator.evaluate(fixture.query(), retriever.retrieve(space, fixture.query(), 5), grades);
     }
 
     private FinancialSnapshot snapshot(EvaluationCaseFixture fixture) {

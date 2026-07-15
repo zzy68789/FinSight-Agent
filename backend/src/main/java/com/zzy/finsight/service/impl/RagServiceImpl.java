@@ -5,6 +5,7 @@ import com.zzy.finsight.rag.PdfTextExtractor;
 import com.zzy.finsight.rag.RagDocument;
 import com.zzy.finsight.rag.RagDocumentChunk;
 import com.zzy.finsight.rag.RagRetrievalResult;
+import com.zzy.finsight.rag.RagKnowledgeSpace;
 import com.zzy.finsight.rag.TextChunker;
 import com.zzy.finsight.rag.VectorDocumentStore;
 import com.zzy.finsight.service.RagService;
@@ -42,8 +43,9 @@ public class RagServiceImpl implements RagService {
     }
 
     @Override
-    public int process(List<MultipartFile> files) {
-        clear();
+    public int process(long ownerId, List<MultipartFile> files) {
+        RagKnowledgeSpace space = RagKnowledgeSpace.forOwner(ownerId);
+        clear(ownerId);
         int stored = 0;
         List<RagDocumentChunk> chunks = new ArrayList<>();
         for (MultipartFile file : files) {
@@ -51,25 +53,25 @@ public class RagServiceImpl implements RagService {
             chunks.addAll(fileChunks);
             stored += fileChunks.size();
         }
-        hybridRagRetriever.index(chunks);
+        hybridRagRetriever.index(space, chunks);
         return stored;
     }
 
     @Override
-    public List<RagDocument> retrieve(String query, int topK) {
+    public List<RagDocument> retrieve(long ownerId, String query, int topK) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
-        return hybridRagRetriever.retrieve(query, topK);
+        return hybridRagRetriever.retrieve(RagKnowledgeSpace.forOwner(ownerId), query, topK);
     }
 
     @Override
-    public RagRetrievalResult retrieveWithTrace(String query, int topK) {
-        return hybridRagRetriever.retrieveWithTrace(query, topK);
+    public RagRetrievalResult retrieveWithTrace(long ownerId, String query, int topK) {
+        return hybridRagRetriever.retrieveWithTrace(RagKnowledgeSpace.forOwner(ownerId), query, topK);
     }
 
     @Override
-    public int indexText(String source, String text) {
+    public int indexText(long ownerId, String source, String text) {
         if (text == null || text.isBlank()) {
             return 0;
         }
@@ -79,13 +81,13 @@ public class RagServiceImpl implements RagService {
         for (int i = 0; i < rawChunks.size(); i++) {
             chunks.add(new RagDocumentChunk(normalizedSource, i, rawChunks.get(i)));
         }
-        hybridRagRetriever.index(chunks);
+        hybridRagRetriever.index(RagKnowledgeSpace.forOwner(ownerId), chunks);
         return chunks.size();
     }
 
     @Override
-    public void clear() {
-        hybridRagRetriever.clear();
+    public void clear(long ownerId) {
+        hybridRagRetriever.clear(RagKnowledgeSpace.forOwner(ownerId));
     }
 
     /** 解析单个 PDF 并保留原始文件名作为切片来源。 */

@@ -47,13 +47,13 @@ public class FinancialSnapshotBuilder {
     }
 
     /** 调用适用数据源并构建不可变金融快照。 */
-    public FinancialSnapshot build(StockSubject subject, String reportPeriod, String searchMode) {
+    public FinancialSnapshot build(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
         List<FinancialEvidenceItem> evidenceItems = new ArrayList<>();
         List<FinancialAgentStageResult> stageResults = new ArrayList<>();
         List<com.zzy.finsight.rag.RagRetrievalResult> retrievalResults = new ArrayList<>();
         List<CompletableFuture<ProviderResult>> futures = providers.stream()
                 .map(provider -> CompletableFuture.supplyAsync(
-                        () -> collectProvider(provider, subject, reportPeriod, searchMode),
+                        () -> collectProvider(provider, ownerId, subject, reportPeriod, searchMode),
                         executor
                 ))
                 .toList();
@@ -78,10 +78,16 @@ public class FinancialSnapshotBuilder {
         return evidenceValidator.validate(snapshot);
     }
 
-    private ProviderResult collectProvider(FinancialDataProvider provider, StockSubject subject, String reportPeriod, String searchMode) {
+    private ProviderResult collectProvider(
+            FinancialDataProvider provider,
+            long ownerId,
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode
+    ) {
         long startedAt = System.currentTimeMillis();
         try {
-            FinancialDataCollection collection = provider.collectWithTrace(subject, reportPeriod, searchMode);
+            FinancialDataCollection collection = provider.collectWithTrace(ownerId, subject, reportPeriod, searchMode);
             List<FinancialEvidenceItem> items = collection == null ? List.of() : collection.evidenceItems();
             items = items == null ? List.of() : items;
             long durationMs = Math.max(0, System.currentTimeMillis() - startedAt);

@@ -3,6 +3,7 @@ package com.zzy.finsight.service.impl;
 import com.zzy.finsight.rag.PdfTextExtractor;
 import com.zzy.finsight.rag.RagDocument;
 import com.zzy.finsight.rag.RagDocumentChunk;
+import com.zzy.finsight.rag.RagKnowledgeSpace;
 import com.zzy.finsight.rag.TextChunker;
 import com.zzy.finsight.rag.VectorDocumentStore;
 import com.zzy.finsight.service.RagService;
@@ -36,11 +37,11 @@ class RagServiceImplTest {
         );
         when(pdfTextExtractor.extract(any())).thenReturn("agent workflow needs vector rag");
 
-        int stored = ragService.process(List.of(file));
+        int stored = ragService.process(7L, List.of(file));
 
         assertThat(stored).isEqualTo(3);
-        verify(vectorDocumentStore).clear();
-        verify(vectorDocumentStore).add(eq(List.of(
+        verify(vectorDocumentStore).clear(RagKnowledgeSpace.forOwner(7L));
+        verify(vectorDocumentStore).add(eq(RagKnowledgeSpace.forOwner(7L)), eq(List.of(
                 new RagDocumentChunk("agent.pdf", 0, "agent workfl"),
                 new RagDocumentChunk("agent.pdf", 1, "flow needs v"),
                 new RagDocumentChunk("agent.pdf", 2, " vector rag")
@@ -52,10 +53,10 @@ class RagServiceImplTest {
         PdfTextExtractor pdfTextExtractor = mock(PdfTextExtractor.class);
         VectorDocumentStore vectorDocumentStore = mock(VectorDocumentStore.class);
         RagService ragService = new RagServiceImpl(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
-        when(vectorDocumentStore.query(eq("agent"), anyInt()))
+        when(vectorDocumentStore.query(eq(RagKnowledgeSpace.forOwner(7L)), eq("agent"), anyInt()))
                 .thenReturn(List.of(new RagDocument("agent.pdf", "agent content", 0.95)));
 
-        List<RagDocument> docs = ragService.retrieve("agent", 2);
+        List<RagDocument> docs = ragService.retrieve(7L, "agent", 2);
 
         assertThat(docs).containsExactly(new RagDocument("agent.pdf", "agent content", 0.95));
     }
@@ -66,13 +67,13 @@ class RagServiceImplTest {
         VectorDocumentStore vectorDocumentStore = mock(VectorDocumentStore.class);
         RagService ragService = new RagServiceImpl(pdfTextExtractor, vectorDocumentStore, new TextChunker(12, 2));
 
-        int stored = ragService.indexText("report-thread-1-v2.md", "agent report content");
+        int stored = ragService.indexText(7L, "report-thread-1-v2.md", "agent report content");
 
         assertThat(stored).isEqualTo(2);
-        verify(vectorDocumentStore).add(eq(List.of(
+        verify(vectorDocumentStore).add(eq(RagKnowledgeSpace.forOwner(7L)), eq(List.of(
                 new RagDocumentChunk("report-thread-1-v2.md", 0, "agent report"),
                 new RagDocumentChunk("report-thread-1-v2.md", 1, "rt content")
         )));
-        verify(vectorDocumentStore, never()).clear();
+        verify(vectorDocumentStore, never()).clear(any());
     }
 }

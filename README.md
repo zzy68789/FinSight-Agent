@@ -20,6 +20,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
 - **报告库与导出**：支持报告列表、版本查看、Markdown/PDF/Word 导出、收藏、软删除和加入 RAG。
+- **用户隔离知识库**：PDF 上传、报告加入 RAG、BM25/Chroma 检索和知识库清理均绑定当前登录用户，不跨用户共享文档。
 - **本地可演示降级**：未配置 LLM、Tavily、TuShare、Redis 或 ChromaDB 时，仍可通过本地 fallback 跑通核心流程。
 
 ## 当前重构状态
@@ -221,12 +222,17 @@ Field: files
 - 最多 5 个文件
 - 单文件最大 20 MB
 - 总请求最大 50 MB
+- 上传会重建当前登录用户的知识空间，不影响其他用户。
 
 ### 清空知识库
 
 ```http
 POST /api/clear
 ```
+
+该接口只清空当前登录用户的知识空间，不会删除其他用户的 PDF 或报告索引。
+
+> 从旧版全局知识库升级时，原 `finsight_docs` 中未带 `knowledge_space` metadata 的记录不会自动归属任何用户；请重新上传 PDF，或在报告库重新执行“加入知识库”。
 
 ### 启动证券代码研究报告
 

@@ -37,6 +37,7 @@ class PublicMarketDataProviderTest {
         )));
 
         List<FinancialEvidenceItem> items = provider.collect(
+                7L,
                 new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
                 "20260331",
                 "hybrid"

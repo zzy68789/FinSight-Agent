@@ -98,7 +98,7 @@ public class TaskQueryServiceImpl implements TaskQueryService {
     public ReportIndexResponse indexReportToKnowledgeBase(long ownerId, long reportId) {
         ReportRecord report = reportMapper.findReportById(ownerId, reportId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
-        int chunksStored = ragService.indexText(reportSource(report), report.content());
+        int chunksStored = ragService.indexText(ownerId, reportSource(report), report.content());
         reportMapper.markIndexed(ownerId, reportId);
         return new ReportIndexResponse(reportId, chunksStored, "indexed");
     }

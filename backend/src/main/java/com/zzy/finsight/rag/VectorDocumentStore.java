@@ -6,12 +6,12 @@ import java.util.List;
  * 定义向量文档的保存、搜索和清理能力。
  */
 public interface VectorDocumentStore {
-    /** 批量写入文档分片。 */
-    void add(List<RagDocumentChunk> chunks);
+    /** 向指定知识空间批量写入文档分片。 */
+    void add(RagKnowledgeSpace space, List<RagDocumentChunk> chunks);
 
-    /** 按相似度查询最相关文档。 */
-    List<RagDocument> query(String query, int topK);
+    /** 在指定知识空间内按相似度查询最相关文档。 */
+    List<RagDocument> query(RagKnowledgeSpace space, String query, int topK);
 
-    /** 清空全部向量文档。 */
-    void clear();
+    /** 只清空指定知识空间的向量文档。 */
+    void clear(RagKnowledgeSpace space);
 }

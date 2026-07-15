@@ -46,7 +46,7 @@ public class PublicMarketDataProvider implements FinancialDataProvider {
     }
 
     @Override
-    public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+    public List<FinancialEvidenceItem> collect(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
         if ("document".equalsIgnoreCase(searchMode)) {
             return List.of();
         }

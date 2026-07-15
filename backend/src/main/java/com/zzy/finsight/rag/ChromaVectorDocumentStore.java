@@ -48,21 +48,21 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
     }
 
     @Override
-    public void add(List<RagDocumentChunk> chunks) {
+    public void add(RagKnowledgeSpace space, List<RagDocumentChunk> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return;
         }
-        fallbackStore.add(chunks);
+        fallbackStore.add(space, chunks);
         if (!chromaAvailable) {
             return;
         }
         try {
             String targetCollectionId = ensureCollection();
             restClient.post()
-                    .uri(collectionRecordsPath(targetCollectionId) + "/add")
+                    .uri(collectionRecordsPath(targetCollectionId) + "/upsert")
                     .contentType(MediaType.APPLICATION_JSON)
                     .headers(this::setToken)
-                    .body(addRequest(chunks))
+                    .body(addRequest(space, chunks))
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception e) {
@@ -71,12 +71,12 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
     }
 
     @Override
-    public List<RagDocument> query(String query, int topK) {
+    public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
         if (query == null || query.isBlank() || topK <= 0) {
             return List.of();
         }
         if (!chromaAvailable) {
-            return fallbackStore.query(query, topK);
+            return fallbackStore.query(space, query, topK);
         }
         try {
             String targetCollectionId = ensureCollection();
@@ -87,33 +87,34 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
                     .body(Map.of(
                             "query_embeddings", List.of(embeddingClient.embed(query)),
                             "n_results", topK,
+                            "where", Map.of("knowledge_space", space.id()),
                             "include", List.of("documents", "metadatas", "distances")
                     ))
                     .retrieve()
                     .body(JsonNode.class);
             List<RagDocument> docs = parseQueryResponse(response);
-            return docs.isEmpty() ? fallbackStore.query(query, topK) : docs;
+            return docs.isEmpty() ? fallbackStore.query(space, query, topK) : docs;
         } catch (Exception e) {
             markChromaUnavailable();
-            return fallbackStore.query(query, topK);
+            return fallbackStore.query(space, query, topK);
         }
     }
 
     @Override
-    public void clear() {
-        fallbackStore.clear();
-        String targetCollectionId = collectionId == null || collectionId.isBlank() ? collectionName : collectionId;
+    public void clear(RagKnowledgeSpace space) {
+        fallbackStore.clear(space);
         try {
-            restClient.delete()
-                    .uri(collectionRecordsPath(targetCollectionId))
+            String targetCollectionId = ensureCollection();
+            restClient.post()
+                    .uri(collectionRecordsPath(targetCollectionId) + "/delete")
+                    .contentType(MediaType.APPLICATION_JSON)
                     .headers(this::setToken)
+                    .body(Map.of("where", Map.of("knowledge_space", space.id())))
                     .retrieve()
                     .toBodilessEntity();
+            chromaAvailable = true;
         } catch (Exception e) {
             // ChromaDB 离线时仍允许清理本地状态。
-        } finally {
-            collectionId = null;
-            chromaAvailable = true;
         }
     }
 
@@ -137,19 +138,20 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
         return collectionId;
     }
 
-    private Map<String, Object> addRequest(List<RagDocumentChunk> chunks) {
+    private Map<String, Object> addRequest(RagKnowledgeSpace space, List<RagDocumentChunk> chunks) {
         List<String> ids = new ArrayList<>(chunks.size());
         List<List<Double>> embeddings = new ArrayList<>(chunks.size());
         List<String> documents = new ArrayList<>(chunks.size());
         List<Map<String, Object>> metadatas = new ArrayList<>(chunks.size());
         for (RagDocumentChunk chunk : chunks) {
-            ids.add(chunk.chunkId());
+            ids.add(RagChunkIds.generate(space.id(), chunk.chunkIndex(), chunk.chunkId()));
             embeddings.add(embeddingClient.embed(chunk.content()));
             documents.add(chunk.content());
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("source", chunk.source());
             metadata.put("chunk_index", chunk.chunkIndex());
             metadata.put("chunk_id", chunk.chunkId());
+            metadata.put("knowledge_space", space.id());
             metadatas.add(metadata);
         }
         return Map.of(

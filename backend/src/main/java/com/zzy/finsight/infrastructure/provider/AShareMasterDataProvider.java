@@ -30,7 +30,7 @@ public class AShareMasterDataProvider implements FinancialDataProvider {
     }
 
     @Override
-    public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+    public List<FinancialEvidenceItem> collect(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
         if (subject.isEtf()) {
             return List.of(new FinancialEvidenceItem(
                     "LOCAL_CONTEXT",

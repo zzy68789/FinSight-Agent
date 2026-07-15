@@ -2,33 +2,38 @@ package com.zzy.finsight.rag;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 在进程内存中保存和检索向量文档。
  */
 public class InMemoryVectorDocumentStore implements VectorDocumentStore {
     private final EmbeddingClient embeddingClient;
-    private final List<StoredChunk> chunks = new CopyOnWriteArrayList<>();
+    private final Map<ScopedChunkKey, StoredChunk> chunks = new ConcurrentHashMap<>();
 
     public InMemoryVectorDocumentStore(EmbeddingClient embeddingClient) {
         this.embeddingClient = embeddingClient;
     }
 
     @Override
-    public void add(List<RagDocumentChunk> chunks) {
+    public void add(RagKnowledgeSpace space, List<RagDocumentChunk> chunks) {
         for (RagDocumentChunk chunk : chunks) {
-            this.chunks.add(new StoredChunk(chunk, embeddingClient.embed(chunk.content())));
+            this.chunks.put(
+                    new ScopedChunkKey(space, chunk.chunkId()),
+                    new StoredChunk(space, chunk, embeddingClient.embed(chunk.content()))
+            );
         }
     }
 
     @Override
-    public List<RagDocument> query(String query, int topK) {
+    public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
         if (query == null || query.isBlank() || topK <= 0 || chunks.isEmpty()) {
             return List.of();
         }
         List<Double> queryEmbedding = embeddingClient.embed(query);
-        return chunks.stream()
+        return chunks.values().stream()
+                .filter(chunk -> chunk.space().equals(space))
                 .map(chunk -> new RagDocument(
                         chunk.documentChunk().chunkId(),
                         chunk.documentChunk().source(),
@@ -42,8 +47,8 @@ public class InMemoryVectorDocumentStore implements VectorDocumentStore {
     }
 
     @Override
-    public void clear() {
-        chunks.clear();
+    public void clear(RagKnowledgeSpace space) {
+        chunks.keySet().removeIf(key -> key.space().equals(space));
     }
 
     private double cosine(List<Double> left, List<Double> right) {
@@ -71,6 +76,13 @@ public class InMemoryVectorDocumentStore implements VectorDocumentStore {
         return Math.round(value * 1_000_000d) / 1_000_000d;
     }
 
-    private record StoredChunk(RagDocumentChunk documentChunk, List<Double> embedding) {
+    private record StoredChunk(
+            RagKnowledgeSpace space,
+            RagDocumentChunk documentChunk,
+            List<Double> embedding
+    ) {
+    }
+
+    private record ScopedChunkKey(RagKnowledgeSpace space, String chunkId) {
     }
 }

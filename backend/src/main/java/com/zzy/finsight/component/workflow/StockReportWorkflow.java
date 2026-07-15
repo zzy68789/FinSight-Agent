@@ -61,8 +61,8 @@ public class StockReportWorkflow {
     }
 
     /** 采集并冻结本次报告使用的金融数据。 */
-    public FinancialSnapshot snapshot(StockSubject subject, StockReportRequest request) {
-        return snapshotBuilder.build(subject, request.getReportPeriod(), request.getSearchMode());
+    public FinancialSnapshot snapshot(long ownerId, StockSubject subject, StockReportRequest request) {
+        return snapshotBuilder.build(ownerId, subject, request.getReportPeriod(), request.getSearchMode());
     }
 
     /** 计算金融快照对应的确定性指标。 */

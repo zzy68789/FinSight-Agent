@@ -128,7 +128,7 @@ public class StockReportRunner {
             Optional<PersistedFinancialSnapshot> persistedSnapshot = snapshotMapper.findSnapshot(ownerId, taskId);
             FinancialSnapshot snapshot = persistedSnapshot
                     .map(PersistedFinancialSnapshot::snapshot)
-                    .orElseGet(() -> workflow.snapshot(subject, request));
+                    .orElseGet(() -> workflow.snapshot(ownerId, subject, request));
             String dataSnapshotHash = persistedSnapshot
                     .map(PersistedFinancialSnapshot::dataSnapshotHash)
                     .filter(value -> value != null && !value.isBlank())

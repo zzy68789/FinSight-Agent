@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 融合关键词和向量结果完成混合检索。
@@ -24,7 +24,8 @@ public class HybridRagRetriever {
 
     private final VectorDocumentStore vectorDocumentStore;
     private final double relevanceThreshold;
-    private final List<RagDocumentChunk> lexicalChunks = new CopyOnWriteArrayList<>();
+    private final Map<RagKnowledgeSpace, Map<String, RagDocumentChunk>> lexicalChunksBySpace =
+            new ConcurrentHashMap<>();
 
     public HybridRagRetriever(
             VectorDocumentStore vectorDocumentStore,
@@ -34,40 +35,51 @@ public class HybridRagRetriever {
         this.relevanceThreshold = relevanceThreshold;
     }
 
-    public void index(List<RagDocumentChunk> chunks) {
+    /** 将分片同时写入指定空间的关键词索引与向量索引。 */
+    public void index(RagKnowledgeSpace space, List<RagDocumentChunk> chunks) {
         if (chunks == null || chunks.isEmpty()) {
             return;
         }
-        lexicalChunks.addAll(chunks);
-        vectorDocumentStore.add(chunks);
+        Map<String, RagDocumentChunk> spaceChunks = lexicalChunksBySpace.computeIfAbsent(
+                space,
+                ignored -> new ConcurrentHashMap<>()
+        );
+        chunks.forEach(chunk -> spaceChunks.put(chunk.chunkId(), chunk));
+        vectorDocumentStore.add(space, chunks);
     }
 
-    public List<RagDocument> retrieve(String query, int topK) {
-        return retrieveWithTrace(query, topK).documents();
+    /** 在指定空间内执行混合检索。 */
+    public List<RagDocument> retrieve(RagKnowledgeSpace space, String query, int topK) {
+        return retrieveWithTrace(space, query, topK).documents();
     }
 
-    public RagRetrievalResult retrieveWithTrace(String query, int topK) {
+    /** 在指定空间内执行混合检索并返回通道级追踪信息。 */
+    public RagRetrievalResult retrieveWithTrace(RagKnowledgeSpace space, String query, int topK) {
         long startedAt = System.nanoTime();
         if (query == null || query.isBlank() || topK <= 0) {
             return RagRetrievalResult.empty(query, relevanceThreshold, elapsedMs(startedAt));
         }
         int candidateLimit = Math.max(topK * 2, topK);
-        List<RagDocument> keywordCandidates = bm25(query, candidateLimit);
-        List<RagDocument> vectorCandidates = vectorDocumentStore.query(query, candidateLimit);
+        List<RagDocumentChunk> lexicalChunks = List.copyOf(
+                lexicalChunksBySpace.getOrDefault(space, Map.of()).values()
+        );
+        List<RagDocument> keywordCandidates = bm25(query, candidateLimit, lexicalChunks);
+        List<RagDocument> vectorCandidates = vectorDocumentStore.query(space, query, candidateLimit);
         return mergeWithTrace(query, keywordCandidates, vectorCandidates, topK, startedAt);
     }
 
-    public void clear() {
-        lexicalChunks.clear();
-        vectorDocumentStore.clear();
+    /** 清空指定空间的关键词索引与向量索引。 */
+    public void clear(RagKnowledgeSpace space) {
+        lexicalChunksBySpace.remove(space);
+        vectorDocumentStore.clear(space);
     }
 
-    private List<RagDocument> bm25(String query, int topK) {
+    private List<RagDocument> bm25(String query, int topK, List<RagDocumentChunk> lexicalChunks) {
         List<String> queryTerms = tokenize(query);
         if (queryTerms.isEmpty() || lexicalChunks.isEmpty()) {
             return List.of();
         }
-        Map<String, Integer> documentFrequency = documentFrequency(queryTerms);
+        Map<String, Integer> documentFrequency = documentFrequency(queryTerms, lexicalChunks);
         double averageLength = lexicalChunks.stream()
                 .mapToInt(chunk -> Math.max(1, tokenize(chunk.content()).size()))
                 .average()
@@ -75,7 +87,13 @@ public class HybridRagRetriever {
 
         List<ScoredChunk> scoredChunks = new ArrayList<>();
         for (RagDocumentChunk chunk : lexicalChunks) {
-            double score = bm25Score(queryTerms, tokenize(chunk.content()), documentFrequency, averageLength);
+            double score = bm25Score(
+                    queryTerms,
+                    tokenize(chunk.content()),
+                    documentFrequency,
+                    averageLength,
+                    lexicalChunks.size()
+            );
             if (score > 0) {
                 scoredChunks.add(new ScoredChunk(chunk, score));
             }
@@ -97,14 +115,14 @@ public class HybridRagRetriever {
             List<String> queryTerms,
             List<String> documentTerms,
             Map<String, Integer> documentFrequency,
-            double averageLength
+            double averageLength,
+            int documentCount
     ) {
         Map<String, Long> termFrequency = new HashMap<>();
         for (String term : documentTerms) {
             termFrequency.merge(term, 1L, Long::sum);
         }
         double score = 0.0d;
-        int documentCount = lexicalChunks.size();
         int documentLength = Math.max(1, documentTerms.size());
         for (String queryTerm : queryTerms) {
             long frequency = termFrequency.getOrDefault(queryTerm, 0L);
@@ -119,7 +137,10 @@ public class HybridRagRetriever {
         return score;
     }
 
-    private Map<String, Integer> documentFrequency(List<String> queryTerms) {
+    private Map<String, Integer> documentFrequency(
+            List<String> queryTerms,
+            List<RagDocumentChunk> lexicalChunks
+    ) {
         Map<String, Integer> df = new HashMap<>();
         Set<String> uniqueQueryTerms = new HashSet<>(queryTerms);
         for (RagDocumentChunk chunk : lexicalChunks) {

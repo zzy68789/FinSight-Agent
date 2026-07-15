@@ -8,6 +8,7 @@ import java.util.Comparator;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HybridRagRetrieverTest {
+    private static final RagKnowledgeSpace SPACE = RagKnowledgeSpace.forOwner(7L);
 
     @Test
     void combinesBm25AndVectorResultsWithDeduplication() {
@@ -16,12 +17,12 @@ class HybridRagRetrieverTest {
                 new RagDocument("vector.pdf", "semantic financial context from vector store", 0.88)
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
-        retriever.index(List.of(
+        retriever.index(SPACE, List.of(
                 new RagDocumentChunk("finance.pdf", 0, "financial evidence and citation review"),
                 new RagDocumentChunk("bm25.pdf", 0, "financial report uses evidence writer citation reviewer")
         ));
 
-        List<RagDocument> docs = retriever.retrieve("financial evidence reviewer", 5);
+        List<RagDocument> docs = retriever.retrieve(SPACE, "financial evidence reviewer", 5);
 
         assertThat(docs)
                 .extracting(RagDocument::source)
@@ -42,7 +43,7 @@ class HybridRagRetrieverTest {
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
 
-        List<RagDocument> docs = retriever.retrieve("financial report", 5);
+        List<RagDocument> docs = retriever.retrieve(SPACE, "financial report", 5);
 
         assertThat(docs)
                 .extracting(RagDocument::source)
@@ -56,9 +57,9 @@ class HybridRagRetrieverTest {
                 new RagDocument("weak.pdf", "weak", 0.10)
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
-        retriever.index(List.of(new RagDocumentChunk("shared.pdf", 0, "financial report reviewer")));
+        retriever.index(SPACE, List.of(new RagDocumentChunk("shared.pdf", 0, "financial report reviewer")));
 
-        RagRetrievalResult result = retriever.retrieveWithTrace("financial report", 5);
+        RagRetrievalResult result = retriever.retrieveWithTrace(SPACE, "financial report", 5);
 
         assertThat(result.candidateCount()).isEqualTo(2);
         assertThat(result.acceptedCount()).isEqualTo(1);
@@ -87,16 +88,16 @@ class HybridRagRetrieverTest {
         }
 
         @Override
-        public void add(List<RagDocumentChunk> chunks) {
+        public void add(RagKnowledgeSpace space, List<RagDocumentChunk> chunks) {
         }
 
         @Override
-        public List<RagDocument> query(String query, int topK) {
+        public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
             return queryResults.stream().limit(topK).toList();
         }
 
         @Override
-        public void clear() {
+        public void clear(RagKnowledgeSpace space) {
         }
     }
 }

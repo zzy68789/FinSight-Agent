@@ -38,7 +38,7 @@ class TushareMarketDataProviderTest {
         );
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
-        assertThat(provider.collect(subject, "latest", "hybrid")).isEmpty();
+        assertThat(provider.collect(7L, subject, "latest", "hybrid")).isEmpty();
 
         provider = new TushareMarketDataProvider(
                 builder,
@@ -49,7 +49,7 @@ class TushareMarketDataProviderTest {
                 "PT10S"
         );
 
-        assertThat(provider.collect(subject, "latest", "document")).isEmpty();
+        assertThat(provider.collect(7L, subject, "latest", "document")).isEmpty();
     }
 
     @Test
@@ -120,7 +120,7 @@ class TushareMarketDataProviderTest {
                 }
                 """);
 
-        List<FinancialEvidenceItem> items = provider.collect(subject, "latest", "hybrid");
+        List<FinancialEvidenceItem> items = provider.collect(7L, subject, "latest", "hybrid");
 
         assertThat(items).extracting(FinancialEvidenceItem::metricName)
                 .contains(
@@ -181,7 +181,7 @@ class TushareMarketDataProviderTest {
                 }
                 """);
 
-        List<FinancialEvidenceItem> items = provider.collect(subject, "20260706", "hybrid");
+        List<FinancialEvidenceItem> items = provider.collect(7L, subject, "20260706", "hybrid");
 
         assertThat(items).extracting(FinancialEvidenceItem::metricName)
                 .containsExactly(
@@ -214,7 +214,7 @@ class TushareMarketDataProviderTest {
                         {"code": 40001, "msg": "抱歉，您没有访问该接口的权限", "data": {"fields": [], "items": []}}
                         """, MediaType.APPLICATION_JSON));
 
-        List<FinancialEvidenceItem> items = provider.collect(subject, "latest", "hybrid");
+        List<FinancialEvidenceItem> items = provider.collect(7L, subject, "latest", "hybrid");
 
         assertThat(items).hasSize(1);
         assertThat(items.get(0).sourceType()).isEqualTo("AUTHORIZED_MARKET");

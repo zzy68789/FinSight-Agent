@@ -1,5 +1,6 @@
 package com.zzy.finsight.controller;
 
+import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.UploadResponse;
 import com.zzy.finsight.service.RagService;
 import org.springframework.http.HttpStatus;
@@ -20,9 +21,11 @@ import java.util.List;
 @RequestMapping("/api")
 public class UploadController {
     private final RagService ragService;
+    private final UserContext userContext;
 
-    public UploadController(RagService ragService) {
+    public UploadController(RagService ragService, UserContext userContext) {
         this.ragService = ragService;
+        this.userContext = userContext;
     }
 
     /** 上传 PDF 文档并建立 RAG 索引。 */
@@ -31,7 +34,7 @@ public class UploadController {
         if (files.size() > 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "一次最多只能上传 5 个文件");
         }
-        int chunksStored = ragService.process(files);
+        int chunksStored = ragService.process(userContext.currentUserId(), files);
         return new UploadResponse("success", files.size(), chunksStored, "知识库构建成功");
     }
 }

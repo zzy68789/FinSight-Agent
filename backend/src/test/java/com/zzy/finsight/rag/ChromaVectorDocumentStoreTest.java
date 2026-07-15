@@ -20,6 +20,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class ChromaVectorDocumentStoreTest {
+    private static final RagKnowledgeSpace SPACE = RagKnowledgeSpace.forOwner(7L);
 
     @Test
     void addAndQueryUseChromaV2CollectionApi() {
@@ -43,17 +44,21 @@ class ChromaVectorDocumentStoreTest {
                 .andExpect(content().string(containsString("\"get_or_create\":true")))
                 .andRespond(withSuccess("{\"id\":\"collection-id\",\"name\":\"finsight_docs\"}", MediaType.APPLICATION_JSON));
         RagDocumentChunk indexedChunk = new RagDocumentChunk("agent.pdf", 0, "agent vector content");
-        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/add"))
+        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/upsert"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("\"ids\":[\"" + indexedChunk.chunkId() + "\"]")))
+                .andExpect(content().string(containsString("\"ids\":[\""
+                        + RagChunkIds.generate(SPACE.id(), indexedChunk.chunkIndex(), indexedChunk.chunkId())
+                        + "\"]")))
                 .andExpect(content().string(containsString("\"embeddings\":[[0.1,0.2,0.3]]")))
                 .andExpect(content().string(containsString("\"documents\":[\"agent vector content\"]")))
                 .andExpect(content().string(containsString("\"source\":\"agent.pdf\"")))
+                .andExpect(content().string(containsString("\"knowledge_space\":\"user-7\"")))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/query"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().string(containsString("\"query_embeddings\":[[0.1,0.2,0.3]]")))
                 .andExpect(content().string(containsString("\"n_results\":3")))
+                .andExpect(content().string(containsString("\"where\":{\"knowledge_space\":\"user-7\"}")))
                 .andExpect(content().string(containsString("\"include\":[\"documents\",\"metadatas\",\"distances\"]")))
                 .andRespond(withSuccess("""
                         {
@@ -63,8 +68,8 @@ class ChromaVectorDocumentStoreTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        store.add(List.of(indexedChunk));
-        List<RagDocument> docs = store.query("agent", 3);
+        store.add(SPACE, List.of(indexedChunk));
+        List<RagDocument> docs = store.query(SPACE, "agent", 3);
 
         assertThat(docs).containsExactly(new RagDocument("agent.pdf", "agent vector content", 0.88));
         server.verify();
@@ -88,12 +93,38 @@ class ChromaVectorDocumentStoreTest {
         server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections"))
                 .andRespond(withServerError());
 
-        store.add(List.of(new RagDocumentChunk("agent.pdf", 0, "agent vector content")));
-        List<RagDocument> docs = store.query("agent", 1);
+        store.add(SPACE, List.of(new RagDocumentChunk("agent.pdf", 0, "agent vector content")));
+        List<RagDocument> docs = store.query(SPACE, "agent", 1);
 
         assertThat(docs).hasSize(1);
         assertThat(docs.get(0).source()).isEqualTo("agent.pdf");
         assertThat(docs.get(0).content()).isEqualTo("agent vector content");
+    }
+
+    @Test
+    void clearDeletesOnlyCurrentKnowledgeSpace() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ChromaVectorDocumentStore store = new ChromaVectorDocumentStore(
+                builder,
+                new ObjectMapper(),
+                new StubEmbeddingClient(),
+                "http://localhost:8000",
+                "default_tenant",
+                "default_database",
+                "finsight_docs",
+                ""
+        );
+        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections"))
+                .andRespond(withSuccess("{\"id\":\"collection-id\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/delete"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"knowledge_space\":\"user-7\"")))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        store.clear(SPACE);
+
+        server.verify();
     }
 
     private static class StubEmbeddingClient implements EmbeddingClient {

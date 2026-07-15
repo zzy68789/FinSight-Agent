@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,14 +25,15 @@ class FinancialSnapshotBuilderTest {
     void collectsIndependentProvidersConcurrentlyAndRecordsStageMetadata() {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
+            CountDownLatch providersStarted = new CountDownLatch(2);
             FinancialSnapshotBuilder builder = new FinancialSnapshotBuilder(List.of(
-                    slowProvider("uploaded-report", "LOCAL_CONTEXT"),
-                    slowProvider("public-market", "NEWS_SUMMARY")
+                    slowProvider("uploaded-report", "LOCAL_CONTEXT", providersStarted),
+                    slowProvider("public-market", "NEWS_SUMMARY", providersStarted)
             ), executor);
             StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
             long startedAt = System.currentTimeMillis();
-            FinancialSnapshot snapshot = builder.build(subject, "latest", "hybrid");
+            FinancialSnapshot snapshot = builder.build(7L, subject, "latest", "hybrid");
             long elapsedMs = System.currentTimeMillis() - startedAt;
 
             assertThat(snapshot.evidenceItems()).hasSize(2);
@@ -38,13 +41,17 @@ class FinancialSnapshotBuilderTest {
             assertThat(snapshot.stageResults()).allMatch(stage -> "SUCCESS".equals(stage.status()));
             assertThat(snapshot.stageResults()).extracting(FinancialAgentStageResult::stageName)
                     .containsExactlyInAnyOrder("uploaded-report", "public-market");
-            assertThat(elapsedMs).isLessThan(450);
+            assertThat(elapsedMs).isLessThan(600);
         } finally {
             executor.shutdownNow();
         }
     }
 
-    private FinancialDataProvider slowProvider(String name, String metricName) {
+    private FinancialDataProvider slowProvider(
+            String name,
+            String metricName,
+            CountDownLatch providersStarted
+    ) {
         return new FinancialDataProvider() {
             @Override
             public String name() {
@@ -52,9 +59,14 @@ class FinancialSnapshotBuilderTest {
             }
 
             @Override
-            public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
+            public List<FinancialEvidenceItem> collect(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
+                assertThat(ownerId).isEqualTo(7L);
                 try {
-                    Thread.sleep(250);
+                    providersStarted.countDown();
+                    if (!providersStarted.await(1, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Provider 未并发启动");
+                    }
+                    Thread.sleep(100);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

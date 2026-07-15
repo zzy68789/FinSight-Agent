@@ -35,19 +35,24 @@ public class UploadedReportProvider implements FinancialDataProvider {
     }
 
     @Override
-    public List<FinancialEvidenceItem> collect(StockSubject subject, String reportPeriod, String searchMode) {
-        return collectWithTrace(subject, reportPeriod, searchMode).evidenceItems();
+    public List<FinancialEvidenceItem> collect(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
+        return collectWithTrace(ownerId, subject, reportPeriod, searchMode).evidenceItems();
     }
 
     @Override
-    public FinancialDataCollection collectWithTrace(StockSubject subject, String reportPeriod, String searchMode) {
+    public FinancialDataCollection collectWithTrace(
+            long ownerId,
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode
+    ) {
         if ("web".equalsIgnoreCase(searchMode)) {
             return FinancialDataCollection.evidenceOnly(List.of());
         }
         String query = subject.isEtf()
                 ? subject.fullCode() + " ETF 基金 招募说明书 定期报告 净值 持仓 跟踪指数 规模"
                 : subject.fullCode() + " " + subject.companyName() + " 年报 季报 营业收入 净利润 经营现金流 总资产 总负债";
-        RagRetrievalResult retrievalResult = ragService.retrieveWithTrace(query, 6);
+        RagRetrievalResult retrievalResult = ragService.retrieveWithTrace(ownerId, query, 6);
         List<RagDocument> documents = retrievalResult.documents();
         List<FinancialEvidenceItem> items = new ArrayList<>();
         for (RagDocument document : documents) {

@@ -68,13 +68,14 @@ class TaskQueryServiceImplTenantIsolationTest {
                 null
         );
         when(reportMapper.findReportById(7L, 21L)).thenReturn(java.util.Optional.of(report));
-        when(ragService.indexText("report-thread-1-v2.md", "# Report\nRAG reusable content")).thenReturn(2);
+        when(ragService.indexText(7L, "report-thread-1-v2.md", "# Report\nRAG reusable content")).thenReturn(2);
 
         ReportIndexResponse response = service.indexReportToKnowledgeBase(7L, 21L);
 
         assertThat(response.reportId()).isEqualTo(21L);
         assertThat(response.chunksStored()).isEqualTo(2);
         verify(reportMapper).findReportById(7L, 21L);
+        verify(ragService).indexText(7L, "report-thread-1-v2.md", "# Report\nRAG reusable content");
         verify(reportMapper).markIndexed(7L, 21L);
     }
 }

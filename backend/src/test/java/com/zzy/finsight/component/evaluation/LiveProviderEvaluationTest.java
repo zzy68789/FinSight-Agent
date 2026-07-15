@@ -23,6 +23,7 @@ import com.zzy.finsight.rag.HybridRagRetriever;
 import com.zzy.finsight.rag.InMemoryVectorDocumentStore;
 import com.zzy.finsight.rag.OpenAiCompatibleEmbeddingClient;
 import com.zzy.finsight.rag.RagDocumentChunk;
+import com.zzy.finsight.rag.RagKnowledgeSpace;
 import com.zzy.finsight.search.EnhancedSearchService;
 import com.zzy.finsight.search.TavilyExtractClient;
 import com.zzy.finsight.search.TavilySearchSource;
@@ -91,8 +92,8 @@ class LiveProviderEvaluationTest {
         int totalRagResults = 0;
         for (StockSubject subject : subjects) {
             List<FinancialEvidenceItem> evidence = new ArrayList<>();
-            evidence.addAll(tushare.collect(subject, "latest", "hybrid"));
-            evidence.addAll(publicProvider.collect(subject, "latest", "hybrid"));
+            evidence.addAll(tushare.collect(7L, subject, "latest", "hybrid"));
+            evidence.addAll(publicProvider.collect(7L, subject, "latest", "hybrid"));
             totalEffectiveEvidence += (int) evidence.stream().filter(FinancialEvidenceItem::effective).count();
             FinancialSnapshot snapshot = new FinancialSnapshot(subject, "latest", "hybrid", evidence, LocalDateTime.now());
             List<FinancialMetricResult> metrics = new FinancialMetricEngine().compute(snapshot);
@@ -118,8 +119,9 @@ class LiveProviderEvaluationTest {
             HybridRagRetriever retriever = new HybridRagRetriever(
                     new InMemoryVectorDocumentStore(embeddingClient), 0.20d
             );
-            retriever.index(chunks);
-            totalRagResults += retriever.retrieve(subject.companyName() + " 财务 风险", 5).size();
+            RagKnowledgeSpace space = RagKnowledgeSpace.named("live-" + subject.fullCode());
+            retriever.index(space, chunks);
+            totalRagResults += retriever.retrieve(space, subject.companyName() + " 财务 风险", 5).size();
         }
         aggregates.put("live_effective_evidence_count", BigDecimal.valueOf(totalEffectiveEvidence));
         aggregates.put("live_rag_result_count", BigDecimal.valueOf(totalRagResults));
