@@ -13,6 +13,7 @@ import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -94,6 +95,17 @@ class ApplicationSmokeTest {
 
         assertThat(response.status()).isEqualTo("success");
         assertThat(response.message()).isEqualTo("知识库已重置");
+    }
+
+    @Test
+    void genericChatEndpointIsNotExposed() {
+        var response = restTemplate.postForEntity(
+                "http://localhost:" + port + "/api/chat",
+                Map.of("query", "通用研究"),
+                Map.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
 }

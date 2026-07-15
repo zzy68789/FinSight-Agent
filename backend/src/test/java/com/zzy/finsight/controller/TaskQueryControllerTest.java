@@ -50,16 +50,16 @@ class TaskQueryControllerTest {
     @Test
     void listTasksReturnsPagedApiResponse() throws Exception {
         LocalDateTime now = LocalDateTime.of(2026, 6, 24, 10, 0);
-        TaskSummaryResponse task = new TaskSummaryResponse(1L, "thread-1", "AI Agent", "hybrid", "COMPLETED", 0, now, now);
+        TaskSummaryResponse task = new TaskSummaryResponse(1L, "thread-1", "A股股票投研报告：600519", "stock-hybrid", "COMPLETED", 0, now, now);
         when(userContext.currentUserId()).thenReturn(7L);
-        when(taskQueryService.listTasks(7L, 1, 10, "COMPLETED", "agent"))
+        when(taskQueryService.listTasks(7L, 1, 10, "COMPLETED", "600519"))
                 .thenReturn(new PageResponse<>(List.of(task), 1, 10, 1L));
 
         mockMvc.perform(get("/api/tasks")
                         .param("page", "1")
                         .param("size", "10")
                         .param("status", "COMPLETED")
-                        .param("keyword", "agent"))
+                        .param("keyword", "600519"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.message").value("success"))
@@ -75,7 +75,7 @@ class TaskQueryControllerTest {
         LocalDateTime now = LocalDateTime.of(2026, 6, 24, 10, 0);
         when(userContext.currentUserId()).thenReturn(7L);
         when(taskQueryService.getTask(7L, 1L))
-                .thenReturn(new TaskDetailResponse(1L, "thread-1", "AI Agent", "hybrid", "COMPLETED", 0, now, now));
+                .thenReturn(new TaskDetailResponse(1L, "thread-1", "A股股票投研报告：600519", "stock-hybrid", "COMPLETED", 0, now, now));
 
         mockMvc.perform(get("/api/tasks/1"))
                 .andExpect(status().isOk())
@@ -87,7 +87,7 @@ class TaskQueryControllerTest {
     @Test
     void getTaskLogsReturnsAgentStepLogs() throws Exception {
         LocalDateTime now = LocalDateTime.of(2026, 6, 24, 10, 0);
-        AgentStepLogResponse log = new AgentStepLogResponse(11L, 1L, "planner", null, "{\"plan\":[]}", "SUCCESS", null, now);
+        AgentStepLogResponse log = new AgentStepLogResponse(11L, 1L, "stock_resolve", null, "{\"ticker\":\"600519.SH\"}", "SUCCESS", null, now);
         when(userContext.currentUserId()).thenReturn(7L);
         when(taskQueryService.getTaskLogs(7L, 1L)).thenReturn(List.of(log));
 
@@ -95,7 +95,7 @@ class TaskQueryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].id").value(11))
-                .andExpect(jsonPath("$.data[0].stepName").value("planner"));
+                .andExpect(jsonPath("$.data[0].stepName").value("stock_resolve"));
     }
 
     @Test

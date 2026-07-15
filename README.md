@@ -24,10 +24,10 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 
 ## 当前重构状态
 
-- 后端通用 deep-research 文件已从本仓库移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService` 和 `/api/chat` 控制器。
+- 通用 deep-research 已从前后端完整移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService`、`ChatRequest`、`/api/chat` 控制器及前端 `streamChat`/双模式入口。
 - 金融投研链路已按严格 Spring MVC 职责拆分：`controller` 只依赖 `service` 接口，具体实现位于 `service/impl`；计算、采集、审查和工作流位于 `component`；MyBatis 类型转换、数据源和序列化适配位于 `infrastructure`。公开入口仍为 `/api/stock-reports`。
 - RAG、搜索、报告库、用户、管理员后台等基础设施继续复用，但定位为金融投研链路的支撑能力。
-- 前端仍有部分通用研究模式 UI/调用需要后续清理，路线图见 `docs/待实现功能.md`。
+- 前端 Run 工作区只保留证券代码分析，直接输入 A股或 ETF 代码进入 `/api/stock-reports`，执行轨迹固定展示金融报告阶段。
 
 ## 技术栈
 
@@ -352,6 +352,6 @@ npm.cmd run build
 ## 当前边界
 
 - 当前仓库聚焦金融投研报告 Agent，不再对外提供通用 `/api/chat` deep-research 链路。
-- 前端通用研究模式仍需清理或改造成金融入口，这是下一轮 P0/P1 工作。
+- 前端不再包含通用研究按钮、自由主题输入或失效的通用报告修订入口；报告库继续提供查看、收藏、加入 RAG 和导出能力。
 - TuShare 真实 token、缓存、限速、接口权限错误提示和更多行情序列仍需继续硬化。
 - ETF 深度数据、ECharts 行情图、多空辩论、评测趋势管理页面和真实 MySQL 迁移集成测试属于后续增强。

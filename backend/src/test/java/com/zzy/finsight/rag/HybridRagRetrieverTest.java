@@ -12,20 +12,20 @@ class HybridRagRetrieverTest {
     @Test
     void combinesBm25AndVectorResultsWithDeduplication() {
         StubVectorDocumentStore vectorStore = new StubVectorDocumentStore(List.of(
-                new RagDocument("agent.pdf", "agent workflow planning and reviewer loop", 0.60),
-                new RagDocument("vector.pdf", "semantic context from vector store", 0.88)
+                new RagDocument("finance.pdf", "financial evidence and citation review", 0.60),
+                new RagDocument("vector.pdf", "semantic financial context from vector store", 0.88)
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
         retriever.index(List.of(
-                new RagDocumentChunk("agent.pdf", 0, "agent workflow planning and reviewer loop"),
-                new RagDocumentChunk("bm25.pdf", 0, "agent workflow uses planner researcher writer reviewer")
+                new RagDocumentChunk("finance.pdf", 0, "financial evidence and citation review"),
+                new RagDocumentChunk("bm25.pdf", 0, "financial report uses evidence writer citation reviewer")
         ));
 
-        List<RagDocument> docs = retriever.retrieve("agent workflow reviewer", 5);
+        List<RagDocument> docs = retriever.retrieve("financial evidence reviewer", 5);
 
         assertThat(docs)
                 .extracting(RagDocument::source)
-                .containsExactlyInAnyOrder("bm25.pdf", "agent.pdf", "vector.pdf");
+                .containsExactlyInAnyOrder("bm25.pdf", "finance.pdf", "vector.pdf");
         assertThat(docs)
                 .extracting(RagDocument::score)
                 .isSortedAccordingTo(Comparator.reverseOrder());
@@ -38,11 +38,11 @@ class HybridRagRetrieverTest {
     void filtersWeakResultsByRelevanceThreshold() {
         StubVectorDocumentStore vectorStore = new StubVectorDocumentStore(List.of(
                 new RagDocument("weak.pdf", "barely related", 0.10),
-                new RagDocument("strong.pdf", "agent workflow context", 0.45)
+                new RagDocument("strong.pdf", "financial report context", 0.45)
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
 
-        List<RagDocument> docs = retriever.retrieve("agent workflow", 5);
+        List<RagDocument> docs = retriever.retrieve("financial report", 5);
 
         assertThat(docs)
                 .extracting(RagDocument::source)
@@ -52,13 +52,13 @@ class HybridRagRetrieverTest {
     @Test
     void exposesChannelScoresAndFilteringStatistics() {
         StubVectorDocumentStore vectorStore = new StubVectorDocumentStore(List.of(
-                new RagDocument("shared.pdf", "agent workflow reviewer", 0.70),
+                new RagDocument("shared.pdf", "financial report reviewer", 0.70),
                 new RagDocument("weak.pdf", "weak", 0.10)
         ));
         HybridRagRetriever retriever = new HybridRagRetriever(vectorStore, 0.20);
-        retriever.index(List.of(new RagDocumentChunk("shared.pdf", 0, "agent workflow reviewer")));
+        retriever.index(List.of(new RagDocumentChunk("shared.pdf", 0, "financial report reviewer")));
 
-        RagRetrievalResult result = retriever.retrieveWithTrace("agent workflow", 5);
+        RagRetrievalResult result = retriever.retrieveWithTrace("financial report", 5);
 
         assertThat(result.candidateCount()).isEqualTo(2);
         assertThat(result.acceptedCount()).isEqualTo(1);

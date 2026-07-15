@@ -44,10 +44,10 @@ class TaskRuntimeStateServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         TaskRuntimeStateServiceImpl service = new TaskRuntimeStateServiceImpl(redisTemplate, new ObjectMapper(), TTL);
 
-        service.recordStep(42L, "thread-1", "planner", Map.of("plan", "draft"));
+        service.recordStep(42L, "thread-1", "stock_resolve", Map.of("ticker", "600519.SH"));
 
-        verify(valueOperations).set(eq("finsight:task:42:progress"), contains("\"step\":\"planner\""), eq(TTL));
-        verify(valueOperations).set(eq("finsight:sse:42:last-event"), contains("\"step\":\"planner\""), eq(TTL));
+        verify(valueOperations).set(eq("finsight:task:42:progress"), contains("\"step\":\"stock_resolve\""), eq(TTL));
+        verify(valueOperations).set(eq("finsight:sse:42:last-event"), contains("\"step\":\"stock_resolve\""), eq(TTL));
     }
 
     @Test

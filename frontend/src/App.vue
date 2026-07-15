@@ -61,12 +61,12 @@
 
     <main v-if="!authUser" class="auth-stage mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl grid-cols-1 items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1.1fr_28rem] lg:px-8">
       <section class="max-w-2xl">
-        <p class="text-sm font-semibold text-blue-700">FinSight research agent</p>
+        <p class="text-sm font-semibold text-blue-700">FinSight 金融投研 Agent</p>
         <h2 class="mt-3 font-display text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-          把检索、撰写、质检收束到一条研究轨迹里。
+          从证券代码到可信报告，收束到一条金融研究轨迹里。
         </h2>
         <p class="mt-5 max-w-xl text-base leading-7 text-slate-600">
-          上传 PDF 或使用混合检索，FinSight 会按 Planner、Researcher、Writer、Reviewer 的节点生成可追踪报告。
+          输入 A股或 ETF 代码，FinSight 会完成数据快照、指标计算、证据检索、报告撰写与质量门控。
         </p>
         <div class="mt-8 grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
@@ -82,7 +82,7 @@
           <div class="rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
             <p class="font-mono text-xs font-semibold text-blue-700">03</p>
             <p class="mt-2 text-sm font-semibold text-slate-950">报告沉淀</p>
-            <p class="mt-1 text-xs leading-5 text-slate-500">版本、收藏、导出和再次修订保留在同一工作区。</p>
+            <p class="mt-1 text-xs leading-5 text-slate-500">报告、收藏、导出和证据回放保留在同一工作区。</p>
           </div>
         </div>
       </section>
@@ -183,40 +183,6 @@
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h2 class="text-sm font-semibold text-blue-950">任务类型</h2>
-              <p class="mt-1 text-xs text-slate-500">选择通用调研或证券研究报告链路</p>
-            </div>
-            <BotIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
-          </div>
-
-          <div class="grid grid-cols-2 gap-2" role="group" aria-label="任务类型">
-            <button
-              type="button"
-              :aria-pressed="runMode === 'research'"
-              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-              :class="runMode === 'research' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
-              @click="runMode = 'research'"
-            >
-              <SearchIcon class="h-4 w-4" aria-hidden="true" />
-              通用研究
-            </button>
-
-            <button
-              type="button"
-              :aria-pressed="runMode === 'stock'"
-              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-              :class="runMode === 'stock' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
-              @click="runMode = 'stock'"
-            >
-              <FileOutputIcon class="h-4 w-4" aria-hidden="true" />
-              证券代码分析
-            </button>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <div>
               <h2 class="text-sm font-semibold text-blue-950">检索模式</h2>
               <p class="mt-1 text-xs text-slate-500">选择本次研究使用的证据来源</p>
             </div>
@@ -250,10 +216,8 @@
         </section>
 
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <label :for="runMode === 'stock' ? 'stock-ticker' : 'research-query'" class="text-sm font-semibold text-blue-950">
-            {{ runMode === 'stock' ? '证券代码' : '研究任务' }}
-          </label>
-          <div v-if="runMode === 'stock'" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
+          <label for="stock-ticker" class="text-sm font-semibold text-blue-950">证券代码</label>
+          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
             <input
               id="stock-ticker"
               v-model="stockTicker"
@@ -273,31 +237,21 @@
               <option value="quarterly">季报</option>
             </select>
           </div>
-          <textarea
-            v-else
-            id="research-query"
-            v-model="query"
-            class="mt-3 min-h-28 w-full resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-            rows="4"
-            placeholder="请输入研究主题，或输入对上一版报告的修订要求..."
-            :disabled="isLoading"
-          ></textarea>
-
           <button
             type="button"
             class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             :disabled="isLoading || !canStartRun"
-            @click="startResearch"
+            @click="startStockResearch"
           >
             <Loader2Icon v-if="isLoading" class="h-4 w-4 animate-spin" aria-hidden="true" />
             <SendIcon v-else class="h-4 w-4" aria-hidden="true" />
-            <span>{{ isLoading ? '运行中' : (runMode === 'stock' ? '生成证券报告' : '开始研究') }}</span>
+            <span>{{ isLoading ? '运行中' : '生成证券报告' }}</span>
           </button>
         </section>
 
-        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" :flowType="runMode" />
+        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" />
 
-        <section v-if="runMode === 'stock'" class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
+        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <div class="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 class="text-sm font-semibold text-blue-950">证券报告质检</h2>
@@ -448,7 +402,7 @@
               <p class="mt-1 text-sm text-slate-500">智能体工作流生成的报告内容</p>
             </div>
             <div class="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ runModeLabel }}</span>
+              <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">证券代码分析</span>
               <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ searchModeLabel(searchMode) }}</span>
               <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">{{ currentStepLabel(currentStep) }}</span>
             </div>
@@ -628,7 +582,6 @@
               </div>
               <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
                 <span>{{ searchModeLabel(task.searchMode) }}</span>
-                <span>第 {{ task.revisionNumber }} 版</span>
                 <span>{{ formatDate(task.updatedAt || task.createdAt) }}</span>
               </div>
             </button>
@@ -656,7 +609,7 @@
                 <dd class="mt-1"><span class="rounded-md px-2 py-1 text-xs font-semibold ring-1" :class="statusStyles(selectedTask.status)">{{ statusLabel(selectedTask.status) }}</span></dd>
               </div>
               <div class="sm:col-span-2">
-                <dt class="text-xs font-medium tracking-wide text-slate-400">研究问题</dt>
+                <dt class="text-xs font-medium tracking-wide text-slate-400">证券研究任务</dt>
                 <dd class="mt-1 text-sm leading-6 text-slate-700">{{ selectedTask.query }}</dd>
               </div>
             </dl>
@@ -760,7 +713,7 @@
           <div class="flex flex-col gap-3 border-b border-blue-100 bg-blue-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 class="text-base font-semibold text-blue-950">报告预览</h2>
-              <p class="mt-1 text-sm text-slate-500">查看、导出，或基于当前版本继续修订</p>
+              <p class="mt-1 text-sm text-slate-500">查看、收藏、加入知识库或导出当前报告</p>
             </div>
             <div class="flex flex-wrap gap-2">
               <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-45" :disabled="!selectedReport" @click="copySelectedReport">
@@ -790,10 +743,6 @@
               <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg border border-rose-200 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-45" :disabled="!selectedReport" @click="deleteSelectedReport">
                 <Trash2Icon class="h-4 w-4" aria-hidden="true" />
                 删除
-              </button>
-              <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg bg-blue-700 px-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:bg-slate-300" :disabled="!selectedReport" @click="reviseSelectedReport">
-                <EyeIcon class="h-4 w-4" aria-hidden="true" />
-                修订
               </button>
             </div>
           </div>
@@ -976,7 +925,6 @@
 import { ref, computed, nextTick, onMounted } from 'vue';
 import {
     AlertTriangleIcon,
-    BotIcon,
     CheckCircle2Icon,
     ClipboardListIcon,
     CopyIcon,
@@ -1004,7 +952,6 @@ import {
 } from 'lucide-vue-next';
 import {
     uploadFiles,
-    streamChat,
     streamStockReport,
     saveStockFeedback,
     getStockReplay,
@@ -1055,8 +1002,6 @@ const triggerWarning = (msg) => {
     }, 5000);
 };
 
-const query = ref('');
-const runMode = ref('research');
 const stockTicker = ref('600519');
 const stockReportPeriod = ref('latest');
 const latestStockTaskId = ref(null);
@@ -1142,14 +1087,7 @@ const workspaceTabs = computed(() => {
     return tabs;
 });
 
-const canStartRun = computed(() => {
-    if (runMode.value === 'stock') {
-        return /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim());
-    }
-    return Boolean(query.value.trim());
-});
-
-const runModeLabel = computed(() => runMode.value === 'stock' ? '证券代码分析' : '通用研究');
+const canStartRun = computed(() => /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim()));
 
 const riskScorePercent = computed(() => {
     const score = Number(financialRiskAssessment.value?.finalScore || 0);
@@ -1287,9 +1225,7 @@ const searchModeLabel = (mode) => {
 const currentStepLabel = (step) => {
     const labels = {
         idle: '就绪',
-        planner: '规划中',
-        researcher: '检索中',
-        stock_resolve: '股票解析',
+        stock_resolve: '证券解析',
         data_snapshot: '数据快照',
         metric_engine: '指标计算',
         risk_assessment: '风险评分',
@@ -1297,7 +1233,6 @@ const currentStepLabel = (step) => {
         writer: '撰写中',
         reviewer: '质检中',
         evaluation: '评测中',
-        refiner: '修订中',
         done: '已完成'
     };
     return labels[step] || step || '-';
@@ -1306,17 +1241,14 @@ const currentStepLabel = (step) => {
 const stepNameLabel = (step) => {
     const value = (step || '').toLowerCase();
     const labels = {
-        planner: '规划',
-        researcher: '检索',
-        stock_resolve: '股票解析',
+        stock_resolve: '证券解析',
         data_snapshot: '数据快照',
         metric_engine: '指标计算',
         risk_assessment: '风险评分',
         evidence_collect: '证据账本',
         writer: '撰写',
         reviewer: '质检',
-        evaluation: '评测',
-        refiner: '修订'
+        evaluation: '评测'
     };
     return labels[value] || step || '-';
 };
@@ -1398,14 +1330,6 @@ const selectReport = async (report) => {
     selectedReport.value = await getReport(report.id);
     activeThreadId.value = selectedReport.value.threadId || currentThreadId;
     displayedReport.value = selectedReport.value.content || '';
-};
-
-const reviseSelectedReport = () => {
-    if (!selectedReport.value) return;
-    activeThreadId.value = selectedReport.value.threadId || currentThreadId;
-    query.value = '修改上一版报告：请补充关键结论，并让内容更适合简历项目展示。';
-    displayedReport.value = selectedReport.value.content || '';
-    activeWorkspace.value = 'run';
 };
 
 const copySelectedReport = async () => {
@@ -1563,122 +1487,6 @@ const typeWriterEffect = (text) => {
             isTyping.value = false;
         }
     }, 10);
-};
-
-const startResearch = async () => {
-    if (runMode.value === 'stock') {
-        await startStockResearch();
-        return;
-    }
-    if (!query.value) return;
-
-    isLoading.value = true;
-    currentStep.value = 'planner';
-    completedSteps.value = [];
-    logs.value = [];
-    logs.value.push(`[初始化] 系统已就绪，检索模式：${searchModeLabel(searchMode.value)}`);
-    displayedReport.value = '';
-
-    const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
-
-    try {
-        if (uploadedFiles.value.length > 0) {
-            logs.value.push(`[系统] 正在上传 ${uploadedFiles.value.length} 个文档...`);
-            const res = await uploadFiles(uploadedFiles.value);
-            logs.value.push(`[系统] 知识库已构建，已索引 ${res.chunks_stored} 个文本块。`);
-        } else {
-            logs.value.push('[系统] 正在清理上一轮知识库上下文...');
-            await clearContext();
-            logs.value.push('[系统] 上下文已清理，将使用联网混合检索。');
-        }
-
-        streamChat(
-            query.value,
-            actualMode,
-            (data) => {
-                    if (data.step) {
-                        currentStep.value = data.step;
-                        if (!completedSteps.value.includes(data.step)) {
-                            completedSteps.value = [...completedSteps.value, data.step];
-                        }
-                    }
-
-                    if (data.step === 'planner') {
-                        const plan = data.data.plan || [];
-                        logs.value.push(`[规划] 检索策略：[${plan.join(', ')}]`);
-                    }
-
-                    else if (data.step === 'researcher') {
-                        const results = data.data.search_results || data.data.searchResults || [];
-                        const resultsStr = JSON.stringify(results);
-
-                        if (resultsStr.includes("流程已终止")) {
-                            triggerWarning("文档与问题无关，任务已强制停止");
-                            logs.value.push('[系统] 任务已停止：仅文档模式下上下文与问题无关。');
-                            currentStep.value = 'done';
-                            return;
-                        }
-
-                        if (resultsStr.includes("自动切换为全网搜索")) {
-                            triggerWarning("文档与问题无关，已自动切换为全网搜索");
-                        } else if (resultsStr.includes("Document Only 模式")) {
-                            triggerWarning("文档与问题无关，无法回答");
-                        }
-
-                        logs.value.push(`[检索] 证据收集完成，条目数：${results.length}`);
-                    }
-
-                    else if (data.step === 'writer') {
-                        logs.value.push('[撰写] 正在生成报告内容...');
-                        const finalReport = data.data.final_report || data.data.finalReport;
-                        if (finalReport) {
-                            displayedReport.value = '';
-                            typeWriterEffect(finalReport);
-                        }
-                    }
-
-                    else if (data.step === 'reviewer') {
-                        const reviewStatus = data.data.review_status || data.data.reviewStatus;
-                        const critique = data.data.critique || '';
-                        if (reviewStatus === 'FAIL') {
-                            logs.value.push(`[质检] 未通过：${critique}，正在重新规划。`);
-                            currentStep.value = 'planner';
-                        } else {
-                            logs.value.push('[质检] 已通过。');
-                        }
-                    }
-                    else if (data.step === 'refiner') {
-                        currentStep.value = 'refiner';
-                        logs.value.push('[修订] 正在根据反馈调整报告...');
-                        const finalReport = data.data.final_report || data.data.finalReport;
-                        if (finalReport) {
-                            displayedReport.value = '';
-                            typeWriterEffect(finalReport);
-                        }
-                    }
-
-                    scrollToBottom();
-                },
-            () => {
-                isLoading.value = false;
-                currentStep.value = 'done';
-                logs.value.push('[完成] 研究流程已结束。');
-                loadTasks();
-                loadReports(activeThreadId.value);
-                scrollToBottom();
-            },
-            (err) => {
-                isLoading.value = false;
-                logs.value.push(`[错误] ${err.message}`);
-                scrollToBottom();
-            },
-            activeThreadId.value
-        );
-    } catch (e) {
-        isLoading.value = false;
-        logs.value.push(`[错误] 初始化失败：${e.message}`);
-        alert(`系统错误：${e.message}`);
-    }
 };
 
 const startStockResearch = async () => {

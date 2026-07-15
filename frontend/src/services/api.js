@@ -304,19 +304,3 @@ export async function getStockTrace(taskId) {
 export async function retryStockReport(taskId) {
   return requestJson(`/stock-reports/${taskId}/retry`, { method: 'POST' });
 }
-
-/**
- * 流式聊天
- * @param {string} query - 问题
- * @param {string} searchMode - 'hybrid' | 'document'
- * @param {function} onMessage - 接收消息回调
- * @param {function} onDone - 完成回调
- * @param {function} onError - 错误回调
- */
-export async function streamChat(query, search_mode, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
-  return streamSse('/chat', {
-      query,
-      search_mode,
-      thread_id: threadId
-  }, onData, onDone, onError);
-}
