@@ -26,11 +26,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 按默认样例和规则评估金融报告质量。
+ * 对线上金融报告执行通用质量门禁，并为离线样例补充数据集指标。
  */
 @Component
 public class FinancialEvaluator {
-    public static final String POLICY_VERSION = "financial-evaluation-v3-body-quality-gates";
+    public static final String POLICY_VERSION = "financial-evaluation-v4-layered-gates";
     private static final String DEFAULT_EVAL_SET = "financial-eval-set.json";
     private static final BigDecimal PASS_THRESHOLD = new BigDecimal("0.80");
     private static final String CITATION_HEADING = "## 引用与数据快照";
@@ -59,43 +59,85 @@ public class FinancialEvaluator {
         }
     }
 
-    /** 按指定用例评估报告的指标、引用和合规结果。 */
+    /** 按指定离线用例评估通用规则和数据集关键点。 */
     public FinancialEvaluationResult evaluate(
             FinancialEvaluationCase evalCase,
             String report,
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics
     ) {
-        String text = report == null ? "" : report;
+        String body = reportBody(report == null ? "" : report);
         List<FinancialMetricResult> metricResults = metrics == null ? List.of() : metrics;
         List<FinancialEvidenceItem> evidenceItems = snapshot == null ? List.of() : snapshot.evidenceItems();
+        List<FinancialEvaluationMetricScore> scores = new ArrayList<>();
+        scores.add(score("claim_support_rate", claimSupportScore(body, evalCase, evidenceItems, metricResults), PASS_THRESHOLD,
+                "关键结论需覆盖要点并提供正文就近引用", FinancialEvaluationMetricScore.GateLevel.HARD));
+        scores.addAll(onlineScores(report, snapshot, metrics));
+        scores.add(score("keypoint_coverage", keypointCoverageScore(body, evalCase), PASS_THRESHOLD,
+                "报告需覆盖评测样例要求的关键点", FinancialEvaluationMetricScore.GateLevel.HARD));
+        return result(evalCase.ticker(), evalCase.name(), scores);
+    }
 
+    /** 对任意证券报告执行不依赖评测集的线上质量门禁。 */
+    public FinancialEvaluationResult evaluateOnline(
+            String report,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics
+    ) {
+        String ticker = snapshot == null || snapshot.subject() == null ? "UNKNOWN" : snapshot.subject().ticker();
+        String companyName = snapshot == null || snapshot.subject() == null ? "未知证券" : snapshot.subject().companyName();
+        return result(ticker, companyName, onlineScores(report, snapshot, metrics));
+    }
+
+    private List<FinancialEvaluationMetricScore> onlineScores(
+            String report,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics
+    ) {
+        String text = report == null ? "" : report;
         String body = reportBody(text);
-        List<FinancialEvaluationMetricScore> scores = List.of(
-                score("claim_support_rate", claimSupportScore(body, evalCase, evidenceItems, metricResults), PASS_THRESHOLD, "关键结论需覆盖要点并提供正文就近引用"),
-                score("unsupported_claim_rate", unsupportedClaimScore(text), BigDecimal.ONE, "不得出现无依据荐股、保证收益或绝对化承诺"),
-                score("contradiction_rate", contradictionScore(text), BigDecimal.ONE, "不得同时表达数据缺失和确定性投资结论"),
-                score("numeric_consistency_rate", numericConsistencyScore(body, metricResults), new BigDecimal("0.95"), "正文中的指标展示值需和确定性指标结果一致"),
-                score("citation_hit_rate", citationHitScore(body, evidenceItems), new BigDecimal("0.95"), "正文引用必须命中有效证据"),
-                score("body_citation_coverage", bodyCitationCoverage(body, evidenceItems, metricResults), new BigDecimal("0.90"), "正文关键指标需就近引用对应原始证据"),
-                score("source_quality_rate", sourceQualityScore(evidenceItems), new BigDecimal("0.75"), "公开网页有效正文占比不得低于阈值"),
-                score("period_semantic_consistency", periodSemanticScore(body, evidenceItems, metricResults), BigDecimal.ONE, "阶段性 ROE 必须说明报告期且标注未年化"),
-                score("directional_claim_support_rate", directionalClaimSupportScore(body, evidenceItems), BigDecimal.ONE, "方向性判断必须引用有效证据"),
-                score("low_quality_evidence_rate", lowQualityReferenceScore(body, evidenceItems), BigDecimal.ONE, "正文不得引用低质量证据"),
-                score("keypoint_coverage", keypointCoverageScore(body, evalCase), PASS_THRESHOLD, "报告需覆盖评测样例要求的关键点"),
-                score("evidence_effective_rate", evidenceEffectiveScore(evidenceItems), PASS_THRESHOLD, "有效证据占比不得低于阈值")
+        List<FinancialMetricResult> metricResults = metrics == null ? List.of() : metrics;
+        List<FinancialEvidenceItem> evidenceItems = snapshot == null ? List.of() : snapshot.evidenceItems();
+        return List.of(
+                score("unsupported_claim_rate", unsupportedClaimScore(text), BigDecimal.ONE,
+                        "不得出现无依据荐股、保证收益或绝对化承诺", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("contradiction_rate", contradictionScore(text), BigDecimal.ONE,
+                        "不得同时表达数据缺失和确定性投资结论", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("numeric_consistency_rate", numericConsistencyScore(body, metricResults), new BigDecimal("0.95"),
+                        "正文中的指标展示值需和确定性指标结果一致", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("citation_hit_rate", citationHitScore(body, evidenceItems), new BigDecimal("0.95"),
+                        "正文引用必须命中有效证据", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("body_citation_coverage", bodyCitationCoverage(body, evidenceItems, metricResults), new BigDecimal("0.90"),
+                        "正文关键指标需就近引用对应原始证据", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("source_quality_rate", sourceQualityScore(evidenceItems), new BigDecimal("0.75"),
+                        "公开网页有效正文占比低于诊断阈值", FinancialEvaluationMetricScore.GateLevel.ADVISORY),
+                score("period_semantic_consistency", periodSemanticScore(body, evidenceItems, metricResults), BigDecimal.ONE,
+                        "阶段性 ROE 必须说明报告期且标注未年化", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("directional_claim_support_rate", directionalClaimSupportScore(body, evidenceItems), BigDecimal.ONE,
+                        "方向性判断必须引用有效证据", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("low_quality_evidence_rate", lowQualityReferenceScore(body, evidenceItems), BigDecimal.ONE,
+                        "正文不得引用低质量证据", FinancialEvaluationMetricScore.GateLevel.HARD),
+                score("evidence_effective_rate", evidenceEffectiveScore(evidenceItems), PASS_THRESHOLD,
+                        "有效证据占比低于诊断阈值", FinancialEvaluationMetricScore.GateLevel.ADVISORY)
         );
+    }
 
+    private FinancialEvaluationResult result(
+            String ticker,
+            String companyName,
+            List<FinancialEvaluationMetricScore> scores
+    ) {
         BigDecimal overall = scores.stream()
                 .map(FinancialEvaluationMetricScore::score)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(scores.size()), 2, RoundingMode.HALF_UP);
         List<String> failedReasons = scores.stream()
-                .filter(item -> "FAIL".equals(item.status()))
+                .filter(item -> item.gateLevel() == FinancialEvaluationMetricScore.GateLevel.HARD)
+                .filter(item -> "FAIL".equals(item.status()) || "ERROR".equals(item.status()))
                 .map(item -> item.metricName() + "：" + item.reason())
                 .toList();
-        String status = overall.compareTo(PASS_THRESHOLD) >= 0 && failedReasons.isEmpty() ? "PASS" : "FAIL";
-        return new FinancialEvaluationResult(evalCase.ticker(), evalCase.name(), overall, status, scores, failedReasons);
+        String status = failedReasons.isEmpty() ? "PASS" : "FAIL";
+        return new FinancialEvaluationResult(ticker, companyName, overall, status, scores, failedReasons);
     }
 
     /** 使用内置用例评估报告，无匹配用例时返回空。 */
@@ -114,10 +156,27 @@ public class FinancialEvaluator {
                 .map(evalCase -> evaluate(evalCase, report, snapshot, metrics));
     }
 
-    private FinancialEvaluationMetricScore score(String metricName, BigDecimal value, BigDecimal threshold, String reason) {
+    private FinancialEvaluationMetricScore score(
+            String metricName,
+            BigDecimal value,
+            BigDecimal threshold,
+            String reason,
+            FinancialEvaluationMetricScore.GateLevel gateLevel
+    ) {
         BigDecimal normalized = value.setScale(2, RoundingMode.HALF_UP);
-        String status = normalized.compareTo(threshold) >= 0 ? "PASS" : "FAIL";
-        return new FinancialEvaluationMetricScore(metricName, normalized, threshold, status, reason);
+        String status = normalized.compareTo(threshold) >= 0
+                ? "PASS"
+                : gateLevel == FinancialEvaluationMetricScore.GateLevel.HARD ? "FAIL" : "WARN";
+        return new FinancialEvaluationMetricScore(
+                metricName,
+                normalized,
+                threshold,
+                status,
+                reason,
+                FinancialEvaluationMetricScore.Category.RULE,
+                gateLevel,
+                FinancialEvaluationMetricScore.Direction.HIGHER_BETTER
+        );
     }
 
     private BigDecimal claimSupportScore(

@@ -143,12 +143,13 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
         List<String> documents = new ArrayList<>(chunks.size());
         List<Map<String, Object>> metadatas = new ArrayList<>(chunks.size());
         for (RagDocumentChunk chunk : chunks) {
-            ids.add(chunk.source() + ":" + chunk.chunkIndex());
+            ids.add(chunk.chunkId());
             embeddings.add(embeddingClient.embed(chunk.content()));
             documents.add(chunk.content());
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("source", chunk.source());
             metadata.put("chunk_index", chunk.chunkIndex());
+            metadata.put("chunk_id", chunk.chunkId());
             metadatas.add(metadata);
         }
         return Map.of(
@@ -173,9 +174,10 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
         for (int i = 0; i < documents.size(); i++) {
             String content = documents.path(i).asText("");
             String source = metadatas.path(i).path("source").asText(collectionName);
+            String chunkId = metadatas.path(i).path("chunk_id").asText("");
             double distance = distances.path(i).asDouble(1.0d);
             double score = Math.max(0.0d, 1.0d - distance);
-            results.add(new RagDocument(source, content, round(score)));
+            results.add(new RagDocument(chunkId, source, content, round(score)));
         }
         return results;
     }

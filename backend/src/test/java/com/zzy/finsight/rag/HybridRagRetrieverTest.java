@@ -65,6 +65,18 @@ class HybridRagRetrieverTest {
         assertThat(result.filteredCount()).isEqualTo(1);
         assertThat(result.traceEntries().get(0).channels()).containsExactly("keyword", "vector");
         assertThat(result.traceEntries().get(0).fusionScore()).isGreaterThanOrEqualTo(0.70);
+        assertThat(result.traceEntries().get(0).chunkId()).isEqualTo(result.documents().get(0).chunkId());
+    }
+
+    @Test
+    void generatesStableChunkIdsFromSourceIndexAndContent() {
+        RagDocumentChunk first = new RagDocumentChunk("report.md", 2, "稳定正文");
+        RagDocumentChunk same = new RagDocumentChunk("report.md", 2, "稳定正文");
+        RagDocumentChunk differentIndex = new RagDocumentChunk("report.md", 3, "稳定正文");
+
+        assertThat(first.chunkId()).isEqualTo(same.chunkId());
+        assertThat(first.chunkId()).hasSize(64);
+        assertThat(first.chunkId()).isNotEqualTo(differentIndex.chunkId());
     }
 
     private static class StubVectorDocumentStore implements VectorDocumentStore {

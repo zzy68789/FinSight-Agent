@@ -64,7 +64,7 @@ class InvestmentReportWriterTest {
                         "最终引用附录由系统确定性覆盖",
                         "八章节正文总长度不超过 2500 个中文字符",
                         "可用证据索引",
-                        "[E1] ETF收盘价"
+                        "[E1] ETF_CLOSE"
                 )
                 .doesNotContain("[E1] AUTHORIZED_MARKET / TuShare Pro", "### 指标计算公式", "### 风险评分明细");
         assertThat(report).contains("LLM 生成的基金概况");

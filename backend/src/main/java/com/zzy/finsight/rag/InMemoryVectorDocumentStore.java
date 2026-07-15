@@ -30,6 +30,7 @@ public class InMemoryVectorDocumentStore implements VectorDocumentStore {
         List<Double> queryEmbedding = embeddingClient.embed(query);
         return chunks.stream()
                 .map(chunk -> new RagDocument(
+                        chunk.documentChunk().chunkId(),
                         chunk.documentChunk().source(),
                         chunk.documentChunk().content(),
                         round(cosine(queryEmbedding, chunk.embedding()))

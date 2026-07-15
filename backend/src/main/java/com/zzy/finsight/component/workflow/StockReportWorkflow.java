@@ -20,7 +20,6 @@ import com.zzy.finsight.component.review.InvestmentReportWriter;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 编排证券解析、指标、审查和评测组件。
@@ -96,12 +95,12 @@ public class StockReportWorkflow {
         return complianceReviewer.review(report, citationReview);
     }
 
-    /** 使用评测集对最终报告进行可选评估。 */
-    public Optional<FinancialEvaluationResult> evaluation(
+    /** 对最终报告执行不依赖证券白名单的线上质量门禁。 */
+    public FinancialEvaluationResult evaluation(
             String report,
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics
     ) {
-        return evaluator.evaluateDefaultCase(report, snapshot, metrics);
+        return evaluator.evaluateOnline(report, snapshot, metrics);
     }
 }

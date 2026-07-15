@@ -1,0 +1,38 @@
+name: Evaluation Regression
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-evaluation:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run deterministic evaluation gate
+        run: mvn.cmd "-Dtest=FinancialEvaluationRegressionTest" test
+
+      - name: Upload evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-evaluation-${{ github.sha }}
+          path: backend/target/evaluation
+          if-no-files-found: error

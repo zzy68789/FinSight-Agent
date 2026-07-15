@@ -1,0 +1,45 @@
+name: External Evaluation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  judge-and-live-smoke:
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      TUSHARE_API_KEY: ${{ secrets.TUSHARE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run advisory Judge evaluation
+        run: mvn.cmd "-Dtest=LlmJudgeEvaluationTest" "-Dfinsight.eval.judge.enabled=true" test
+
+      - name: Run advisory live provider smoke
+        run: mvn.cmd "-Dtest=LiveProviderEvaluationTest" "-Dfinsight.eval.live.enabled=true" test
+
+      - name: Upload external evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-evaluation-${{ github.sha }}
+          path: backend/target/evaluation
+          if-no-files-found: warn

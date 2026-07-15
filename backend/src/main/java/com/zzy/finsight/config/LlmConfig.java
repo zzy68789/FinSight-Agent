@@ -62,12 +62,34 @@ public class LlmConfig {
         );
     }
 
+    /**
+     * Judge（确定性，温度 0）聊天模型。未单独配置模型名时复用 smart 模型名。
+     */
+    @Bean
+    @Nullable
+    ChatModel judgeChatModel(
+            @Value("${finsight.llm.base-url:https://api.openai.com/v1}") String baseUrl,
+            @Value("${finsight.llm.api-key:}") String apiKey,
+            @Value("${finsight.llm.judge-model:${finsight.llm.smart-model:deepseek-r1}}") String judgeModel,
+            @Value("${finsight.llm.timeout:30s}") Duration timeout,
+            @Value("${finsight.llm.max-output-tokens:4096}") int maxOutputTokens,
+            @Value("${finsight.llm.provider-max-retries:0}") int providerMaxRetries,
+            @Value("${finsight.llm.log-requests:false}") boolean logRequests,
+            @Value("${finsight.llm.log-responses:false}") boolean logResponses
+    ) {
+        return buildModel(
+                baseUrl, apiKey, judgeModel, 0.0d, timeout, maxOutputTokens,
+                providerMaxRetries, logRequests, logResponses
+        );
+    }
+
     @Bean
     LangChain4jLlmClient langChain4jLlmClient(
             @Nullable @Qualifier("fastChatModel") ChatModel fastChatModel,
-            @Nullable @Qualifier("smartChatModel") ChatModel smartChatModel
+            @Nullable @Qualifier("smartChatModel") ChatModel smartChatModel,
+            @Nullable @Qualifier("judgeChatModel") ChatModel judgeChatModel
     ) {
-        return new LangChain4jLlmClient(fastChatModel, smartChatModel);
+        return new LangChain4jLlmClient(fastChatModel, smartChatModel, judgeChatModel);
     }
 
     @Bean

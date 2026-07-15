@@ -17,7 +17,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 检查证据数量、报告期、指标引用和指标值展示；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
-- **自动评测门控**：`FinancialEvaluator` 加载 `financial-eval-set.json`，对默认样例输出 claim/citation/numeric/keypoint 评测结果。
+- **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
 - **报告库与导出**：支持报告列表、版本查看、Markdown/PDF/Word 导出、收藏、软删除和加入 RAG。
 - **本地可演示降级**：未配置 LLM、Tavily、TuShare、Redis 或 ChromaDB 时，仍可通过本地 fallback 跑通核心流程。
@@ -88,10 +88,10 @@ data: [DONE]
 FinSight-Agent/
 ├── backend/
 │   ├── pom.xml
-│   └── src/main/
+│   ├── src/main/
 │       ├── java/com/zzy/finsight/
 │       │   ├── auth/              # Bearer Token、密码和用户上下文支撑
-│       │   ├── component/         # analysis/marketdata/review/workflow 业务组件
+│       │   ├── component/         # analysis/evaluation/marketdata/review/workflow 业务组件
 │       │   ├── config/            # CORS、LLM、异步执行器等配置
 │       │   ├── controller/        # REST API 与 SSE 接口
 │       │   ├── domain/stock/      # 股票领域模型、metric 指标定义和 reference 主档
@@ -107,6 +107,7 @@ FinSight-Agent/
 │           ├── financial-eval-set.json
 │           ├── mapper/            # MyBatis XML SQL 与结果映射
 │           └── db/                # Flyway 迁移、完整 schema 与手动升级脚本
+│   └── src/test/resources/evaluation/ # 冻结评测集与版本化基线
 ├── frontend/                      # Vue 3 前端
 ├── docs/                          # 路线图、已实现能力、遗留问题、踩坑日志
 └── README.md
@@ -195,7 +196,7 @@ $env:TUSHARE_API_KEY="your_tushare_token"
 
 在同一个 PowerShell 窗口设置 Key 后再启动后端；如果通过 IntelliJ IDEA 启动，需要把 `API_KEY`、`TAVILY_API_KEY`、`TUSHARE_API_KEY` 加到对应 Spring Boot Run Configuration 的 Environment variables，然后重启后端。不要把真实 Key 写入 `application.yml`、README、Git 或前端代码。
 
-`InvestmentReportWriter` 会使用 SMART 模型增强确定性报告草稿。LLM 只能改写叙述，引用、指标公式和风险明细由 Java 覆盖回确定性内容；未配置 Key、请求失败或输出缺少必要章节时自动回退模板。报告源码中的 `FinSight generation-mode: llm` / `template-fallback` 可用于确认实际生成方式。
+`InvestmentReportWriter` 会使用 SMART 模型增强确定性报告草稿。LLM 只能改写叙述，引用、指标公式和风险明细由 Java 覆盖回确定性内容；未配置 Key、请求失败或输出缺少必要章节时自动回退模板。报告源码中的 `FinSight generation-mode: llm` / `template-fallback` 可用于确认实际生成方式。离线 Judge 使用 `finsight.llm.judge-model`，未单独配置时默认与 SMART 模型同名，并记录模型、Token、结束原因和耗时。
 
 使用 TuShare 时，还需要在 `application.yml` 中把 `finsight.market.tushare.enabled` 改为 `true`。TuShare provider 只在 `hybrid` / `web` 股票报告模式下调用；`document` 模式不会访问外部行情接口。
 
@@ -318,6 +319,22 @@ cd backend
 mvn.cmd test
 ```
 
+确定性离线评测与显式基线更新：
+
+```powershell
+cd backend
+mvn.cmd "-Dtest=FinancialEvaluationRegressionTest" test
+mvn.cmd "-Dtest=FinancialEvaluationRegressionTest" "-Dfinsight.eval.update-baseline=true" test
+```
+
+评测产物写入 `backend/target/evaluation/<runId>/results.json` 和 `summary.md`。Judge 与真实数据冒烟默认关闭，缺少 Key 时状态为 `SKIPPED`：
+
+```powershell
+cd backend
+mvn.cmd "-Dtest=LlmJudgeEvaluationTest" "-Dfinsight.eval.judge.enabled=true" test
+mvn.cmd "-Dtest=LiveProviderEvaluationTest" "-Dfinsight.eval.live.enabled=true" test
+```
+
 后端打包：
 
 ```powershell
@@ -337,4 +354,4 @@ npm.cmd run build
 - 当前仓库聚焦金融投研报告 Agent，不再对外提供通用 `/api/chat` deep-research 链路。
 - 前端通用研究模式仍需清理或改造成金融入口，这是下一轮 P0/P1 工作。
 - TuShare 真实 token、缓存、限速、接口权限错误提示和更多行情序列仍需继续硬化。
-- ETF 深度数据、ECharts 行情图、多空辩论、批量评测 CLI 和真实 MySQL 迁移集成测试属于后续增强。
+- ETF 深度数据、ECharts 行情图、多空辩论、评测趋势管理页面和真实 MySQL 迁移集成测试属于后续增强。

@@ -1,0 +1,16 @@
+{
+  "version": "baseline-v1",
+  "metrics": {
+    "rule_case_pass_rate": 1.0000,
+    "recall_at_1": 1.0000,
+    "recall_at_3": 1.0000,
+    "recall_at_5": 1.0000,
+    "precision_at_1": 1.0000,
+    "precision_at_3": 0.3333,
+    "precision_at_5": 0.2000,
+    "mrr": 1.0000,
+    "ndcg_at_1": 1.0000,
+    "ndcg_at_3": 1.0000,
+    "ndcg_at_5": 1.0000
+  }
+}

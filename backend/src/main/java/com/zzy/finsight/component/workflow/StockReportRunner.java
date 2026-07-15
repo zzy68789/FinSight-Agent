@@ -170,19 +170,27 @@ public class StockReportRunner {
             Optional<ReusableReportRecord> reusableReport = reportService.findReusable(ownerId, generationContextHash);
             if (reusableReport.isPresent()) {
                 ReusableReportRecord cached = reusableReport.orElseThrow();
-                reportService.saveLatest(
-                        ownerId, threadId, taskId, cached.content(), "PASS", "",
-                        snapshotId, dataSnapshotHash, generationContextHash, cached.id()
-                );
-                publish(taskId, threadId, progress, "cache_hit", mapOf(
-                        "cacheHit", true,
-                        "reusedFromReportId", cached.id(),
-                        "dataSnapshotHash", dataSnapshotHash,
-                        "generationContextHash", generationContextHash
+                FinancialEvaluationResult cachedEvaluation = workflow.evaluation(cached.content(), snapshot, metrics);
+                publish(taskId, threadId, progress, "evaluation", mapOf(
+                        "evaluation", cachedEvaluation,
+                        "rewriteCount", 0,
+                        "cacheCandidate", true
                 ), 0L, 1);
-                meterRegistry.counter("finsight.stock.report.cache", "result", "hit").increment();
-                completeTask(taskId, threadId, progress, "PASS", 0, true);
-                return;
+                if (isPass(cachedEvaluation.status())) {
+                    reportService.saveLatest(
+                            ownerId, threadId, taskId, cached.content(), "PASS", "",
+                            snapshotId, dataSnapshotHash, generationContextHash, cached.id()
+                    );
+                    publish(taskId, threadId, progress, "cache_hit", mapOf(
+                            "cacheHit", true,
+                            "reusedFromReportId", cached.id(),
+                            "dataSnapshotHash", dataSnapshotHash,
+                            "generationContextHash", generationContextHash
+                    ), 0L, 1);
+                    meterRegistry.counter("finsight.stock.report.cache", "result", "hit").increment();
+                    completeTask(taskId, threadId, progress, "PASS", 0, true);
+                    return;
+                }
             }
             meterRegistry.counter("finsight.stock.report.cache", "result", "miss").increment();
 
@@ -227,22 +235,20 @@ public class StockReportRunner {
             }
 
             startedAt = System.nanoTime();
-            Optional<FinancialEvaluationResult> evaluation = workflow.evaluation(report, snapshot, metrics);
-            if (evaluation.isPresent()) {
-                publish(taskId, threadId, progress, "evaluation", mapOf(
-                        "evaluation", evaluation.orElseThrow(),
-                        "rewriteCount", Math.max(0, writerAttempts - 1)
-                ), elapsedMs(startedAt), writerAttempts);
-            }
+            FinancialEvaluationResult evaluation = workflow.evaluation(report, snapshot, metrics);
+            publish(taskId, threadId, progress, "evaluation", mapOf(
+                    "evaluation", evaluation,
+                    "rewriteCount", Math.max(0, writerAttempts - 1)
+            ), elapsedMs(startedAt), writerAttempts);
 
             boolean reviewPassed = isPass(review.status());
             boolean compliancePassed = isPass(compliance.status());
-            boolean evaluationPassed = evaluation.map(result -> isPass(result.status())).orElse(true);
+            boolean evaluationPassed = isPass(evaluation.status());
             String finalStatus = reviewPassed && compliancePassed && evaluationPassed ? "PASS" : "FAIL";
             String critique = isPass(finalStatus)
                     ? ""
                     : (review.reason() + " " + compliance.issues() + " "
-                    + evaluation.map(FinancialEvaluationResult::failedReasons).orElse(List.of())).trim();
+                    + evaluation.failedReasons()).trim();
             reportService.saveLatest(
                     ownerId, threadId, taskId, report, finalStatus, critique,
                     snapshotId, dataSnapshotHash, generationContextHash, null

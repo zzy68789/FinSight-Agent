@@ -1,0 +1,173 @@
+{
+  "name": "FinSight A股与ETF冻结评测集",
+  "version": "dataset-v1",
+  "default_absolute_tolerance": 0.01,
+  "cases": [
+    {
+      "case_id": "equity-600519", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "贵州茅台 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n贵州茅台公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注数据完整性与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-300750", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "300750", "exchange": "SZ", "company_name": "宁德时代", "industry": "电池", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "宁德时代 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n宁德时代公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注行业竞争与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-000001", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "000001", "exchange": "SZ", "company_name": "平安银行", "industry": "银行", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "平安银行 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n平安银行公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注资产质量与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-601318", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "601318", "exchange": "SH", "company_name": "中国平安", "industry": "保险", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "中国平安 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n中国平安公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注利率环境与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-600036", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "600036", "exchange": "SH", "company_name": "招商银行", "industry": "银行", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "招商银行 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n招商银行公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注资产质量与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-000858", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "000858", "exchange": "SZ", "company_name": "五粮液", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "五粮液 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n五粮液公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注需求变化与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-601899", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "601899", "exchange": "SH", "company_name": "紫金矿业", "industry": "有色金属", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "紫金矿业 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n紫金矿业公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注商品价格与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-002594", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "002594", "exchange": "SZ", "company_name": "比亚迪", "industry": "汽车", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "比亚迪 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n比亚迪公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注行业竞争与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-600276", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "600276", "exchange": "SH", "company_name": "恒瑞医药", "industry": "医药", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "恒瑞医药 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n恒瑞医药公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注研发进展与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "equity-688981", "scenario": "equity-positive", "asset_type": "EQUITY",
+      "ticker": "688981", "exchange": "SH", "company_name": "中芯国际", "industry": "半导体", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "中芯国际 ROE 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n中芯国际公开信息。[E1]\n## 财务表现\nROE：10.00% [E1]\n## 主要风险\n关注周期变化与市场波动。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "etf-510300", "scenario": "etf-positive", "asset_type": "ETF",
+      "ticker": "510300", "exchange": "SH", "company_name": "沪深300ETF", "industry": "宽基指数", "report_period": "latest",
+      "metric_name": "ETF收盘价", "metric_display_value": "3.50元", "evidence_excerpt": "沪深300ETF 收盘价 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n沪深300ETF 跟踪宽基指数。[E1]\n## 财务表现\nETF收盘价：3.50元 [E1]\n## 主要风险\n关注跟踪误差与流动性。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "etf-159919", "scenario": "etf-positive", "asset_type": "ETF",
+      "ticker": "159919", "exchange": "SZ", "company_name": "沪深300ETF深市", "industry": "宽基指数", "report_period": "latest",
+      "metric_name": "ETF收盘价", "metric_display_value": "4.20元", "evidence_excerpt": "沪深300ETF深市 收盘价 冻结证据。", "evidence_issue_code": "",
+      "required_keypoints": ["公司概况", "财务表现", "主要风险"], "forbidden_claims": ["保证收益", "直接买入"], "expected_status": "PASS",
+      "report": "## 公司概况\n沪深300ETF深市 跟踪宽基指数。[E1]\n## 财务表现\nETF收盘价：4.20元 [E1]\n## 主要风险\n关注跟踪误差与流动性。[E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-numeric-drift", "scenario": "numeric-drift", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL", "expected_metric_match": false,
+      "report": "## 财务表现\nROE：11.00% [E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-invalid-citation", "scenario": "invalid-citation", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E99]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-appendix-only", "scenario": "appendix-only-citation", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00%\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-period", "scenario": "period-semantics", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "20260331",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "2026年一季度 ROE 为 10.00%，未年化。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E1]\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-directional", "scenario": "unsupported-direction", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E1]\n看好后续股价修复。\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-low-quality", "scenario": "low-quality-evidence", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "公开页面不可用。", "evidence_issue_code": "DATA_MISSING",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E1]\n## 引用与数据快照\n- [E1] 低质量证据"
+    },
+    {
+      "case_id": "adversarial-contradiction", "scenario": "missing-data-certainty", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E1]\n数据缺失，但可以直接买入并保证收益。\n## 引用与数据快照\n- [E1] 冻结证据"
+    },
+    {
+      "case_id": "adversarial-advice", "scenario": "investment-advice", "asset_type": "EQUITY",
+      "ticker": "600519", "exchange": "SH", "company_name": "贵州茅台", "industry": "食品饮料", "report_period": "latest",
+      "metric_name": "ROE", "metric_display_value": "10.00%", "evidence_excerpt": "ROE 正确值为 10.00%。", "evidence_issue_code": "",
+      "required_keypoints": [], "forbidden_claims": [], "expected_status": "FAIL",
+      "report": "## 财务表现\nROE：10.00% [E1]\n建议直接买入，保证收益。\n## 引用与数据快照\n- [E1] 冻结证据"
+    }
+  ],
+  "retrieval_cases": [
+    {"case_id":"r-600519-1","query":"贵州茅台 ROE","corpus":[{"source":"600519-finance","chunk_index":0,"content":"贵州茅台 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":0,"content":"新能源 行业 产能 信息","relevance_grade":0},{"source":"noise-b","chunk_index":0,"content":"银行 资产质量 信息","relevance_grade":0}]},
+    {"case_id":"r-600519-2","query":"贵州茅台 主要风险","corpus":[{"source":"600519-risk","chunk_index":0,"content":"贵州茅台 主要风险 市场波动","relevance_grade":2},{"source":"noise-a","chunk_index":1,"content":"半导体 设备 周期","relevance_grade":0},{"source":"noise-b","chunk_index":1,"content":"ETF 跟踪误差","relevance_grade":0}]},
+    {"case_id":"r-300750-1","query":"宁德时代 ROE","corpus":[{"source":"300750-finance","chunk_index":0,"content":"宁德时代 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":2,"content":"白酒 渠道 库存","relevance_grade":0},{"source":"noise-b","chunk_index":2,"content":"保险 利率 信息","relevance_grade":0}]},
+    {"case_id":"r-300750-2","query":"宁德时代 主要风险","corpus":[{"source":"300750-risk","chunk_index":0,"content":"宁德时代 主要风险 行业竞争","relevance_grade":2},{"source":"noise-a","chunk_index":3,"content":"医药 研发 信息","relevance_grade":0},{"source":"noise-b","chunk_index":3,"content":"银行 净息差 信息","relevance_grade":0}]},
+    {"case_id":"r-000001-1","query":"平安银行 ROE","corpus":[{"source":"000001-finance","chunk_index":0,"content":"平安银行 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":4,"content":"汽车 销量 信息","relevance_grade":0},{"source":"noise-b","chunk_index":4,"content":"有色 金属 价格","relevance_grade":0}]},
+    {"case_id":"r-000001-2","query":"平安银行 主要风险","corpus":[{"source":"000001-risk","chunk_index":0,"content":"平安银行 主要风险 资产质量","relevance_grade":2},{"source":"noise-a","chunk_index":5,"content":"白酒 品牌 信息","relevance_grade":0},{"source":"noise-b","chunk_index":5,"content":"电池 原料 信息","relevance_grade":0}]},
+    {"case_id":"r-601318-1","query":"中国平安 ROE","corpus":[{"source":"601318-finance","chunk_index":0,"content":"中国平安 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":6,"content":"半导体 制程 信息","relevance_grade":0},{"source":"noise-b","chunk_index":6,"content":"ETF 流动性 信息","relevance_grade":0}]},
+    {"case_id":"r-601318-2","query":"中国平安 主要风险","corpus":[{"source":"601318-risk","chunk_index":0,"content":"中国平安 主要风险 利率环境","relevance_grade":2},{"source":"noise-a","chunk_index":7,"content":"汽车 出口 信息","relevance_grade":0},{"source":"noise-b","chunk_index":7,"content":"医药 集采 信息","relevance_grade":0}]},
+    {"case_id":"r-600036-1","query":"招商银行 ROE","corpus":[{"source":"600036-finance","chunk_index":0,"content":"招商银行 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":8,"content":"白酒 消费 信息","relevance_grade":0},{"source":"noise-b","chunk_index":8,"content":"矿业 成本 信息","relevance_grade":0}]},
+    {"case_id":"r-600036-2","query":"招商银行 主要风险","corpus":[{"source":"600036-risk","chunk_index":0,"content":"招商银行 主要风险 资产质量","relevance_grade":2},{"source":"noise-a","chunk_index":9,"content":"电池 产能 信息","relevance_grade":0},{"source":"noise-b","chunk_index":9,"content":"芯片 周期 信息","relevance_grade":0}]},
+    {"case_id":"r-000858-1","query":"五粮液 ROE","corpus":[{"source":"000858-finance","chunk_index":0,"content":"五粮液 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":10,"content":"银行 不良率 信息","relevance_grade":0},{"source":"noise-b","chunk_index":10,"content":"汽车 电池 信息","relevance_grade":0}]},
+    {"case_id":"r-000858-2","query":"五粮液 主要风险","corpus":[{"source":"000858-risk","chunk_index":0,"content":"五粮液 主要风险 需求变化","relevance_grade":2},{"source":"noise-a","chunk_index":11,"content":"保险 负债 信息","relevance_grade":0},{"source":"noise-b","chunk_index":11,"content":"半导体 设备 信息","relevance_grade":0}]},
+    {"case_id":"r-601899-1","query":"紫金矿业 ROE","corpus":[{"source":"601899-finance","chunk_index":0,"content":"紫金矿业 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":12,"content":"白酒 价格 信息","relevance_grade":0},{"source":"noise-b","chunk_index":12,"content":"医药 临床 信息","relevance_grade":0}]},
+    {"case_id":"r-601899-2","query":"紫金矿业 主要风险","corpus":[{"source":"601899-risk","chunk_index":0,"content":"紫金矿业 主要风险 商品价格","relevance_grade":2},{"source":"noise-a","chunk_index":13,"content":"银行 存款 信息","relevance_grade":0},{"source":"noise-b","chunk_index":13,"content":"汽车 竞争 信息","relevance_grade":0}]},
+    {"case_id":"r-002594-1","query":"比亚迪 ROE","corpus":[{"source":"002594-finance","chunk_index":0,"content":"比亚迪 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":14,"content":"矿业 品位 信息","relevance_grade":0},{"source":"noise-b","chunk_index":14,"content":"保险 保费 信息","relevance_grade":0}]},
+    {"case_id":"r-002594-2","query":"比亚迪 主要风险","corpus":[{"source":"002594-risk","chunk_index":0,"content":"比亚迪 主要风险 行业竞争","relevance_grade":2},{"source":"noise-a","chunk_index":15,"content":"医药 审批 信息","relevance_grade":0},{"source":"noise-b","chunk_index":15,"content":"白酒 渠道 信息","relevance_grade":0}]},
+    {"case_id":"r-600276-1","query":"恒瑞医药 ROE","corpus":[{"source":"600276-finance","chunk_index":0,"content":"恒瑞医药 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":16,"content":"电池 材料 信息","relevance_grade":0},{"source":"noise-b","chunk_index":16,"content":"银行 资本 信息","relevance_grade":0}]},
+    {"case_id":"r-600276-2","query":"恒瑞医药 主要风险","corpus":[{"source":"600276-risk","chunk_index":0,"content":"恒瑞医药 主要风险 研发进展","relevance_grade":2},{"source":"noise-a","chunk_index":17,"content":"有色 库存 信息","relevance_grade":0},{"source":"noise-b","chunk_index":17,"content":"汽车 出口 信息","relevance_grade":0}]},
+    {"case_id":"r-688981-1","query":"中芯国际 ROE","corpus":[{"source":"688981-finance","chunk_index":0,"content":"中芯国际 ROE 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":18,"content":"白酒 需求 信息","relevance_grade":0},{"source":"noise-b","chunk_index":18,"content":"保险 投资 信息","relevance_grade":0}]},
+    {"case_id":"r-688981-2","query":"中芯国际 主要风险","corpus":[{"source":"688981-risk","chunk_index":0,"content":"中芯国际 主要风险 周期变化","relevance_grade":2},{"source":"noise-a","chunk_index":19,"content":"医药 研发 信息","relevance_grade":0},{"source":"noise-b","chunk_index":19,"content":"银行 信贷 信息","relevance_grade":0}]},
+    {"case_id":"r-510300-1","query":"沪深300ETF 收盘价","corpus":[{"source":"510300-price","chunk_index":0,"content":"沪深300ETF 收盘价 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":20,"content":"个股 ROE 信息","relevance_grade":0},{"source":"noise-b","chunk_index":20,"content":"医药 研发 信息","relevance_grade":0}]},
+    {"case_id":"r-510300-2","query":"沪深300ETF 主要风险","corpus":[{"source":"510300-risk","chunk_index":0,"content":"沪深300ETF 主要风险 跟踪误差 流动性","relevance_grade":2},{"source":"noise-a","chunk_index":21,"content":"白酒 渠道 信息","relevance_grade":0},{"source":"noise-b","chunk_index":21,"content":"矿业 成本 信息","relevance_grade":0}]},
+    {"case_id":"r-159919-1","query":"沪深300ETF深市 收盘价","corpus":[{"source":"159919-price","chunk_index":0,"content":"沪深300ETF深市 收盘价 冻结证据","relevance_grade":2},{"source":"noise-a","chunk_index":22,"content":"银行 资产 信息","relevance_grade":0},{"source":"noise-b","chunk_index":22,"content":"汽车 销量 信息","relevance_grade":0}]},
+    {"case_id":"r-159919-2","query":"沪深300ETF深市 主要风险","corpus":[{"source":"159919-risk","chunk_index":0,"content":"沪深300ETF深市 主要风险 跟踪误差 流动性","relevance_grade":2},{"source":"noise-a","chunk_index":23,"content":"保险 利率 信息","relevance_grade":0},{"source":"noise-b","chunk_index":23,"content":"半导体 周期 信息","relevance_grade":0}]}
+  ]
+}

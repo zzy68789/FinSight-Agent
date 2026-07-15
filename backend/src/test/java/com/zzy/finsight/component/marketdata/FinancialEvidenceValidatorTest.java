@@ -73,7 +73,7 @@ class FinancialEvidenceValidatorTest {
     void keepsSubstantivePublicNewsEffective() {
         FinancialEvidenceItem news = publicEvidence(
                 "https://www.sse.com.cn/news/600519",
-                "公司发布经营公告，正文说明报告期收入变化、渠道调整、现金流影响及相关风险，内容可回到公告原文复核。"
+                "公司发布经营公告，正文说明报告期收入变化、渠道调整、现金流影响及相关风险，内容可回到公告原文复核，并列明公告日期、适用范围和后续信息披露安排。"
         );
 
         FinancialSnapshot validated = validator.validate(snapshot(List.of(news)));

@@ -42,9 +42,10 @@ class ChromaVectorDocumentStoreTest {
                 .andExpect(content().string(containsString("\"name\":\"finsight_docs\"")))
                 .andExpect(content().string(containsString("\"get_or_create\":true")))
                 .andRespond(withSuccess("{\"id\":\"collection-id\",\"name\":\"finsight_docs\"}", MediaType.APPLICATION_JSON));
+        RagDocumentChunk indexedChunk = new RagDocumentChunk("agent.pdf", 0, "agent vector content");
         server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/add"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(content().string(containsString("\"ids\":[\"agent.pdf:0\"]")))
+                .andExpect(content().string(containsString("\"ids\":[\"" + indexedChunk.chunkId() + "\"]")))
                 .andExpect(content().string(containsString("\"embeddings\":[[0.1,0.2,0.3]]")))
                 .andExpect(content().string(containsString("\"documents\":[\"agent vector content\"]")))
                 .andExpect(content().string(containsString("\"source\":\"agent.pdf\"")))
@@ -62,7 +63,7 @@ class ChromaVectorDocumentStoreTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        store.add(List.of(new RagDocumentChunk("agent.pdf", 0, "agent vector content")));
+        store.add(List.of(indexedChunk));
         List<RagDocument> docs = store.query("agent", 3);
 
         assertThat(docs).containsExactly(new RagDocument("agent.pdf", "agent vector content", 0.88));

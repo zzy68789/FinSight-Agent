@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -61,14 +60,37 @@ class StockReportWorkflowTest {
                 - [E1] PUBLIC_MARKET / 新闻 / latest / NEWS_SUMMARY / OK：公司经营平稳，未见重大利空。
                 """;
 
-        Optional<FinancialEvaluationResult> result = workflow.evaluation(
+        FinancialEvaluationResult result = workflow.evaluation(
                 report,
                 snapshot,
                 List.of(metric("ROE", "30.00%"))
         );
 
-        assertThat(result).isPresent();
-        assertThat(result.orElseThrow().ticker()).isEqualTo("600519");
+        assertThat(result.ticker()).isEqualTo("600519");
+    }
+
+    @Test
+    void evaluatesReportWhenTickerIsOutsideDefaultEvalSet() {
+        FinancialSnapshot snapshot = new FinancialSnapshot(
+                new StockSubject("123456", "SZ", "123456.SZ", "未知公司", "未知行业"),
+                "latest",
+                "hybrid",
+                List.of(evidence("NEWS_SUMMARY", "公司经营信息待持续验证。")),
+                LocalDateTime.of(2026, 7, 3, 10, 0)
+        );
+        String report = """
+                ## 公司概况
+                未知公司公开资料有限。[E1]
+                ## 主要风险
+                相关结论仍需持续验证。[E1]
+                ## 引用与数据快照
+                - [E1] PUBLIC_MARKET / 新闻 / latest / NEWS_SUMMARY / OK：公司经营信息待持续验证。
+                """;
+
+        FinancialEvaluationResult result = workflow.evaluation(report, snapshot, List.of());
+
+        assertThat(result.ticker()).isEqualTo("123456");
+        assertThat(result.metricScores()).isNotEmpty();
     }
 
     private FinancialMetricResult metric(String name, String displayValue) {

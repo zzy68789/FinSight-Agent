@@ -1,6 +1,7 @@
 package com.zzy.finsight.component.review;
 
 import com.zzy.finsight.domain.stock.FinancialEvaluationCase;
+import com.zzy.finsight.domain.stock.FinancialEvaluationMetricScore;
 import com.zzy.finsight.domain.stock.FinancialEvaluationResult;
 import com.zzy.finsight.domain.stock.FinancialEvaluationSet;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
@@ -227,6 +228,39 @@ class FinancialEvaluatorTest {
         assertThat(result.status()).isEqualTo("FAIL");
         assertThat(score(result, "unsupported_claim_rate")).isEqualByComparingTo("0.00");
         assertThat(result.failedReasons()).anyMatch(reason -> reason.contains("无依据") || reason.contains("保证收益"));
+    }
+
+    @Test
+    void treatsSourceAvailabilityAsAdvisoryWhenBodyOnlyUsesEffectiveEvidence() {
+        FinancialSnapshot snapshot = snapshot(
+                evidence("ROE", "ROE来自净利润和股东权益。"),
+                new FinancialEvidenceItem(
+                        "PUBLIC_MARKET", "不可用网页", "", null, "latest", "NEWS_SUMMARY",
+                        null, null, "页面不可用。", BigDecimal.ZERO,
+                        LocalDateTime.of(2026, 7, 3, 10, 0), "DATA_MISSING"
+                )
+        );
+        String report = """
+                ## 财务表现
+                ROE：30.00% [E1]。
+                ## 主要风险
+                公开信息仍需持续验证。[E1]
+                ## 引用与数据快照
+                - [E1] 冻结证据
+                """;
+
+        FinancialEvaluationResult result = service.evaluateOnline(
+                report, snapshot, List.of(metric("ROE", "30.00%"))
+        );
+
+        assertThat(result.status()).isEqualTo("PASS");
+        assertThat(result.metricScores())
+                .filteredOn(item -> "evidence_effective_rate".equals(item.metricName()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.status()).isEqualTo("WARN");
+                    assertThat(item.gateLevel()).isEqualTo(FinancialEvaluationMetricScore.GateLevel.ADVISORY);
+                });
     }
 
     private BigDecimal score(FinancialEvaluationResult result, String metricName) {

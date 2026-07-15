@@ -31,4 +31,23 @@ public class RetryingLlmClient implements LlmClient {
                 ? lastFailure
                 : new IllegalStateException("LLM 调用失败且无可用响应");
     }
+
+    @Override
+    public LlmGenerationResult generateWithMetadata(String prompt, ModelType modelType) {
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                LlmGenerationResult response = delegate.generateWithMetadata(prompt, modelType);
+                if (response != null && !response.text().isBlank()) {
+                    return response;
+                }
+                lastFailure = new IllegalStateException("LLM returned blank response");
+            } catch (RuntimeException exception) {
+                lastFailure = exception;
+            }
+        }
+        throw lastFailure != null
+                ? lastFailure
+                : new IllegalStateException("LLM 调用失败且无可用响应");
+    }
 }

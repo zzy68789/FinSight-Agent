@@ -82,7 +82,12 @@ public class HybridRagRetriever {
         }
         double maxScore = scoredChunks.stream().mapToDouble(ScoredChunk::score).max().orElse(1.0d);
         return scoredChunks.stream()
-                .map(scored -> new RagDocument(scored.chunk().source(), scored.chunk().content(), round(scored.score() / maxScore)))
+                .map(scored -> new RagDocument(
+                        scored.chunk().chunkId(),
+                        scored.chunk().source(),
+                        scored.chunk().content(),
+                        round(scored.score() / maxScore)
+                ))
                 .sorted(Comparator.comparingDouble(RagDocument::score).reversed())
                 .limit(topK)
                 .toList();
@@ -162,8 +167,14 @@ public class HybridRagRetriever {
             if (trace.vectorScore > 0) {
                 channels.add("vector");
             }
-            documents.add(new RagDocument(trace.document.source(), trace.document.content(), round(trace.fusionScore)));
+            documents.add(new RagDocument(
+                    trace.document.chunkId(),
+                    trace.document.source(),
+                    trace.document.content(),
+                    round(trace.fusionScore)
+            ));
             entries.add(new RagRetrievalTraceEntry(
+                    trace.document.chunkId(),
                     trace.document.source(),
                     trace.document.content(),
                     round(trace.keywordScore),

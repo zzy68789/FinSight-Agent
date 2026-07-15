@@ -6,6 +6,7 @@ import com.zzy.finsight.component.workflow.StockReportRunner;
 import com.zzy.finsight.component.workflow.StockReportWorkflow;
 import com.zzy.finsight.domain.stock.CitationReviewResult;
 import com.zzy.finsight.domain.stock.FinancialComplianceReviewResult;
+import com.zzy.finsight.domain.stock.FinancialEvaluationResult;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
@@ -118,7 +119,9 @@ class StockReportServiceImplTest {
         when(workflow.compliance(anyString(), any(CitationReviewResult.class))).thenReturn(
                 new FinancialComplianceReviewResult("PASS", new BigDecimal("100.00"), List.of())
         );
-        when(workflow.evaluation(anyString(), eq(snapshot), eq(metrics))).thenReturn(Optional.empty());
+        when(workflow.evaluation(anyString(), eq(snapshot), eq(metrics))).thenReturn(
+                new FinancialEvaluationResult("600519", "贵州茅台", BigDecimal.ONE, "PASS", List.of(), List.of())
+        );
     }
 
     @Test
@@ -238,6 +241,7 @@ class StockReportServiceImplTest {
         runner.runNew(7L, request, StockReportProgressListener.noop());
 
         verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow).evaluation("缓存报告", snapshot, metrics);
         verify(reportService).saveLatest(
                 7L, "stock-thread", 11L, "缓存报告", "PASS", "",
                 21L, "data-hash", "context-hash", 99L
