@@ -23,8 +23,8 @@
     <header class="app-header sticky top-0 z-40 border-b border-slate-800/80 shadow-sm shadow-slate-950/20 backdrop-blur">
       <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div class="flex items-center gap-3">
-          <div class="brand-mark flex h-11 w-11 items-center justify-center rounded-lg border border-amber-300/40 bg-slate-900 text-amber-200 shadow-sm shadow-slate-950/30">
-            <BotIcon class="h-5 w-5" aria-hidden="true" />
+          <div class="brand-mark h-11 w-11 shrink-0 rounded-lg shadow-sm shadow-slate-950/30">
+            <img src="/finsight.svg" alt="" class="block h-full w-full" aria-hidden="true" />
           </div>
           <div>
             <p class="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200/90">A-share intelligence desk</p>
