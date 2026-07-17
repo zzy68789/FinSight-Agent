@@ -1,13 +1,41 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.zzy.finsight.mapper.CheckpointMapper">
+    <resultMap id="checkpointResult" type="com.zzy.finsight.domain.WorkflowCheckpointRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="thread_id" javaType="string"/>
+            <arg column="task_id" javaType="_long"/>
+            <arg column="stage" javaType="string"/>
+            <arg column="attempt_no" javaType="_int"/>
+            <arg column="generation_context_hash" javaType="string"/>
+            <arg column="state_json" javaType="string"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
     <insert id="insert">
-        INSERT INTO checkpoint(thread_id, task_id, state_json, created_at)
+        INSERT INTO checkpoint(
+          thread_id, task_id, stage, attempt_no, generation_context_hash, state_json, created_at
+        )
         VALUES (
           #{threadId},
           #{taskId},
+          #{stage},
+          #{attemptNo},
+          #{generationContextHash},
           #{state,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
           #{createdAt}
         )
     </insert>
+
+    <select id="findLatest" resultMap="checkpointResult">
+        SELECT id, thread_id, task_id, stage, attempt_no, generation_context_hash, state_json, created_at
+        FROM checkpoint
+        WHERE task_id = #{taskId}
+          AND stage = #{stage}
+          AND generation_context_hash = #{generationContextHash}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
 </mapper>

@@ -77,9 +77,13 @@ CREATE TABLE IF NOT EXISTS checkpoint (
   id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
   thread_id VARCHAR(64) NOT NULL COMMENT '会话线程ID',
   task_id BIGINT COMMENT '关联的调研任务ID',
+  stage VARCHAR(64) NOT NULL DEFAULT 'UNKNOWN' COMMENT '检查点对应的工作流阶段',
+  attempt_no INT NOT NULL DEFAULT 1 COMMENT '阶段执行尝试次数',
+  generation_context_hash CHAR(64) COMMENT '检查点对应的报告生成上下文SHA-256',
   state_json LONGTEXT NOT NULL COMMENT '序列化后的工作流状态快照',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
-  INDEX idx_checkpoint_thread_id (thread_id)
+  INDEX idx_checkpoint_thread_id (thread_id),
+  INDEX idx_checkpoint_task_stage_context (task_id, stage, generation_context_hash, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (

@@ -136,9 +136,9 @@ spring:
     password: 123456
 ```
 
-数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
+数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql`、`V2__stock_report_reliability.sql`、`V3__workflow_checkpoint_resume.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
 
-如需临时关闭自动迁移，可在 `application.yml` 中把 `spring.flyway.enabled` 改为 `false`；关闭后需自行保证数据库结构与代码一致。
+如需临时关闭自动迁移，可在 `application.yml` 中把 `spring.flyway.enabled` 改为 `false`；关闭后需自行按顺序执行 `upgrade-stock-report-observability.sql`、`upgrade-workflow-checkpoint-resume.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -308,7 +308,7 @@ GET /api/admin/system/health
 - `research_task`：任务主表。
 - `agent_step_log`：Agent 阶段执行日志。
 - `report`：报告内容和版本。
-- `checkpoint`：工作流状态快照。
+- `checkpoint`：带阶段、尝试次数和生成上下文指纹的工作流状态快照，可从 Writer/Reviewer 安全恢复。
 - `stock_analysis_snapshot`：股票报告生成时的数据快照。
 - `stock_evidence_item`：金融证据账本。
 - `stock_metric_result`：Java 指标引擎计算结果。

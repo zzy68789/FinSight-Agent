@@ -9,6 +9,7 @@ import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.PersistedFinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.WorkflowCheckpointRecord;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
 import com.zzy.finsight.dto.stock.StockReportRequest;
 import com.zzy.finsight.infrastructure.serialization.StockReportRequestCodec;
@@ -50,6 +51,7 @@ public class StockReportRunner {
     private final ReportService reportService;
     private final FinancialReportFingerprinter fingerprinter;
     private final ReportGenerationSingleFlight singleFlight;
+    private final WorkflowCheckpointCodec checkpointCodec;
     private final StockReportRequestCodec requestCodec;
     private final MeterRegistry meterRegistry;
     private final String leaseOwner = "stock-runner-" + UUID.randomUUID();
@@ -64,6 +66,7 @@ public class StockReportRunner {
             ReportService reportService,
             FinancialReportFingerprinter fingerprinter,
             ReportGenerationSingleFlight singleFlight,
+            WorkflowCheckpointCodec checkpointCodec,
             StockReportRequestCodec requestCodec,
             MeterRegistry meterRegistry
     ) {
@@ -76,6 +79,7 @@ public class StockReportRunner {
         this.reportService = reportService;
         this.fingerprinter = fingerprinter;
         this.singleFlight = singleFlight;
+        this.checkpointCodec = checkpointCodec;
         this.requestCodec = requestCodec;
         this.meterRegistry = meterRegistry;
     }
@@ -178,7 +182,8 @@ public class StockReportRunner {
                 publish(taskId, threadId, progress, "evaluation", mapOf(
                         "evaluation", cachedEvaluation,
                         "rewriteCount", 0,
-                        "cacheCandidate", true
+                        "cacheCandidate", true,
+                        "generationContextHash", generationContextHash
                 ), 0L, 1);
                 if (isPass(cachedEvaluation.status())) {
                     reportService.saveLatest(
@@ -223,7 +228,8 @@ public class StockReportRunner {
                             "evaluation", joinedEvaluation,
                             "rewriteCount", 0,
                             "cacheCandidate", true,
-                            "coalesced", true
+                            "coalesced", true,
+                            "generationContextHash", generationContextHash
                     ), 0L, 1);
                     if (isPass(joinedEvaluation.status())) {
                         reportService.saveLatest(
@@ -256,32 +262,100 @@ public class StockReportRunner {
             FinancialComplianceReviewResult compliance = new FinancialComplianceReviewResult("FAIL", BigDecimal.ZERO, List.of());
             String report = "";
             int writerAttempts = 0;
-            for (int attempt = 1; attempt <= MAX_WRITER_ATTEMPTS; attempt++) {
-                writerAttempts = attempt;
-                startedAt = System.nanoTime();
-                report = workflow.write(snapshot, metrics, riskAssessment, attempt == 1 ? null : review);
+            int nextWriterAttempt = 1;
+
+            Optional<WorkflowCheckpointRecord> writerRecord = checkpointMapper.findLatest(
+                    taskId, "WRITER", generationContextHash
+            );
+            Optional<WorkflowCheckpointRecord> reviewerRecord = checkpointMapper.findLatest(
+                    taskId, "REVIEWER", generationContextHash
+            );
+            Optional<WriterCheckpointState> restoredWriter = writerRecord.flatMap(checkpointCodec::writer);
+            Optional<ReviewerCheckpointState> restoredReviewer = reviewerRecord.flatMap(checkpointCodec::reviewer);
+            if (writerRecord.isPresent() && restoredWriter.isEmpty()) {
+                meterRegistry.counter("finsight.stock.workflow.checkpoint", "result", "invalid_writer").increment();
+            }
+            if (reviewerRecord.isPresent() && restoredReviewer.isEmpty()) {
+                meterRegistry.counter("finsight.stock.workflow.checkpoint", "result", "invalid_reviewer").increment();
+            }
+
+            if (restoredWriter.isPresent()) {
+                WriterCheckpointState writerState = restoredWriter.orElseThrow();
+                report = writerState.report();
+                writerAttempts = writerState.attempt();
+                nextWriterAttempt = writerAttempts + 1;
                 String generationMode = InvestmentReportWriter.generationMode(report);
                 String fallbackReason = InvestmentReportWriter.fallbackReason(report);
                 publish(taskId, threadId, progress, "writer", mapOf(
-                        "attempt", attempt,
+                        "attempt", writerAttempts,
                         "finalReport", report,
                         "generationMode", generationMode,
-                        "fallbackReason", fallbackReason
-                ), elapsedMs(startedAt), attempt,
+                        "fallbackReason", fallbackReason,
+                        "resumed", true,
+                        "generationContextHash", generationContextHash
+                ), 0L, writerAttempts,
                         "template-fallback".equals(generationMode) ? "DEGRADED" : "SUCCESS",
                         fallbackReason);
+                meterRegistry.counter("finsight.stock.workflow.checkpoint", "result", "writer_restored").increment();
 
-                startedAt = System.nanoTime();
-                review = workflow.review(report, snapshot, metrics);
-                compliance = workflow.compliance(report, review);
-                publish(taskId, threadId, progress, "reviewer", mapOf(
-                        "attempt", attempt,
-                        "reviewStatus", review.status(),
-                        "critique", review.reason(),
-                        "compliance", compliance
-                ), elapsedMs(startedAt), attempt);
-                if (isPass(review.status()) && isPass(compliance.status())) {
-                    break;
+                if (restoredReviewer.isPresent()
+                        && restoredReviewer.orElseThrow().attempt() == writerAttempts) {
+                    ReviewerCheckpointState reviewerState = restoredReviewer.orElseThrow();
+                    review = reviewerState.review();
+                    compliance = reviewerState.compliance();
+                    publish(taskId, threadId, progress, "reviewer", mapOf(
+                            "attempt", writerAttempts,
+                            "reviewStatus", review.status(),
+                            "critique", review.reason(),
+                            "compliance", compliance,
+                            "resumed", true,
+                            "generationContextHash", generationContextHash
+                    ), 0L, writerAttempts);
+                    meterRegistry.counter("finsight.stock.workflow.checkpoint", "result", "reviewer_restored").increment();
+                } else {
+                    startedAt = System.nanoTime();
+                    review = workflow.review(report, snapshot, metrics);
+                    compliance = workflow.compliance(report, review);
+                    publish(taskId, threadId, progress, "reviewer", mapOf(
+                            "attempt", writerAttempts,
+                            "reviewStatus", review.status(),
+                            "critique", review.reason(),
+                            "compliance", compliance,
+                            "generationContextHash", generationContextHash
+                    ), elapsedMs(startedAt), writerAttempts);
+                }
+            }
+
+            if (!isPass(review.status()) || !isPass(compliance.status())) {
+                for (int attempt = nextWriterAttempt; attempt <= MAX_WRITER_ATTEMPTS; attempt++) {
+                    writerAttempts = attempt;
+                    startedAt = System.nanoTime();
+                    report = workflow.write(snapshot, metrics, riskAssessment, attempt == 1 ? null : review);
+                    String generationMode = InvestmentReportWriter.generationMode(report);
+                    String fallbackReason = InvestmentReportWriter.fallbackReason(report);
+                    publish(taskId, threadId, progress, "writer", mapOf(
+                            "attempt", attempt,
+                            "finalReport", report,
+                            "generationMode", generationMode,
+                            "fallbackReason", fallbackReason,
+                            "generationContextHash", generationContextHash
+                    ), elapsedMs(startedAt), attempt,
+                            "template-fallback".equals(generationMode) ? "DEGRADED" : "SUCCESS",
+                            fallbackReason);
+
+                    startedAt = System.nanoTime();
+                    review = workflow.review(report, snapshot, metrics);
+                    compliance = workflow.compliance(report, review);
+                    publish(taskId, threadId, progress, "reviewer", mapOf(
+                            "attempt", attempt,
+                            "reviewStatus", review.status(),
+                            "critique", review.reason(),
+                            "compliance", compliance,
+                            "generationContextHash", generationContextHash
+                    ), elapsedMs(startedAt), attempt);
+                    if (isPass(review.status()) && isPass(compliance.status())) {
+                        break;
+                    }
                 }
             }
 
@@ -289,7 +363,8 @@ public class StockReportRunner {
             FinancialEvaluationResult evaluation = workflow.evaluation(report, snapshot, metrics);
             publish(taskId, threadId, progress, "evaluation", mapOf(
                     "evaluation", evaluation,
-                    "rewriteCount", Math.max(0, writerAttempts - 1)
+                    "rewriteCount", Math.max(0, writerAttempts - 1),
+                    "generationContextHash", generationContextHash
             ), elapsedMs(startedAt), writerAttempts);
 
             boolean reviewPassed = isPass(review.status());
@@ -376,7 +451,14 @@ public class StockReportRunner {
                 .tag("stage", step)
                 .register(meterRegistry)
                 .record(Math.max(0L, durationMs), TimeUnit.MILLISECONDS);
-        checkpointMapper.save(threadId, taskId, data);
+        checkpointMapper.save(
+                threadId,
+                taskId,
+                step.toUpperCase(java.util.Locale.ROOT),
+                attemptNo,
+                generationContextHash(data),
+                data
+        );
         runtimeStateService.recordStep(taskId, threadId, step, data);
         taskMapper.updateStage(taskId, step.toUpperCase(java.util.Locale.ROOT), leaseOwner, leaseUntil());
         try {
@@ -419,6 +501,14 @@ public class StockReportRunner {
             return request.getThreadId();
         }
         return "stock-" + request.getTicker() + "-" + UUID.randomUUID();
+    }
+
+    private String generationContextHash(Object data) {
+        if (!(data instanceof Map<?, ?> values)) {
+            return null;
+        }
+        Object value = values.get("generationContextHash");
+        return value instanceof String hash && !hash.isBlank() ? hash : null;
     }
 
     private Map<String, Object> mapOf(Object... values) {

@@ -541,3 +541,21 @@ Writer 改为发送最多 18 条有效紧凑证据索引，并要求关键事实
 ### 结果
 
 聚焦测试 13 项全部通过，覆盖采集时间稳定性、引用位置失效、租户隔离、失败释放和 Runner 并发只调用一次 Writer；2026-07-17 后端全量 138 项测试零失败、零错误，Judge 与真实数据冒烟按默认配置跳过 2 项。当前合并范围是同一应用实例和同一用户，跨实例协同与纯公开快照的跨用户复用仍保留在待解决问题中。
+
+## 031. 只写不读的 Checkpoint 不能支撑真正的断点恢复
+
+### 发生了什么
+
+工作流每个阶段都会向 `checkpoint` 插入状态 JSON，但 `CheckpointMapper` 只有 `insert`，Runner 恢复时只复用 snapshot、metric 和最终 report。任务如果在 Writer 完成后、最终报告落库前中断，下一次执行仍会重新调用 LLM；因此“基于 Checkpoint 断点续跑”的表述缺少读取路径支撑。
+
+### 原因
+
+原检查点没有阶段、Writer 尝试次数和生成上下文指纹，无法判断 JSON 属于哪个恢复边界，也无法确认规则升级后旧状态是否仍安全。恢复调度解决了任务重新提交和租约互斥，但没有把阶段产物还原给 Runner。
+
+### 解决方式
+
+新增 Flyway V3，为 `checkpoint` 增加 `stage`、`attempt_no`、`generation_context_hash` 和组合索引；`CheckpointMapper.findLatest` 按任务、阶段和当前上下文读取恢复点，`WorkflowCheckpointCodec` 对 Writer/Reviewer JSON 做强类型、尝试次数和完整性校验。Runner 可从 Writer 草稿继续审查，或从已通过的 Reviewer 直接进入 Evaluation；非法、损坏或上下文不匹配的状态一律安全重跑。
+
+### 结果
+
+聚焦测试 13 项全部通过，覆盖 Writer 恢复、Reviewer 恢复、损坏状态降级和 Mapper XML；2026-07-17 后端全量 143 项测试零失败、零错误，Judge 与真实数据冒烟跳过 2 项。V3 尚未在真实 MySQL/Testcontainers 执行，且步骤日志、Checkpoint 与任务心跳不是单事务提交，极端退出窗口仍可能重复最近一个阶段。

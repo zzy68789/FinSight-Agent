@@ -5,6 +5,8 @@ import com.zzy.finsight.component.workflow.ReportGenerationSingleFlight;
 import com.zzy.finsight.component.workflow.StockReportProgressListener;
 import com.zzy.finsight.component.workflow.StockReportRunner;
 import com.zzy.finsight.component.workflow.StockReportWorkflow;
+import com.zzy.finsight.component.workflow.WorkflowCheckpointCodec;
+import com.zzy.finsight.domain.WorkflowCheckpointRecord;
 import com.zzy.finsight.domain.stock.CitationReviewResult;
 import com.zzy.finsight.domain.stock.FinancialComplianceReviewResult;
 import com.zzy.finsight.domain.stock.FinancialEvaluationResult;
@@ -86,6 +88,7 @@ class StockReportServiceImplTest {
                 reportService,
                 fingerprinter,
                 new ReportGenerationSingleFlight(),
+                new WorkflowCheckpointCodec(new ObjectMapper()),
                 new StockReportRequestCodec(new ObjectMapper()),
                 new SimpleMeterRegistry()
         );
@@ -116,6 +119,7 @@ class StockReportServiceImplTest {
         )).thenReturn(21L);
         when(reportService.findReusable(7L, "context-hash")).thenReturn(Optional.empty());
         when(reportService.findByTask(7L, 11L)).thenReturn(Optional.empty());
+        when(checkpointMapper.findLatest(anyLong(), anyString(), anyString())).thenReturn(Optional.empty());
         when(snapshotMapper.findSnapshot(7L, 11L)).thenReturn(Optional.empty());
         when(snapshotMapper.findMetrics(11L)).thenReturn(List.of());
         when(workflow.metrics(snapshot)).thenReturn(metrics);
@@ -320,5 +324,79 @@ class StockReportServiceImplTest {
         );
         verify(taskMapper).markCompleted(11L);
         verify(taskMapper).markCompleted(12L);
+    }
+
+    @Test
+    void resumesWriterCheckpointWithoutCallingLlmAgain() {
+        when(checkpointMapper.findLatest(11L, "WRITER", "context-hash")).thenReturn(Optional.of(
+                checkpoint(31L, "WRITER", 1, """
+                        {"attempt":1,"finalReport":"检查点报告"}
+                        """)
+        ));
+        when(workflow.review("检查点报告", snapshot, metrics)).thenReturn(CitationReviewResult.pass());
+
+        runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
+
+        verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow).review("检查点报告", snapshot, metrics);
+        verify(workflow).evaluation("检查点报告", snapshot, metrics);
+        verify(reportService).saveLatest(
+                7L, "stock-thread", 11L, "检查点报告", "PASS", "",
+                21L, "data-hash", "context-hash", null
+        );
+        verify(taskMapper).markCompleted(11L);
+    }
+
+    @Test
+    void resumesPassingReviewerCheckpointAtEvaluation() {
+        when(checkpointMapper.findLatest(11L, "WRITER", "context-hash")).thenReturn(Optional.of(
+                checkpoint(31L, "WRITER", 1, """
+                        {"attempt":1,"finalReport":"检查点报告"}
+                        """)
+        ));
+        when(checkpointMapper.findLatest(11L, "REVIEWER", "context-hash")).thenReturn(Optional.of(
+                checkpoint(32L, "REVIEWER", 1, """
+                        {
+                          "attempt":1,
+                          "reviewStatus":"PASS",
+                          "critique":"",
+                          "compliance":{"status":"PASS","score":100.00,"issues":[]}
+                        }
+                        """)
+        ));
+
+        runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
+
+        verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow, never()).review(anyString(), any(), any());
+        verify(workflow, never()).compliance(anyString(), any());
+        verify(workflow).evaluation("检查点报告", snapshot, metrics);
+        verify(taskMapper).markCompleted(11L);
+    }
+
+    @Test
+    void regeneratesWhenWriterCheckpointIsCorrupted() {
+        when(checkpointMapper.findLatest(11L, "WRITER", "context-hash")).thenReturn(Optional.of(
+                checkpoint(31L, "WRITER", 1, "{invalid-json")
+        ));
+        when(workflow.review(anyString(), eq(snapshot), eq(metrics))).thenReturn(CitationReviewResult.pass());
+
+        runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
+
+        verify(workflow).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(taskMapper).markCompleted(11L);
+    }
+
+    private WorkflowCheckpointRecord checkpoint(long id, String stage, int attemptNo, String stateJson) {
+        return new WorkflowCheckpointRecord(
+                id,
+                "stock-thread",
+                11L,
+                stage,
+                attemptNo,
+                "context-hash",
+                stateJson,
+                LocalDateTime.of(2026, 7, 17, 10, 0)
+        );
     }
 }
