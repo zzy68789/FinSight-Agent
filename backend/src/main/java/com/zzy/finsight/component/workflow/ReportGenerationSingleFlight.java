@@ -4,9 +4,13 @@ import com.zzy.finsight.domain.ReusableReportRecord;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 在单个应用实例内合并同一用户、同一生成上下文的并发报告生成请求。
@@ -37,6 +41,27 @@ public class ReportGenerationSingleFlight {
             throw new IllegalArgumentException("单飞凭证不能为空");
         }
         return flight.result.join();
+    }
+
+    /** 在有限时间内等待主请求，避免异常主请求令跟随方永久挂起。 */
+    public Optional<ReusableReportRecord> await(Flight flight, Duration timeout) {
+        if (flight == null) {
+            throw new IllegalArgumentException("单飞凭证不能为空");
+        }
+        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("单飞等待超时必须为正数");
+        }
+        try {
+            return flight.result.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException e) {
+            throw new IllegalStateException("等待相同报告生成超时", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待相同报告生成被中断", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            throw new IllegalStateException("等待相同报告生成失败", cause);
+        }
     }
 
     /** 发布主请求生成且通过门控的报告。 */

@@ -34,7 +34,8 @@ class TushareMarketDataProviderTest {
                 true,
                 "https://api.tushare.pro",
                 "",
-                "PT10S"
+                "PT10S",
+                false
         );
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
@@ -46,7 +47,8 @@ class TushareMarketDataProviderTest {
                 true,
                 "https://api.tushare.pro",
                 "token",
-                "PT10S"
+                "PT10S",
+                false
         );
 
         assertThat(provider.collect(7L, subject, "latest", "document")).isEmpty();
@@ -62,7 +64,8 @@ class TushareMarketDataProviderTest {
                 true,
                 "https://api.tushare.pro",
                 "token-123",
-                "PT10S"
+                "PT10S",
+                false
         );
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 
@@ -164,7 +167,8 @@ class TushareMarketDataProviderTest {
                 true,
                 "https://api.tushare.pro",
                 "token-123",
-                "PT10S"
+                "PT10S",
+                false
         );
         StockSubject subject = new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF);
 
@@ -203,7 +207,8 @@ class TushareMarketDataProviderTest {
                 true,
                 "https://api.tushare.pro",
                 "token-123",
-                "PT10S"
+                "PT10S",
+                false
         );
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
 

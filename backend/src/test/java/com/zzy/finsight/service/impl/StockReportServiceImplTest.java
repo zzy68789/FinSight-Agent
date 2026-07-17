@@ -109,6 +109,7 @@ class StockReportServiceImplTest {
 
         when(taskMapper.create(anyLong(), anyString(), anyString(), anyString(), anyString())).thenReturn(11L);
         when(taskMapper.startAttempt(eq(11L), anyString(), any(LocalDateTime.class))).thenReturn(true);
+        when(taskMapper.updateStage(anyLong(), anyString(), anyString(), any(LocalDateTime.class))).thenReturn(true);
         when(workflow.resolve(request)).thenReturn(snapshot.subject());
         when(workflow.snapshot(7L, snapshot.subject(), request)).thenReturn(snapshot);
         when(snapshotMapper.saveSnapshot(eq(7L), eq(11L), eq("stock-thread"), eq(snapshot), eq("COLLECTED"))).thenReturn(21L);

@@ -24,9 +24,11 @@ import com.zzy.finsight.service.TaskRuntimeStateService;
 import com.zzy.finsight.domain.ReusableReportRecord;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,10 +52,11 @@ public class StockReportRunner {
     private final TaskRuntimeStateService runtimeStateService;
     private final ReportService reportService;
     private final FinancialReportFingerprinter fingerprinter;
-    private final ReportGenerationSingleFlight singleFlight;
+    private final ReportReuseCoordinator reuseCoordinator;
     private final WorkflowCheckpointCodec checkpointCodec;
     private final StockReportRequestCodec requestCodec;
     private final MeterRegistry meterRegistry;
+    private final WorkflowStagePersistence stagePersistence;
     private final String leaseOwner = "stock-runner-" + UUID.randomUUID();
 
     public StockReportRunner(
@@ -70,6 +73,31 @@ public class StockReportRunner {
             StockReportRequestCodec requestCodec,
             MeterRegistry meterRegistry
     ) {
+        this(
+                workflow, snapshotMapper, taskMapper, stepLogMapper, checkpointMapper, runtimeStateService,
+                reportService, fingerprinter,
+                new ReportReuseCoordinator(reportService, singleFlight, meterRegistry, Duration.ofMinutes(7)),
+                checkpointCodec, requestCodec, meterRegistry,
+                new WorkflowStagePersistence(stepLogMapper, checkpointMapper, taskMapper, runtimeStateService)
+        );
+    }
+
+    @Autowired
+    public StockReportRunner(
+            StockReportWorkflow workflow,
+            FinancialSnapshotMapper snapshotMapper,
+            ResearchTaskMapper taskMapper,
+            AgentStepLogMapper stepLogMapper,
+            CheckpointMapper checkpointMapper,
+            TaskRuntimeStateService runtimeStateService,
+            ReportService reportService,
+            FinancialReportFingerprinter fingerprinter,
+            ReportReuseCoordinator reuseCoordinator,
+            WorkflowCheckpointCodec checkpointCodec,
+            StockReportRequestCodec requestCodec,
+            MeterRegistry meterRegistry,
+            WorkflowStagePersistence stagePersistence
+    ) {
         this.workflow = workflow;
         this.snapshotMapper = snapshotMapper;
         this.taskMapper = taskMapper;
@@ -78,10 +106,11 @@ public class StockReportRunner {
         this.runtimeStateService = runtimeStateService;
         this.reportService = reportService;
         this.fingerprinter = fingerprinter;
-        this.singleFlight = singleFlight;
+        this.reuseCoordinator = reuseCoordinator;
         this.checkpointCodec = checkpointCodec;
         this.requestCodec = requestCodec;
         this.meterRegistry = meterRegistry;
+        this.stagePersistence = stagePersistence;
     }
 
     /** 创建并同步执行新的投研任务。 */
@@ -121,7 +150,6 @@ public class StockReportRunner {
             return;
         }
         runtimeStateService.taskCreated(taskId, threadId);
-        ReportGenerationSingleFlight.Flight generationFlight = null;
         try {
             runtimeStateService.markStatus(taskId, "RUNNING");
 
@@ -175,82 +203,13 @@ public class StockReportRunner {
                 return;
             }
 
-            Optional<ReusableReportRecord> reusableReport = reportService.findReusable(ownerId, generationContextHash);
-            if (reusableReport.isPresent()) {
-                ReusableReportRecord cached = reusableReport.orElseThrow();
-                FinancialEvaluationResult cachedEvaluation = workflow.evaluation(cached.content(), snapshot, metrics);
-                publish(taskId, threadId, progress, "evaluation", mapOf(
-                        "evaluation", cachedEvaluation,
-                        "rewriteCount", 0,
-                        "cacheCandidate", true,
-                        "generationContextHash", generationContextHash
-                ), 0L, 1);
-                if (isPass(cachedEvaluation.status())) {
-                    reportService.saveLatest(
-                            ownerId, threadId, taskId, cached.content(), "PASS", "",
-                            snapshotId, dataSnapshotHash, generationContextHash, cached.id()
-                    );
-                    publish(taskId, threadId, progress, "cache_hit", mapOf(
-                            "cacheHit", true,
-                            "reusedFromReportId", cached.id(),
-                            "dataSnapshotHash", dataSnapshotHash,
-                            "generationContextHash", generationContextHash
-                    ), 0L, 1);
-                    meterRegistry.counter("finsight.stock.report.cache", "result", "hit").increment();
-                    completeTask(taskId, threadId, progress, "PASS", 0, true);
-                    return;
-                }
-            }
-            meterRegistry.counter("finsight.stock.report.cache", "result", "miss").increment();
-
-            while (generationFlight == null) {
-                ReportGenerationSingleFlight.Flight candidate = singleFlight.acquire(ownerId, generationContextHash);
-                if (candidate.leader()) {
-                    generationFlight = candidate;
-                    meterRegistry.counter("finsight.stock.report.singleflight", "result", "leader").increment();
-                    break;
-                }
-
-                publish(taskId, threadId, progress, "cache_wait", mapOf(
-                        "generationContextHash", generationContextHash,
-                        "reason", "IDENTICAL_GENERATION_IN_PROGRESS"
-                ), 0L, 1);
-                meterRegistry.counter("finsight.stock.report.singleflight", "result", "follower").increment();
-                long waitStartedAt = System.nanoTime();
-                Optional<ReusableReportRecord> joinedReport = singleFlight.await(candidate);
-                Timer.builder("finsight.stock.report.singleflight.wait")
-                        .register(meterRegistry)
-                        .record(elapsedMs(waitStartedAt), TimeUnit.MILLISECONDS);
-                if (joinedReport.isPresent()) {
-                    ReusableReportRecord joined = joinedReport.orElseThrow();
-                    FinancialEvaluationResult joinedEvaluation = workflow.evaluation(joined.content(), snapshot, metrics);
-                    publish(taskId, threadId, progress, "evaluation", mapOf(
-                            "evaluation", joinedEvaluation,
-                            "rewriteCount", 0,
-                            "cacheCandidate", true,
-                            "coalesced", true,
-                            "generationContextHash", generationContextHash
-                    ), 0L, 1);
-                    if (isPass(joinedEvaluation.status())) {
-                        reportService.saveLatest(
-                                ownerId, threadId, taskId, joined.content(), "PASS", "",
-                                snapshotId, dataSnapshotHash, generationContextHash, joined.id()
-                        );
-                        publish(taskId, threadId, progress, "cache_hit", mapOf(
-                                "cacheHit", true,
-                                "coalesced", true,
-                                "reusedFromReportId", joined.id(),
-                                "dataSnapshotHash", dataSnapshotHash,
-                                "generationContextHash", generationContextHash
-                        ), 0L, 1);
-                        meterRegistry.counter("finsight.stock.report.cache", "result", "hit").increment();
-                        completeTask(taskId, threadId, progress, "PASS", 0, true);
-                        return;
-                    }
-                }
-                meterRegistry.counter("finsight.stock.report.singleflight", "result", "retry").increment();
-            }
-
+            ReportReuseCoordinator.ReuseOutcome reuseOutcome = reuseCoordinator.coordinate(
+                    ownerId,
+                    generationContextHash,
+                    (candidate, origin) -> validateReusableCandidate(
+                            candidate, origin, taskId, threadId, progress, snapshot, metrics, generationContextHash
+                    ),
+                    () -> {
             publish(taskId, threadId, progress, "evidence_collect", mapOf(
                     "evidence", snapshot.evidenceItems(),
                     "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count(),
@@ -313,7 +272,7 @@ public class StockReportRunner {
                     ), 0L, writerAttempts);
                     meterRegistry.counter("finsight.stock.workflow.checkpoint", "result", "reviewer_restored").increment();
                 } else {
-                    startedAt = System.nanoTime();
+                    long reviewerStartedAt = System.nanoTime();
                     review = workflow.review(report, snapshot, metrics);
                     compliance = workflow.compliance(report, review);
                     publish(taskId, threadId, progress, "reviewer", mapOf(
@@ -322,14 +281,14 @@ public class StockReportRunner {
                             "critique", review.reason(),
                             "compliance", compliance,
                             "generationContextHash", generationContextHash
-                    ), elapsedMs(startedAt), writerAttempts);
+                    ), elapsedMs(reviewerStartedAt), writerAttempts);
                 }
             }
 
             if (!isPass(review.status()) || !isPass(compliance.status())) {
                 for (int attempt = nextWriterAttempt; attempt <= MAX_WRITER_ATTEMPTS; attempt++) {
                     writerAttempts = attempt;
-                    startedAt = System.nanoTime();
+                    long writerStartedAt = System.nanoTime();
                     report = workflow.write(snapshot, metrics, riskAssessment, attempt == 1 ? null : review);
                     String generationMode = InvestmentReportWriter.generationMode(report);
                     String fallbackReason = InvestmentReportWriter.fallbackReason(report);
@@ -339,11 +298,11 @@ public class StockReportRunner {
                             "generationMode", generationMode,
                             "fallbackReason", fallbackReason,
                             "generationContextHash", generationContextHash
-                    ), elapsedMs(startedAt), attempt,
+                    ), elapsedMs(writerStartedAt), attempt,
                             "template-fallback".equals(generationMode) ? "DEGRADED" : "SUCCESS",
                             fallbackReason);
 
-                    startedAt = System.nanoTime();
+                    long reviewerStartedAt = System.nanoTime();
                     review = workflow.review(report, snapshot, metrics);
                     compliance = workflow.compliance(report, review);
                     publish(taskId, threadId, progress, "reviewer", mapOf(
@@ -352,20 +311,20 @@ public class StockReportRunner {
                             "critique", review.reason(),
                             "compliance", compliance,
                             "generationContextHash", generationContextHash
-                    ), elapsedMs(startedAt), attempt);
+                    ), elapsedMs(reviewerStartedAt), attempt);
                     if (isPass(review.status()) && isPass(compliance.status())) {
                         break;
                     }
                 }
             }
 
-            startedAt = System.nanoTime();
+            long evaluationStartedAt = System.nanoTime();
             FinancialEvaluationResult evaluation = workflow.evaluation(report, snapshot, metrics);
             publish(taskId, threadId, progress, "evaluation", mapOf(
                     "evaluation", evaluation,
                     "rewriteCount", Math.max(0, writerAttempts - 1),
                     "generationContextHash", generationContextHash
-            ), elapsedMs(startedAt), writerAttempts);
+            ), elapsedMs(evaluationStartedAt), writerAttempts);
 
             boolean reviewPassed = isPass(review.status());
             boolean compliancePassed = isPass(compliance.status());
@@ -379,26 +338,68 @@ public class StockReportRunner {
                     ownerId, threadId, taskId, report, finalStatus, critique,
                     snapshotId, dataSnapshotHash, generationContextHash, null
             );
-            if (isPass(finalStatus) && savedReportId > 0L) {
-                singleFlight.complete(
-                        generationFlight,
-                        new ReusableReportRecord(savedReportId, report, finalStatus)
+            return new ReportReuseCoordinator.GeneratedReport(
+                    new ReusableReportRecord(savedReportId, report, finalStatus),
+                    Math.max(0, writerAttempts - 1)
+            );
+                    },
+                    () -> publish(taskId, threadId, progress, "cache_wait", mapOf(
+                            "generationContextHash", generationContextHash,
+                            "reason", "IDENTICAL_GENERATION_IN_PROGRESS"
+                    ), 0L, 1)
+            );
+
+            if (reuseOutcome.reused()) {
+                ReusableReportRecord reused = reuseOutcome.report();
+                boolean coalesced = reuseOutcome.origin() == ReportReuseCoordinator.ReuseOrigin.COALESCED;
+                reportService.saveLatest(
+                        ownerId, threadId, taskId, reused.content(), "PASS", "",
+                        snapshotId, dataSnapshotHash, generationContextHash, reused.id()
                 );
-            } else {
-                singleFlight.completeWithoutReusable(generationFlight);
+                publish(taskId, threadId, progress, "cache_hit", mapOf(
+                        "cacheHit", true,
+                        "coalesced", coalesced,
+                        "reusedFromReportId", reused.id(),
+                        "dataSnapshotHash", dataSnapshotHash,
+                        "generationContextHash", generationContextHash
+                ), 0L, 1);
             }
-            generationFlight = null;
-            completeTask(taskId, threadId, progress, finalStatus, Math.max(0, writerAttempts - 1), false);
+            completeTask(
+                    taskId,
+                    threadId,
+                    progress,
+                    reuseOutcome.report().reviewStatus(),
+                    reuseOutcome.rewriteCount(),
+                    reuseOutcome.reused()
+            );
         } catch (Exception e) {
-            if (generationFlight != null) {
-                singleFlight.fail(generationFlight);
-            }
             taskMapper.markFailed(taskId, e.getMessage());
             runtimeStateService.markStatus(taskId, "FAILED");
             stepLogMapper.saveError(taskId, "stock_report_workflow", e);
             meterRegistry.counter("finsight.stock.workflow.task", "result", "failed").increment();
             notifyError(progress, e);
         }
+    }
+
+    private boolean validateReusableCandidate(
+            ReusableReportRecord candidate,
+            ReportReuseCoordinator.ReuseOrigin origin,
+            long taskId,
+            String threadId,
+            StockReportProgressListener progress,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            String generationContextHash
+    ) {
+        FinancialEvaluationResult evaluation = workflow.evaluation(candidate.content(), snapshot, metrics);
+        publish(taskId, threadId, progress, "evaluation", mapOf(
+                "evaluation", evaluation,
+                "rewriteCount", 0,
+                "cacheCandidate", true,
+                "coalesced", origin == ReportReuseCoordinator.ReuseOrigin.COALESCED,
+                "generationContextHash", generationContextHash
+        ), 0L, 1);
+        return isPass(evaluation.status());
     }
 
     private void completeTask(
@@ -409,9 +410,6 @@ public class StockReportRunner {
             int rewriteCount,
             boolean cacheHit
     ) {
-        taskMapper.markCompleted(taskId);
-        runtimeStateService.markStatus(taskId, "COMPLETED");
-        meterRegistry.counter("finsight.stock.workflow.task", "result", "completed").increment();
         publish(taskId, threadId, progress, "done", mapOf(
                 "taskId", taskId,
                 "threadId", threadId,
@@ -419,6 +417,9 @@ public class StockReportRunner {
                 "rewriteCount", rewriteCount,
                 "cacheHit", cacheHit
         ), 0L, Math.max(1, rewriteCount + 1));
+        taskMapper.markCompleted(taskId);
+        runtimeStateService.markStatus(taskId, "COMPLETED");
+        meterRegistry.counter("finsight.stock.workflow.task", "result", "completed").increment();
         notifyDone(progress);
     }
 
@@ -446,21 +447,25 @@ public class StockReportRunner {
             String status,
             String errorMessage
     ) {
-        stepLogMapper.save(taskId, step, data, attemptNo, durationMs, status, errorMessage);
         Timer.builder("finsight.stock.workflow.stage.duration")
                 .tag("stage", step)
                 .register(meterRegistry)
                 .record(Math.max(0L, durationMs), TimeUnit.MILLISECONDS);
-        checkpointMapper.save(
-                threadId,
+        String stage = step.toUpperCase(java.util.Locale.ROOT);
+        stagePersistence.persist(new WorkflowStagePersistence.StageCommit(
                 taskId,
-                step.toUpperCase(java.util.Locale.ROOT),
+                threadId,
+                step,
+                stage,
+                data,
+                durationMs,
                 attemptNo,
+                status,
+                errorMessage,
                 generationContextHash(data),
-                data
-        );
-        runtimeStateService.recordStep(taskId, threadId, step, data);
-        taskMapper.updateStage(taskId, step.toUpperCase(java.util.Locale.ROOT), leaseOwner, leaseUntil());
+                leaseOwner,
+                leaseUntil()
+        ));
         try {
             listener.onStep(step, data);
         } catch (RuntimeException ignored) {

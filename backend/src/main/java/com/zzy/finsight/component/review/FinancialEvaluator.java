@@ -10,6 +10,7 @@ import com.zzy.finsight.domain.stock.FinancialSnapshot;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
  */
 @Component
 public class FinancialEvaluator {
-    public static final String POLICY_VERSION = "financial-evaluation-v4-layered-gates";
+    public static final String POLICY_VERSION = "financial-evaluation-v5-full-numeric-facts";
     private static final String DEFAULT_EVAL_SET = "financial-eval-set.json";
     private static final BigDecimal PASS_THRESHOLD = new BigDecimal("0.80");
     private static final String CITATION_HEADING = "## 引用与数据快照";
@@ -40,9 +41,16 @@ public class FinancialEvaluator {
     );
 
     private final ObjectMapper objectMapper;
+    private final ReportNumericFactVerifier numericFactVerifier;
 
     public FinancialEvaluator(ObjectMapper objectMapper) {
+        this(objectMapper, new ReportNumericFactVerifier());
+    }
+
+    @Autowired
+    public FinancialEvaluator(ObjectMapper objectMapper, ReportNumericFactVerifier numericFactVerifier) {
         this.objectMapper = objectMapper;
+        this.numericFactVerifier = numericFactVerifier;
     }
 
     /** 加载内置金融报告评测集。 */
@@ -103,7 +111,7 @@ public class FinancialEvaluator {
                         "不得出现无依据荐股、保证收益或绝对化承诺", FinancialEvaluationMetricScore.GateLevel.HARD),
                 score("contradiction_rate", contradictionScore(text), BigDecimal.ONE,
                         "不得同时表达数据缺失和确定性投资结论", FinancialEvaluationMetricScore.GateLevel.HARD),
-                score("numeric_consistency_rate", numericConsistencyScore(body, metricResults), new BigDecimal("0.95"),
+                score("numeric_consistency_rate", numericConsistencyScore(body, snapshot, metricResults), new BigDecimal("0.95"),
                         "正文中的指标展示值需和确定性指标结果一致", FinancialEvaluationMetricScore.GateLevel.HARD),
                 score("citation_hit_rate", citationHitScore(body, evidenceItems), new BigDecimal("0.95"),
                         "正文引用必须命中有效证据", FinancialEvaluationMetricScore.GateLevel.HARD),
@@ -201,18 +209,24 @@ public class FinancialEvaluator {
         return dataMissing && certainty ? BigDecimal.ZERO : BigDecimal.ONE;
     }
 
-    private BigDecimal numericConsistencyScore(String report, List<FinancialMetricResult> metrics) {
+    private BigDecimal numericConsistencyScore(
+            String report,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics
+    ) {
         List<FinancialMetricResult> okMetrics = metrics.stream()
                 .filter(metric -> "OK".equals(metric.status()))
                 .filter(metric -> metric.displayValue() != null && !metric.displayValue().isBlank())
                 .toList();
-        if (okMetrics.isEmpty()) {
+        ReportNumericFactVerifier.Verification verification = numericFactVerifier.verify(report, snapshot, metrics);
+        int totalChecks = okMetrics.size() + verification.totalClaims();
+        if (totalChecks == 0) {
             return BigDecimal.ONE;
         }
         long hits = okMetrics.stream()
                 .filter(metric -> report.contains(metric.displayValue()))
                 .count();
-        return ratio(hits, okMetrics.size());
+        return ratio(hits + verification.supportedClaims(), totalChecks);
     }
 
     private BigDecimal citationHitScore(String report, List<FinancialEvidenceItem> evidenceItems) {

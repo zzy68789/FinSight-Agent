@@ -231,6 +231,19 @@ class FinancialEvaluatorTest {
     }
 
     @Test
+    void numericConsistencyFailsWhenBodyContainsInventedFinancialNumber() {
+        FinancialSnapshot snapshot = snapshot(evidence("ROE", "ROE 为 30.00%。"));
+        String report = "ROE：30.00% [E1]，但正文额外声称增长 99.99% [E1]。";
+
+        FinancialEvaluationResult result = service.evaluateOnline(
+                report, snapshot, List.of(metric("ROE", "30.00%"))
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(score(result, "numeric_consistency_rate")).isLessThan(new BigDecimal("0.95"));
+    }
+
+    @Test
     void treatsSourceAvailabilityAsAdvisoryWhenBodyOnlyUsesEffectiveEvidence() {
         FinancialSnapshot snapshot = snapshot(
                 evidence("ROE", "ROE来自净利润和股东权益。"),

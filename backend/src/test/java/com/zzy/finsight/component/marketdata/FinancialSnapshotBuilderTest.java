@@ -10,6 +10,7 @@ import com.zzy.finsight.infrastructure.provider.FinancialDataProvider;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -42,6 +43,73 @@ class FinancialSnapshotBuilderTest {
             assertThat(snapshot.stageResults()).extracting(FinancialAgentStageResult::stageName)
                     .containsExactlyInAnyOrder("uploaded-report", "public-market");
             assertThat(elapsedMs).isLessThan(600);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void timesOutSlowProviderWithoutDiscardingCompletedProviderResult() {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            FinancialDataProvider blocking = new FinancialDataProvider() {
+                @Override
+                public String name() {
+                    return "blocking-provider";
+                }
+
+                @Override
+                public List<FinancialEvidenceItem> collect(
+                        long ownerId,
+                        StockSubject subject,
+                        String reportPeriod,
+                        String searchMode
+                ) {
+                    try {
+                        Thread.sleep(5_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return List.of();
+                }
+            };
+            FinancialDataProvider completed = new FinancialDataProvider() {
+                @Override
+                public String name() {
+                    return "completed-provider";
+                }
+
+                @Override
+                public List<FinancialEvidenceItem> collect(
+                        long ownerId,
+                        StockSubject subject,
+                        String reportPeriod,
+                        String searchMode
+                ) {
+                    return List.of(new FinancialEvidenceItem(
+                            "TEST", name(), "", null, reportPeriod, "ROE",
+                            null, null, "ROE 30.00%", BigDecimal.ONE,
+                            LocalDateTime.now(), ""
+                    ));
+                }
+            };
+            FinancialSnapshotBuilder builder = new FinancialSnapshotBuilder(
+                    List.of(blocking, completed),
+                    executor,
+                    new FinancialEvidenceValidator(),
+                    Duration.ofMillis(100)
+            );
+            StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");
+
+            long startedAt = System.nanoTime();
+            FinancialSnapshot snapshot = builder.build(7L, subject, "latest", "hybrid");
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+            assertThat(elapsedMs).isLessThan(1_000);
+            assertThat(snapshot.stageResults()).extracting(FinancialAgentStageResult::status)
+                    .containsExactly("TIMEOUT", "SUCCESS");
+            assertThat(snapshot.evidenceItems()).extracting(FinancialEvidenceItem::metricName)
+                    .contains("DATA_MISSING", "ROE");
         } finally {
             executor.shutdownNow();
         }

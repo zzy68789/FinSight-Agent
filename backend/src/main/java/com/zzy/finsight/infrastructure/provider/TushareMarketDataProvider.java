@@ -9,8 +9,11 @@ import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.convert.DurationStyle;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -44,6 +47,7 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
     private final boolean enabled;
     private final String token;
 
+    @Autowired
     public TushareMarketDataProvider(
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
@@ -52,6 +56,28 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
             @Value("${finsight.market.tushare.api-key:}") String token,
             @Value("${finsight.market.tushare.timeout:10s}") String timeout
     ) {
+        this(restClientBuilder, objectMapper, enabled, baseUrl, token, timeout, true);
+    }
+
+    /**
+     * 创建 TuShare Provider；测试可关闭底层请求工厂替换，以保留 MockRestServiceServer。
+     */
+    public TushareMarketDataProvider(
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            boolean enabled,
+            String baseUrl,
+            String token,
+            String timeout,
+            boolean configureTransportTimeout
+    ) {
+        if (configureTransportTimeout) {
+            java.time.Duration requestTimeout = DurationStyle.detectAndParse(timeout);
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(requestTimeout);
+            requestFactory.setReadTimeout(requestTimeout);
+            restClientBuilder.requestFactory(requestFactory);
+        }
         this.restClient = restClientBuilder.baseUrl(blankToDefault(baseUrl, "https://api.tushare.pro")).build();
         this.enabled = enabled;
         this.token = token == null ? "" : token.trim();

@@ -58,6 +58,25 @@ class CitationReviewerTest {
     }
 
     @Test
+    void failsWhenBodyAddsFinancialNumberAbsentFromMetricsAndEvidence() {
+        List<FinancialEvidenceItem> evidenceItems = List.of(
+                evidence("营业收入"),
+                evidence("净利润"),
+                evidence("经营现金流")
+        );
+
+        CitationReviewResult result = reviewer.review(
+                "## 报告\n营收同比：20.00% [E1]\n预测增幅：99.99% [E1]\n\n"
+                        + "## 引用与数据快照\n- [E1] 营业收入",
+                snapshot(evidenceItems),
+                List.of(metric("营收同比", "20.00", "OK"))
+        );
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.reason()).contains("NUMERIC_FACT_UNSUPPORTED", "99.99%");
+    }
+
+    @Test
     void failsWhenMetricAppearsOnlyInAppendixWithoutBodyCitation() {
         List<FinancialEvidenceItem> evidenceItems = List.of(
                 evidence("营业收入"),

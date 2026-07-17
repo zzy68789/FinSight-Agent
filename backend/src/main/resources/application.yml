@@ -89,7 +89,11 @@ finsight:
     runtime-ttl: PT24H
   async:
     workflow-threads: 8
+    workflow-queue-capacity: 32
     financial-provider-threads: 6
+    financial-provider-queue-capacity: 24
+    financial-provider-timeout: PT15S
   workflow:
     recovery-interval-ms: 60000
     recovery-stale-after: PT5M
+    singleflight-wait-timeout: PT7M

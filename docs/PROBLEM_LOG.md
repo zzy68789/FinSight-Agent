@@ -558,4 +558,22 @@ Writer 改为发送最多 18 条有效紧凑证据索引，并要求关键事实
 
 ### 结果
 
-聚焦测试 13 项全部通过，覆盖 Writer 恢复、Reviewer 恢复、损坏状态降级和 Mapper XML；2026-07-17 后端全量 143 项测试零失败、零错误，Judge 与真实数据冒烟跳过 2 项。V3 尚未在真实 MySQL/Testcontainers 执行，且步骤日志、Checkpoint 与任务心跳不是单事务提交，极端退出窗口仍可能重复最近一个阶段。
+聚焦测试 13 项全部通过，覆盖 Writer 恢复、Reviewer 恢复、损坏状态降级和 Mapper XML；2026-07-17 后端全量 143 项测试零失败、零错误，Judge 与真实数据冒烟跳过 2 项。当时遗留的 V3 容器验证与非事务阶段提交问题已在问题 032 中继续处理。
+
+## 032. 线程数、超时配置和缓存命中存在不代表链路已经可靠
+
+### 发生了什么
+
+股票工作流和 Provider 虽然使用固定线程数，但 `newFixedThreadPool` 的等待队列无上限；Provider 聚合使用无期限 `join()`，TuShare 的 timeout 配置没有应用到 HTTP 客户端。Reviewer 只检查预期指标是否出现，无法发现正文额外编造的金融数字。步骤日志、Checkpoint 和任务心跳分别提交，报告历史复用与并发 single-flight 协议也散落在 Runner 中，缺少真实 MySQL 自动回归。
+
+### 原因
+
+此前优先完成可演示的工作流闭环，把“固定线程数”误当成完整背压，把“存在 timeout 配置”误当成实际生效；数字检查以指标字符串命中率代替全文事实校验。Checkpoint 和 single-flight 逐步叠加在编排类中，没有形成独立的事务边界与复用协调模块；Mapper XML 解析测试也无法发现真实 MySQL 方言、迁移和事务问题。
+
+### 解决方式
+
+执行器改为固定线程数 + `ArrayBlockingQueue`，增加 active/queued/rejected 指标及提交拒绝降级；Provider 使用统一超时窗口、取消慢任务，TuShare 设置连接/读取超时。新增 `ReportNumericFactVerifier`，抽取百分比、倍数和金额并按统一单位及误差阈值逐项校验。新增 `WorkflowStagePersistence` 原子提交步骤日志、Checkpoint 和租约心跳，提交后再刷新 Redis；新增 `ReportReuseCoordinator` 封装历史 PASS 复验、有限等待 single-flight、主请求发布和异常释放。最后加入 Testcontainers/MySQL 8.4 测试覆盖 Flyway V3、Checkpoint、任务租约、报告租户隔离和事务回滚。
+
+### 结果
+
+2026-07-17 执行后端全量 `mvn.cmd test`，156 个测试零失败、零错误，跳过 3 项；新增单元测试已覆盖背压、Provider 超时、全文数字、事务边界和报告复用并发。Judge 与真实 Provider 冒烟按默认配置跳过；本机 Docker 未启动，MySQL Testcontainers 用例也按设计跳过，因此容器迁移仍需在 Docker 可用环境取得实际通过证据。

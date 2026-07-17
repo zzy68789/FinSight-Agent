@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * 扫描并恢复心跳超时的股票报告任务。
@@ -65,10 +66,15 @@ public class StockReportRecoveryScheduler {
             if (!taskMapper.markStaleRetrying(task.id(), cutoff)) {
                 continue;
             }
-            executorService.submit(() -> runner.runExisting(
-                    task.ownerId(), task.id(), task.threadId(), request, StockReportProgressListener.noop()
-            ));
-            meterRegistry.counter("finsight.stock.workflow.recovery", "result", "resubmitted").increment();
+            try {
+                executorService.submit(() -> runner.runExisting(
+                        task.ownerId(), task.id(), task.threadId(), request, StockReportProgressListener.noop()
+                ));
+                meterRegistry.counter("finsight.stock.workflow.recovery", "result", "resubmitted").increment();
+            } catch (RejectedExecutionException e) {
+                taskMapper.markFailed(task.id(), "恢复任务提交失败：工作流执行队列已满");
+                meterRegistry.counter("finsight.stock.workflow.recovery", "result", "rejected").increment();
+            }
         }
     }
 }

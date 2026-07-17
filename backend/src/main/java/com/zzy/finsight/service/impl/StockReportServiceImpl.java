@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -54,7 +55,12 @@ public class StockReportServiceImpl implements StockReportService {
     }
 
     public void run(long ownerId, StockReportRequest request, SseEmitter emitter) {
-        executorService.submit(() -> runner.runNew(ownerId, request, progressListener(emitter)));
+        StockReportProgressListener listener = progressListener(emitter);
+        try {
+            executorService.submit(() -> runner.runNew(ownerId, request, listener));
+        } catch (RejectedExecutionException e) {
+            listener.onError(new IllegalStateException("当前报告生成任务较多，请稍后重试", e));
+        }
     }
 
     public void saveFeedback(long ownerId, long taskId, StockBadCaseFeedbackRequest request) {
@@ -79,9 +85,14 @@ public class StockReportServiceImpl implements StockReportService {
         if (!taskMapper.markRetrying(taskId, "FAILED")) {
             throw new IllegalStateException("股票报告任务状态已变化，请刷新后重试");
         }
-        executorService.submit(() -> runner.runExisting(
-                ownerId, taskId, task.threadId(), request, StockReportProgressListener.noop()
-        ));
+        try {
+            executorService.submit(() -> runner.runExisting(
+                    ownerId, taskId, task.threadId(), request, StockReportProgressListener.noop()
+            ));
+        } catch (RejectedExecutionException e) {
+            taskMapper.markFailed(taskId, "工作流执行队列已满，请稍后重试");
+            throw new IllegalStateException("当前报告生成任务较多，请稍后重试", e);
+        }
     }
 
     public StockReportTraceResponse trace(long ownerId, long taskId) {

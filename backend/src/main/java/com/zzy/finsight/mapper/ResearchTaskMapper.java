@@ -57,8 +57,8 @@ public interface ResearchTaskMapper {
             @Param("now") LocalDateTime now
     );
 
-    default void updateStage(long taskId, String stage, String leaseOwner, LocalDateTime leaseUntil) {
-        updateRunningStage(taskId, stage, leaseOwner, leaseUntil, LocalDateTime.now());
+    default boolean updateStage(long taskId, String stage, String leaseOwner, LocalDateTime leaseUntil) {
+        return updateRunningStage(taskId, stage, leaseOwner, leaseUntil, LocalDateTime.now()) == 1;
     }
 
     int updateRunningStage(

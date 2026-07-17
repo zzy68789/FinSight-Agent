@@ -12,11 +12,11 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **A股/ETF 解析**：普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`；常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
 - **金融数据快照**：通过 `FinancialDataProvider` 扩展点聚合上传报告、本地主档、Tavily fallback 和 TuShare Pro 数据源。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
-- **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，相同上下文只复用同一用户下已通过评审的报告。
-- **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
+- **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，`ReportReuseCoordinator` 只复用同一用户下已通过评审且重新评测通过的报告，并以有限等待的 single-flight 合并并发生成。
+- **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；步骤日志、Checkpoint 与租约心跳在同一事务中提交，SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
-- **引用与合规审查**：`CitationReviewer` 检查证据数量、报告期、指标引用和指标值展示；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
+- **引用与合规审查**：`CitationReviewer` 除检查证据数量、报告期和就近引用外，还会抽取正文中的百分比、倍数和金额并逐项对齐确定性指标/冻结证据；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
 - **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
 - **报告库与导出**：支持报告列表、版本查看、Markdown/PDF/Word 导出、收藏、软删除和加入 RAG。
@@ -134,7 +134,19 @@ spring:
     url: jdbc:mysql://localhost:3306/finsight?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: 123456
+
+finsight:
+  async:
+    workflow-threads: 8
+    workflow-queue-capacity: 32
+    financial-provider-threads: 6
+    financial-provider-queue-capacity: 24
+    financial-provider-timeout: PT15S
+  workflow:
+    singleflight-wait-timeout: PT7M
 ```
+
+工作流和 Provider 执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。Provider 聚合、TuShare 连接/读取和 single-flight 等待均有显式超时，不会无限占用线程。
 
 数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql`、`V2__stock_report_reliability.sql`、`V3__workflow_checkpoint_resume.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
 
@@ -324,6 +336,8 @@ GET /api/admin/system/health
 cd backend
 mvn.cmd test
 ```
+
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V3，并验证 Checkpoint、任务租约、报告复用租户隔离和事务回滚；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 

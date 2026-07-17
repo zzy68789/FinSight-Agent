@@ -7,10 +7,10 @@ import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,14 +25,22 @@ import java.util.stream.Collectors;
  */
 @Component
 public class CitationReviewer {
-    public static final String POLICY_VERSION = "citation-policy-v3-body-evidence";
-    private static final BigDecimal ABSOLUTE_TOLERANCE = new BigDecimal("0.01");
-    private static final BigDecimal RELATIVE_TOLERANCE = new BigDecimal("0.005");
+    public static final String POLICY_VERSION = "citation-policy-v4-full-numeric-facts";
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final Pattern CITATION_PATTERN = Pattern.compile("\\[E(\\d+)]");
     private static final List<String> DIRECTIONAL_TOKENS = List.of(
             "股价修复可期", "上涨空间明确", "分红托底", "值得买入", "建议买入", "看涨", "看好"
     );
+    private final ReportNumericFactVerifier numericFactVerifier;
+
+    public CitationReviewer() {
+        this(new ReportNumericFactVerifier());
+    }
+
+    @Autowired
+    public CitationReviewer(ReportNumericFactVerifier numericFactVerifier) {
+        this.numericFactVerifier = numericFactVerifier;
+    }
 
     /** 检查报告引用、报告期和指标展示是否可追溯。 */
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
@@ -108,6 +116,14 @@ public class CitationReviewer {
         Optional<String> marketNarrativeIssue = marketNarrativeIssue(body, snapshot);
         if (marketNarrativeIssue.isPresent()) {
             return CitationReviewResult.fail(marketNarrativeIssue.orElseThrow());
+        }
+        ReportNumericFactVerifier.Verification numericVerification = numericFactVerifier.verify(body, snapshot, metrics);
+        if (!numericVerification.passed()) {
+            ReportNumericFactVerifier.NumericClaim claim = numericVerification.unsupportedClaims().get(0);
+            return CitationReviewResult.fail(
+                    "NUMERIC_FACT_UNSUPPORTED: 第 " + claim.lineNumber() + " 行数值 " + claim.token()
+                            + " 无法从确定性指标或冻结证据中验证"
+            );
         }
         return CitationReviewResult.pass();
     }
@@ -201,17 +217,6 @@ public class CitationReviewer {
 
     /** 判断报告数值是否处于允许误差范围。 */
     public boolean withinTolerance(BigDecimal expected, BigDecimal actual) {
-        if (expected == null || actual == null) {
-            return false;
-        }
-        BigDecimal diff = expected.subtract(actual).abs();
-        if (diff.compareTo(ABSOLUTE_TOLERANCE) <= 0) {
-            return true;
-        }
-        if (BigDecimal.ZERO.compareTo(expected) == 0) {
-            return false;
-        }
-        BigDecimal relative = diff.divide(expected.abs(), MathContext.DECIMAL64);
-        return relative.compareTo(RELATIVE_TOLERANCE) <= 0;
+        return numericFactVerifier.withinTolerance(expected, actual);
     }
 }
