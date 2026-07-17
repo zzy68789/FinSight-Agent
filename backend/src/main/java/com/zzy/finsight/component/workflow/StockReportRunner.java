@@ -49,6 +49,7 @@ public class StockReportRunner {
     private final TaskRuntimeStateService runtimeStateService;
     private final ReportService reportService;
     private final FinancialReportFingerprinter fingerprinter;
+    private final ReportGenerationSingleFlight singleFlight;
     private final StockReportRequestCodec requestCodec;
     private final MeterRegistry meterRegistry;
     private final String leaseOwner = "stock-runner-" + UUID.randomUUID();
@@ -62,6 +63,7 @@ public class StockReportRunner {
             TaskRuntimeStateService runtimeStateService,
             ReportService reportService,
             FinancialReportFingerprinter fingerprinter,
+            ReportGenerationSingleFlight singleFlight,
             StockReportRequestCodec requestCodec,
             MeterRegistry meterRegistry
     ) {
@@ -73,6 +75,7 @@ public class StockReportRunner {
         this.runtimeStateService = runtimeStateService;
         this.reportService = reportService;
         this.fingerprinter = fingerprinter;
+        this.singleFlight = singleFlight;
         this.requestCodec = requestCodec;
         this.meterRegistry = meterRegistry;
     }
@@ -114,6 +117,7 @@ public class StockReportRunner {
             return;
         }
         runtimeStateService.taskCreated(taskId, threadId);
+        ReportGenerationSingleFlight.Flight generationFlight = null;
         try {
             runtimeStateService.markStatus(taskId, "RUNNING");
 
@@ -194,6 +198,53 @@ public class StockReportRunner {
             }
             meterRegistry.counter("finsight.stock.report.cache", "result", "miss").increment();
 
+            while (generationFlight == null) {
+                ReportGenerationSingleFlight.Flight candidate = singleFlight.acquire(ownerId, generationContextHash);
+                if (candidate.leader()) {
+                    generationFlight = candidate;
+                    meterRegistry.counter("finsight.stock.report.singleflight", "result", "leader").increment();
+                    break;
+                }
+
+                publish(taskId, threadId, progress, "cache_wait", mapOf(
+                        "generationContextHash", generationContextHash,
+                        "reason", "IDENTICAL_GENERATION_IN_PROGRESS"
+                ), 0L, 1);
+                meterRegistry.counter("finsight.stock.report.singleflight", "result", "follower").increment();
+                long waitStartedAt = System.nanoTime();
+                Optional<ReusableReportRecord> joinedReport = singleFlight.await(candidate);
+                Timer.builder("finsight.stock.report.singleflight.wait")
+                        .register(meterRegistry)
+                        .record(elapsedMs(waitStartedAt), TimeUnit.MILLISECONDS);
+                if (joinedReport.isPresent()) {
+                    ReusableReportRecord joined = joinedReport.orElseThrow();
+                    FinancialEvaluationResult joinedEvaluation = workflow.evaluation(joined.content(), snapshot, metrics);
+                    publish(taskId, threadId, progress, "evaluation", mapOf(
+                            "evaluation", joinedEvaluation,
+                            "rewriteCount", 0,
+                            "cacheCandidate", true,
+                            "coalesced", true
+                    ), 0L, 1);
+                    if (isPass(joinedEvaluation.status())) {
+                        reportService.saveLatest(
+                                ownerId, threadId, taskId, joined.content(), "PASS", "",
+                                snapshotId, dataSnapshotHash, generationContextHash, joined.id()
+                        );
+                        publish(taskId, threadId, progress, "cache_hit", mapOf(
+                                "cacheHit", true,
+                                "coalesced", true,
+                                "reusedFromReportId", joined.id(),
+                                "dataSnapshotHash", dataSnapshotHash,
+                                "generationContextHash", generationContextHash
+                        ), 0L, 1);
+                        meterRegistry.counter("finsight.stock.report.cache", "result", "hit").increment();
+                        completeTask(taskId, threadId, progress, "PASS", 0, true);
+                        return;
+                    }
+                }
+                meterRegistry.counter("finsight.stock.report.singleflight", "result", "retry").increment();
+            }
+
             publish(taskId, threadId, progress, "evidence_collect", mapOf(
                     "evidence", snapshot.evidenceItems(),
                     "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count(),
@@ -249,12 +300,24 @@ public class StockReportRunner {
                     ? ""
                     : (review.reason() + " " + compliance.issues() + " "
                     + evaluation.failedReasons()).trim();
-            reportService.saveLatest(
+            long savedReportId = reportService.saveLatest(
                     ownerId, threadId, taskId, report, finalStatus, critique,
                     snapshotId, dataSnapshotHash, generationContextHash, null
             );
+            if (isPass(finalStatus) && savedReportId > 0L) {
+                singleFlight.complete(
+                        generationFlight,
+                        new ReusableReportRecord(savedReportId, report, finalStatus)
+                );
+            } else {
+                singleFlight.completeWithoutReusable(generationFlight);
+            }
+            generationFlight = null;
             completeTask(taskId, threadId, progress, finalStatus, Math.max(0, writerAttempts - 1), false);
         } catch (Exception e) {
+            if (generationFlight != null) {
+                singleFlight.fail(generationFlight);
+            }
             taskMapper.markFailed(taskId, e.getMessage());
             runtimeStateService.markStatus(taskId, "FAILED");
             stepLogMapper.saveError(taskId, "stock_report_workflow", e);

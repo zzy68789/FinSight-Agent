@@ -34,7 +34,7 @@ public class ReportServiceImpl implements ReportService {
         saveLatest(ownerId, threadId, taskId, report, reviewStatus, critique, null, null, null, null);
     }
 
-    public void saveLatest(
+    public long saveLatest(
             long ownerId,
             String threadId,
             long taskId,
@@ -48,9 +48,10 @@ public class ReportServiceImpl implements ReportService {
     ) {
         if (threadId != null && report != null && !report.isBlank()) {
             latestReportByThread.put(cacheKey(ownerId, threadId), report);
-            reportMapper.save(ownerId, taskId, threadId, report, reviewStatus, critique,
+            return reportMapper.save(ownerId, taskId, threadId, report, reviewStatus, critique,
                     snapshotId, dataSnapshotHash, generationContextHash, reusedFromReportId);
         }
+        return 0L;
     }
 
     public Optional<ReusableReportRecord> findReusable(long ownerId, String generationContextHash) {

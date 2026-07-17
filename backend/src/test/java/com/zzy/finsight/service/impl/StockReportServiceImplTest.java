@@ -1,6 +1,7 @@
 package com.zzy.finsight.service.impl;
 
 import com.zzy.finsight.component.workflow.FinancialReportFingerprinter;
+import com.zzy.finsight.component.workflow.ReportGenerationSingleFlight;
 import com.zzy.finsight.component.workflow.StockReportProgressListener;
 import com.zzy.finsight.component.workflow.StockReportRunner;
 import com.zzy.finsight.component.workflow.StockReportWorkflow;
@@ -32,6 +33,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,6 +85,7 @@ class StockReportServiceImplTest {
                 runtimeStateService,
                 reportService,
                 fingerprinter,
+                new ReportGenerationSingleFlight(),
                 new StockReportRequestCodec(new ObjectMapper()),
                 new SimpleMeterRegistry()
         );
@@ -247,5 +254,71 @@ class StockReportServiceImplTest {
                 21L, "data-hash", "context-hash", 99L
         );
         verify(taskMapper).markCompleted(11L);
+    }
+
+    @Test
+    void coalescesConcurrentGenerationForSameOwnerAndContext() throws Exception {
+        when(taskMapper.create(anyLong(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(11L, 12L);
+        when(taskMapper.startAttempt(eq(12L), anyString(), any(LocalDateTime.class))).thenReturn(true);
+        when(snapshotMapper.saveSnapshot(
+                eq(7L), anyLong(), eq("stock-thread"), eq(snapshot), eq("COLLECTED"), eq("data-hash")
+        )).thenReturn(21L, 22L);
+        when(snapshotMapper.findSnapshot(7L, 12L)).thenReturn(Optional.empty());
+        when(snapshotMapper.findMetrics(12L)).thenReturn(List.of());
+        when(reportService.findByTask(7L, 12L)).thenReturn(Optional.empty());
+        when(workflow.review(anyString(), eq(snapshot), eq(metrics))).thenReturn(CitationReviewResult.pass());
+        when(reportService.saveLatest(
+                anyLong(), anyString(), anyLong(), anyString(), anyString(), anyString(),
+                any(), anyString(), anyString(), any()
+        )).thenAnswer(invocation -> invocation.<Long>getArgument(9) == null ? 99L : 100L);
+
+        CountDownLatch followerWaiting = new CountDownLatch(1);
+        when(workflow.write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any()))
+                .thenAnswer(invocation -> {
+                    if (!followerWaiting.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("并发请求未进入等待状态");
+                    }
+                    return "报告正文";
+                });
+        StockReportProgressListener listener = new StockReportProgressListener() {
+            @Override
+            public void onStep(String step, Object data) {
+                if ("cache_wait".equals(step)) {
+                    followerWaiting.countDown();
+                }
+            }
+
+            @Override
+            public void onDone() {
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+        };
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Long> first = executor.submit(() -> runner.runNew(7L, request, listener));
+            Future<Long> second = executor.submit(() -> runner.runNew(7L, request, listener));
+
+            assertThat(first.get(10, TimeUnit.SECONDS)).isIn(11L, 12L);
+            assertThat(second.get(10, TimeUnit.SECONDS)).isIn(11L, 12L);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        verify(workflow, times(1)).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(reportService, times(2)).saveLatest(
+                anyLong(), anyString(), anyLong(), anyString(), anyString(), anyString(),
+                any(), anyString(), anyString(), any()
+        );
+        verify(reportService).saveLatest(
+                eq(7L), eq("stock-thread"), anyLong(), eq("报告正文"), eq("PASS"), eq(""),
+                any(), eq("data-hash"), eq("context-hash"), eq(99L)
+        );
+        verify(taskMapper).markCompleted(11L);
+        verify(taskMapper).markCompleted(12L);
     }
 }

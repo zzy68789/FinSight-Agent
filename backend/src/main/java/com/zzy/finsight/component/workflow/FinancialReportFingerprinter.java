@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Comparator;
+import java.util.stream.Stream;
 
 /**
  * 计算数据快照和报告生成上下文指纹。
@@ -44,25 +44,32 @@ public class FinancialReportFingerprinter {
         append(canonical, subject.industry());
         append(canonical, snapshot.reportPeriod());
         append(canonical, snapshot.searchMode());
-        snapshot.evidenceItems().stream()
-                .sorted(Comparator
-                        .comparing((FinancialEvidenceItem item) -> safe(item.sourceType()))
-                        .thenComparing(item -> safe(item.sourceName()))
-                        .thenComparing(item -> safe(item.metricName()))
-                        .thenComparing(item -> item.asOf() == null ? "" : item.asOf().toString())
-                        .thenComparing(item -> safe(item.excerpt())))
-                .forEach(item -> {
-                    append(canonical, item.sourceType());
-                    append(canonical, item.sourceName());
-                    append(canonical, item.reportPeriod());
-                    append(canonical, item.metricName());
-                    append(canonical, decimal(item.rawValue()));
-                    append(canonical, decimal(item.normalizedValue()));
-                    append(canonical, item.excerpt());
-                    append(canonical, item.asOf() == null ? "" : item.asOf().toString());
-                    append(canonical, item.issueCode());
-                });
+        evidenceItems(snapshot).map(this::canonicalEvidence)
+                .sorted()
+                .forEach(value -> append(canonical, value));
         return sha256(canonical.toString());
+    }
+
+    private Stream<FinancialEvidenceItem> evidenceItems(FinancialSnapshot snapshot) {
+        return snapshot.evidenceItems() == null ? Stream.empty() : snapshot.evidenceItems().stream();
+    }
+
+    /**
+     * 只纳入会影响报告正文或引用定位的业务字段，采集时间不参与缓存身份计算。
+     */
+    private String canonicalEvidence(FinancialEvidenceItem item) {
+        StringBuilder canonical = new StringBuilder();
+        append(canonical, item.sourceType());
+        append(canonical, item.sourceName());
+        append(canonical, item.url());
+        append(canonical, item.pageNumber() == null ? "" : item.pageNumber().toString());
+        append(canonical, item.reportPeriod());
+        append(canonical, item.metricName());
+        append(canonical, decimal(item.rawValue()));
+        append(canonical, decimal(item.normalizedValue()));
+        append(canonical, item.excerpt());
+        append(canonical, item.issueCode());
+        return canonical.toString();
     }
 
     /** 结合指标版本计算报告生成上下文摘要。 */

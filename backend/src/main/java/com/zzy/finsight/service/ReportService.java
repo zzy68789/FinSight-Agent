@@ -17,8 +17,8 @@ public interface ReportService {
     /** 保存任务生成的最新报告及评审结果。 */
     void saveLatest(long ownerId, String threadId, long taskId, String report, String reviewStatus, String critique);
 
-    /** 保存带快照指纹和复用来源的报告版本。 */
-    void saveLatest(
+    /** 保存带快照指纹和复用来源的报告版本，并返回持久化报告标识。 */
+    long saveLatest(
             long ownerId,
             String threadId,
             long taskId,
