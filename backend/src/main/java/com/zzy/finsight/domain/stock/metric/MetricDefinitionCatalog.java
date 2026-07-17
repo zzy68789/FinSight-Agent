@@ -8,7 +8,7 @@ import java.util.Map;
  * 集中维护金融指标定义及目录版本。
  */
 public class MetricDefinitionCatalog {
-    public static final String CATALOG_VERSION = "financial-metrics-v2-period-aligned";
+    public static final String CATALOG_VERSION = "financial-metrics-v3-etf-depth";
 
     private final Map<String, MetricDefinition> definitions;
 
@@ -35,6 +35,9 @@ public class MetricDefinitionCatalog {
         register(items, "etf_close", "ETF收盘价", "ETF二级市场收盘价", FinancialMetricInputNames.ETF_CLOSE);
         register(items, "etf_pct_change", "ETF涨跌幅", "ETF二级市场涨跌幅", FinancialMetricInputNames.ETF_PCT_CHANGE);
         register(items, "etf_amount", "ETF成交额", "ETF二级市场成交额", FinancialMetricInputNames.ETF_AMOUNT);
+        register(items, "etf_unit_nav", "ETF单位净值", "ETF最新披露单位净值", FinancialMetricInputNames.ETF_UNIT_NAV);
+        register(items, "etf_premium_discount", "ETF折溢价率", "（收盘价 - 同日单位净值）/ 同日单位净值",
+                FinancialMetricInputNames.ETF_PREMIUM_DISCOUNT_RATE);
         definitions = Map.copyOf(items);
     }
 

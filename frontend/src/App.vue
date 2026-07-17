@@ -716,6 +716,10 @@
               <p class="mt-1 text-sm text-slate-500">查看、收藏、加入知识库或导出当前报告</p>
             </div>
             <div class="flex flex-wrap gap-2">
+              <RouterLink v-if="selectedReport" :to="`/reports/${selectedReport.id}`" class="flex min-h-9 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100">
+                <ExternalLinkIcon class="h-4 w-4" aria-hidden="true" />
+                独立研究页
+              </RouterLink>
               <button type="button" class="flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-45" :disabled="!selectedReport" @click="copySelectedReport">
                 <CopyIcon class="h-4 w-4" aria-hidden="true" />
                 复制
@@ -931,6 +935,7 @@ import {
     DatabaseIcon,
     DownloadIcon,
     EyeIcon,
+    ExternalLinkIcon,
     BookOpenIcon,
     FileOutputIcon,
     FileTextIcon,
@@ -1011,6 +1016,7 @@ const financialSnapshotSummary = ref(null);
 const financialRiskAssessment = ref(null);
 const financialCompliance = ref(null);
 const financialEvaluation = ref(null);
+const bullBearResearch = ref(null);
 const financialProviderStages = ref([]);
 const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
@@ -1230,6 +1236,7 @@ const currentStepLabel = (step) => {
         metric_engine: '指标计算',
         risk_assessment: '风险评分',
         evidence_collect: '证据账本',
+        bull_bear_research: '多空研究',
         writer: '撰写中',
         reviewer: '质检中',
         evaluation: '评测中',
@@ -1246,6 +1253,7 @@ const stepNameLabel = (step) => {
         metric_engine: '指标计算',
         risk_assessment: '风险评分',
         evidence_collect: '证据账本',
+        bull_bear_research: '多空研究 Agent',
         writer: '撰写',
         reviewer: '质检',
         evaluation: '评测'
@@ -1504,6 +1512,7 @@ const startStockResearch = async () => {
     financialRiskAssessment.value = null;
     financialCompliance.value = null;
     financialEvaluation.value = null;
+    bullBearResearch.value = null;
     financialProviderStages.value = [];
     stockReplay.value = null;
     stockTrace.value = null;
@@ -1579,6 +1588,11 @@ const handleStockEvent = (event) => {
         financialEvidence.value = payload.evidence || [];
         financialProviderStages.value = payload.stageResults || payload.stage_results || [];
         logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
+    } else if (event.step === 'bull_bear_research') {
+        bullBearResearch.value = payload.research || null;
+        const bullCount = bullBearResearch.value?.bullCases?.length || 0;
+        const bearCount = bullBearResearch.value?.bearCases?.length || 0;
+        logs.value.push(`[多空研究] 多头 ${bullCount} 条、空头 ${bearCount} 条论据已绑定证据编号。`);
     } else if (event.step === 'writer') {
         const generationMode = payload.generation_mode || payload.generationMode || '';
         const fallbackReason = payload.fallback_reason || payload.fallbackReason || '';

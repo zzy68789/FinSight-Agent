@@ -1,6 +1,7 @@
 package com.zzy.finsight.infrastructure.provider;
 
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
+import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.StockAssetType;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
@@ -172,28 +173,61 @@ class TushareMarketDataProviderTest {
         );
         StockSubject subject = new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF);
 
-        expectApi(server, "fund_daily", "588200.SH", "ts_code,trade_date,close,pct_chg,amount", "\"trade_date\":\"20260706\"", """
+        expectApi(server, "fund_daily", "588200.SH", "ts_code,trade_date,open,high,low,close,pre_close,pct_chg,vol,amount", "\"end_date\":\"20260706\"", """
                 {
                   "code": 0,
                   "msg": "",
                   "data": {
-                    "fields": ["ts_code", "trade_date", "close", "pct_chg", "amount"],
+                    "fields": ["ts_code", "trade_date", "open", "high", "low", "close", "pre_close", "pct_chg", "vol", "amount"],
                     "items": [
-                      ["588200.SH", "20260706", 1.234, 2.15, 35000.00]
+                      ["588200.SH", "20260706", 1.20, 1.25, 1.19, 1.234, 1.208, 2.15, 280000.00, 35000.00],
+                      ["588200.SH", "20260703", 1.18, 1.22, 1.17, 1.208, 1.19, 1.51, 240000.00, 31000.00]
                     ]
                   }
                 }
                 """);
+        expectApi(server, "fund_basic", "588200.SH",
+                "ts_code,name,management,custodian,fund_type,list_date,m_fee,c_fee,benchmark,invest_type", null, """
+                {
+                  "code": 0,
+                  "msg": "",
+                  "data": {
+                    "fields": ["ts_code", "name", "management", "custodian", "fund_type", "list_date", "m_fee", "c_fee", "benchmark", "invest_type"],
+                    "items": [["588200.SH", "科创芯片ETF", "示例基金", "示例银行", "股票型", "20220101", 0.50, 0.10, "科创芯片指数", "被动指数型"]]
+                  }
+                }
+                """);
+        expectApi(server, "fund_nav", "588200.SH",
+                "ts_code,ann_date,nav_date,unit_nav,accum_nav,total_netasset", "\"end_date\":\"20260706\"", """
+                {
+                  "code": 0,
+                  "msg": "",
+                  "data": {
+                    "fields": ["ts_code", "ann_date", "nav_date", "unit_nav", "accum_nav", "total_netasset"],
+                    "items": [["588200.SH", "20260706", "20260706", 1.200, 1.320, 4500000000.00]]
+                  }
+                }
+                """);
 
-        List<FinancialEvidenceItem> items = provider.collect(7L, subject, "20260706", "hybrid");
+        FinancialDataCollection collection = provider.collectWithTrace(7L, subject, "20260706", "hybrid");
+        List<FinancialEvidenceItem> items = collection.evidenceItems();
 
         assertThat(items).extracting(FinancialEvidenceItem::metricName)
-                .containsExactly(
+                .contains(
                         FinancialMetricInputNames.ETF_CLOSE,
                         FinancialMetricInputNames.ETF_PCT_CHANGE,
-                        FinancialMetricInputNames.ETF_AMOUNT
+                        FinancialMetricInputNames.ETF_AMOUNT,
+                        FinancialMetricInputNames.ETF_UNIT_NAV,
+                        FinancialMetricInputNames.ETF_ACCUMULATED_NAV,
+                        FinancialMetricInputNames.ETF_TOTAL_NET_ASSET,
+                        FinancialMetricInputNames.ETF_PREMIUM_DISCOUNT_RATE,
+                        FinancialMetricInputNames.ETF_PROFILE
                 );
         assertThat(items).allMatch(FinancialEvidenceItem::effective);
+        assertThat(collection.marketSeries()).hasSize(2);
+        assertThat(collection.marketSeries().get(0).tradeDate()).isEqualTo("20260703");
+        assertThat(collection.etfDeepData().fundName()).isEqualTo("科创芯片ETF");
+        assertThat(collection.etfDeepData().premiumDiscountRate()).isEqualByComparingTo("2.8333");
         server.verify();
     }
 

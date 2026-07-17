@@ -14,6 +14,7 @@ import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.BullBearResearchResult;
 import com.zzy.finsight.dto.stock.StockReportRequest;
 import com.zzy.finsight.infrastructure.serialization.StockReportRequestCodec;
 import com.zzy.finsight.mapper.FinancialSnapshotMapper;
@@ -127,7 +128,12 @@ class StockReportServiceImplTest {
         when(workflow.riskAssessment(metrics, snapshot)).thenReturn(new FinancialRiskAssessment(
                 new BigDecimal("5.00"), "MEDIUM", List.of(), List.of()
         ));
-        when(workflow.write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any())).thenReturn("报告正文");
+        when(workflow.bullBearResearch(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class)))
+                .thenReturn(BullBearResearchResult.empty());
+        when(workflow.write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        )).thenReturn("报告正文");
         when(workflow.compliance(anyString(), any(CitationReviewResult.class))).thenReturn(
                 new FinancialComplianceReviewResult("PASS", new BigDecimal("100.00"), List.of())
         );
@@ -144,7 +150,10 @@ class StockReportServiceImplTest {
 
         runner.runNew(7L, request, StockReportProgressListener.noop());
 
-        verify(workflow, times(2)).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(workflow, times(2)).write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        );
         verify(reportService).saveLatest(
                 7L, "stock-thread", 11L, "报告正文", "PASS", "",
                 21L, "data-hash", "context-hash", null
@@ -160,7 +169,10 @@ class StockReportServiceImplTest {
 
         runner.runNew(7L, request, StockReportProgressListener.noop());
 
-        verify(workflow, times(3)).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(workflow, times(3)).write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        );
         verify(reportService).saveLatest(
                 eq(7L), eq("stock-thread"), eq(11L), eq("报告正文"), eq("FAIL"), anyString(),
                 eq(21L), eq("data-hash"), eq("context-hash"), eq(null)
@@ -210,7 +222,10 @@ class StockReportServiceImplTest {
 
     @Test
     void persistsWriterFallbackAsDegradedStep() {
-        when(workflow.write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any())).thenReturn("""
+        when(workflow.write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        )).thenReturn("""
                 <!-- FinSight generation-mode: template-fallback -->
                 <!-- FinSight fallback-reason: LLM_TIMEOUT -->
                 报告正文
@@ -252,7 +267,7 @@ class StockReportServiceImplTest {
 
         runner.runNew(7L, request, StockReportProgressListener.noop());
 
-        verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow, never()).write(any(), any(), any(), any(), any());
         verify(workflow).evaluation("缓存报告", snapshot, metrics);
         verify(reportService).saveLatest(
                 7L, "stock-thread", 11L, "缓存报告", "PASS", "",
@@ -279,7 +294,10 @@ class StockReportServiceImplTest {
         )).thenAnswer(invocation -> invocation.<Long>getArgument(9) == null ? 99L : 100L);
 
         CountDownLatch followerWaiting = new CountDownLatch(1);
-        when(workflow.write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any()))
+        when(workflow.write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        ))
                 .thenAnswer(invocation -> {
                     if (!followerWaiting.await(5, TimeUnit.SECONDS)) {
                         throw new IllegalStateException("并发请求未进入等待状态");
@@ -314,7 +332,10 @@ class StockReportServiceImplTest {
             executor.shutdownNow();
         }
 
-        verify(workflow, times(1)).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(workflow, times(1)).write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        );
         verify(reportService, times(2)).saveLatest(
                 anyLong(), anyString(), anyLong(), anyString(), anyString(), anyString(),
                 any(), anyString(), anyString(), any()
@@ -338,7 +359,7 @@ class StockReportServiceImplTest {
 
         runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
 
-        verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow, never()).write(any(), any(), any(), any(), any());
         verify(workflow).review("检查点报告", snapshot, metrics);
         verify(workflow).evaluation("检查点报告", snapshot, metrics);
         verify(reportService).saveLatest(
@@ -368,7 +389,7 @@ class StockReportServiceImplTest {
 
         runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
 
-        verify(workflow, never()).write(any(), any(), any(), any());
+        verify(workflow, never()).write(any(), any(), any(), any(), any());
         verify(workflow, never()).review(anyString(), any(), any());
         verify(workflow, never()).compliance(anyString(), any());
         verify(workflow).evaluation("检查点报告", snapshot, metrics);
@@ -384,7 +405,10 @@ class StockReportServiceImplTest {
 
         runner.runExisting(7L, 11L, "stock-thread", request, StockReportProgressListener.noop());
 
-        verify(workflow).write(eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class), any());
+        verify(workflow).write(
+                eq(snapshot), eq(metrics), any(FinancialRiskAssessment.class),
+                any(BullBearResearchResult.class), any()
+        );
         verify(taskMapper).markCompleted(11L);
     }
 

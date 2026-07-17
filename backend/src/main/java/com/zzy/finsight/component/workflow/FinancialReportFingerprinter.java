@@ -3,11 +3,14 @@ package com.zzy.finsight.component.workflow;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.MarketDataPoint;
+import com.zzy.finsight.domain.stock.EtfDeepData;
 import com.zzy.finsight.domain.stock.metric.MetricDefinitionCatalog;
 import com.zzy.finsight.component.review.CitationReviewer;
 import com.zzy.finsight.component.review.FinancialComplianceReviewer;
 import com.zzy.finsight.component.review.FinancialEvaluator;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
+import com.zzy.finsight.component.review.BullBearResearchAgent;
 import com.zzy.finsight.component.marketdata.FinancialEvidenceValidator;
 
 
@@ -47,6 +50,13 @@ public class FinancialReportFingerprinter {
         evidenceItems(snapshot).map(this::canonicalEvidence)
                 .sorted()
                 .forEach(value -> append(canonical, value));
+        snapshot.marketSeries().stream()
+                .map(this::canonicalMarketPoint)
+                .sorted()
+                .forEach(value -> append(canonical, value));
+        if (snapshot.etfDeepData() != null) {
+            append(canonical, canonicalEtfDeepData(snapshot.etfDeepData()));
+        }
         return sha256(canonical.toString());
     }
 
@@ -72,12 +82,46 @@ public class FinancialReportFingerprinter {
         return canonical.toString();
     }
 
+    private String canonicalMarketPoint(MarketDataPoint point) {
+        return String.join("|",
+                safe(point.tradeDate()),
+                decimal(point.open()),
+                decimal(point.high()),
+                decimal(point.low()),
+                decimal(point.close()),
+                decimal(point.previousClose()),
+                decimal(point.changePercent()),
+                decimal(point.volume()),
+                decimal(point.amount())
+        );
+    }
+
+    private String canonicalEtfDeepData(EtfDeepData data) {
+        return String.join("|",
+                safe(data.fundName()),
+                safe(data.management()),
+                safe(data.custodian()),
+                safe(data.fundType()),
+                safe(data.investType()),
+                safe(data.benchmark()),
+                safe(data.listDate()),
+                decimal(data.managementFee()),
+                decimal(data.custodyFee()),
+                safe(data.navDate()),
+                decimal(data.unitNav()),
+                decimal(data.accumulatedNav()),
+                decimal(data.totalNetAsset()),
+                decimal(data.premiumDiscountRate())
+        );
+    }
+
     /** 结合指标版本计算报告生成上下文摘要。 */
     public String generationContextHash(String dataSnapshotHash) {
         return sha256(String.join("|",
                 safe(dataSnapshotHash),
                 FinancialEvidenceValidator.POLICY_VERSION,
                 metricCatalog.catalogVersion(),
+                BullBearResearchAgent.POLICY_VERSION,
                 InvestmentReportWriter.WRITER_VERSION,
                 CitationReviewer.POLICY_VERSION,
                 FinancialComplianceReviewer.POLICY_VERSION,

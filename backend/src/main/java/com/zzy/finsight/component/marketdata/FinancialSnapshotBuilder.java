@@ -4,6 +4,8 @@ import com.zzy.finsight.domain.stock.FinancialAgentStageResult;
 import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
+import com.zzy.finsight.domain.stock.EtfDeepData;
+import com.zzy.finsight.domain.stock.MarketDataPoint;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.infrastructure.provider.FinancialDataProvider;
 import com.zzy.finsight.rag.RagRetrievalResult;
@@ -59,6 +61,8 @@ public class FinancialSnapshotBuilder {
         List<FinancialEvidenceItem> evidenceItems = new ArrayList<>();
         List<FinancialAgentStageResult> stageResults = new ArrayList<>();
         List<RagRetrievalResult> retrievalResults = new ArrayList<>();
+        List<MarketDataPoint> marketSeries = new ArrayList<>();
+        EtfDeepData etfDeepData = null;
         long deadlineNanos = System.nanoTime() + providerTimeout.toNanos();
         List<ProviderCall> calls = providers.stream()
                 .map(provider -> submitProvider(provider, ownerId, subject, reportPeriod, searchMode))
@@ -71,6 +75,10 @@ public class FinancialSnapshotBuilder {
             if (result.retrievalResult() != null) {
                 retrievalResults.add(result.retrievalResult());
             }
+            marketSeries.addAll(result.marketSeries());
+            if (etfDeepData == null && result.etfDeepData() != null) {
+                etfDeepData = result.etfDeepData();
+            }
         }
         FinancialSnapshot snapshot = new FinancialSnapshot(
                 subject,
@@ -79,6 +87,8 @@ public class FinancialSnapshotBuilder {
                 evidenceItems,
                 stageResults,
                 retrievalResults,
+                marketSeries,
+                etfDeepData,
                 LocalDateTime.now()
         );
         return evidenceValidator.validate(snapshot);
@@ -147,7 +157,9 @@ public class FinancialSnapshotBuilder {
             return new ProviderResult(
                     items,
                     new FinancialAgentStageResult(provider.name(), "SUCCESS", durationMs, items.size(), ""),
-                    collection == null ? null : collection.retrievalResult()
+                    collection == null ? null : collection.retrievalResult(),
+                    collection == null ? List.of() : collection.marketSeries(),
+                    collection == null ? null : collection.etfDeepData()
             );
         } catch (RuntimeException e) {
             long durationMs = Math.max(0, System.currentTimeMillis() - startedAt);
@@ -180,6 +192,8 @@ public class FinancialSnapshotBuilder {
         return new ProviderResult(
                 fallback,
                 new FinancialAgentStageResult(provider.name(), status, Math.max(0, durationMs), 0, detail),
+                null,
+                List.of(),
                 null
         );
     }
@@ -187,7 +201,9 @@ public class FinancialSnapshotBuilder {
     private record ProviderResult(
             List<FinancialEvidenceItem> evidenceItems,
             FinancialAgentStageResult stageResult,
-            RagRetrievalResult retrievalResult
+            RagRetrievalResult retrievalResult,
+            List<MarketDataPoint> marketSeries,
+            EtfDeepData etfDeepData
     ) {
     }
 

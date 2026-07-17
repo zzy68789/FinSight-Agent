@@ -2,6 +2,9 @@ package com.zzy.finsight.infrastructure.provider;
 
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
+import com.zzy.finsight.domain.stock.FinancialDataCollection;
+import com.zzy.finsight.domain.stock.EtfDeepData;
+import com.zzy.finsight.domain.stock.MarketDataPoint;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 
@@ -90,16 +93,23 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
 
     @Override
     public List<FinancialEvidenceItem> collect(long ownerId, StockSubject subject, String reportPeriod, String searchMode) {
+        return collectWithTrace(ownerId, subject, reportPeriod, searchMode).evidenceItems();
+    }
+
+    /** 采集证据，并为 ETF 附带行情序列和净值深度快照。 */
+    @Override
+    public FinancialDataCollection collectWithTrace(
+            long ownerId,
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode
+    ) {
         if (!enabled || token.isBlank() || "document".equalsIgnoreCase(searchMode)) {
-            return List.of();
+            return FinancialDataCollection.evidenceOnly(List.of());
         }
         try {
             if (subject.isEtf()) {
-                List<FinancialEvidenceItem> etfItems = fundDailyEvidence(subject, reportPeriod);
-                if (etfItems.isEmpty()) {
-                    return List.of(dataMissing(reportPeriod, "TuShare Pro 未返回可用 ETF 行情数据。"));
-                }
-                return etfItems;
+                return etfDeepCollection(subject, reportPeriod);
             }
             List<FinancialEvidenceItem> items = new ArrayList<>();
             items.addAll(incomeEvidence(subject, reportPeriod));
@@ -107,31 +117,205 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
             items.addAll(cashFlowEvidence(subject, reportPeriod));
             items.addAll(dailyBasicEvidence(subject, reportPeriod));
             if (items.isEmpty()) {
-                return List.of(dataMissing(reportPeriod, "TuShare Pro 未返回可用行情或财务数据。"));
+                return FinancialDataCollection.evidenceOnly(List.of(
+                        dataMissing(reportPeriod, "TuShare Pro 未返回可用行情或财务数据。")
+                ));
             }
-            return items;
+            return FinancialDataCollection.evidenceOnly(items);
         } catch (RuntimeException e) {
-            return List.of(dataMissing(reportPeriod, "TuShare Pro 数据不可用：" + e.getMessage()));
+            return FinancialDataCollection.evidenceOnly(List.of(
+                    dataMissing(reportPeriod, "TuShare Pro 数据不可用：" + e.getMessage())
+            ));
         }
     }
 
-    private List<FinancialEvidenceItem> fundDailyEvidence(StockSubject subject, String reportPeriod) {
-        List<Map<String, JsonNode>> rows = sortByDate(query(
-                "fund_daily",
-                subject,
-                reportPeriod,
-                "ts_code,trade_date,close,pct_chg,amount"
-        ), "trade_date");
-        if (rows.isEmpty()) {
-            return List.of();
-        }
-        Map<String, JsonNode> latest = rows.get(0);
-        String period = text(latest, "trade_date", reportPeriod);
+    /** 聚合 ETF 日线、基金资料和净值；单个深度接口失败时保留其余可用结果。 */
+    private FinancialDataCollection etfDeepCollection(StockSubject subject, String reportPeriod) {
         List<FinancialEvidenceItem> items = new ArrayList<>();
+        List<Map<String, JsonNode>> dailyRows = safeEtfQuery(
+                "fund_daily",
+                marketSeriesParams(subject, reportPeriod),
+                "ts_code,trade_date,open,high,low,close,pre_close,pct_chg,vol,amount",
+                items,
+                reportPeriod,
+                "ETF行情"
+        );
+        List<MarketDataPoint> marketSeries = marketSeries(dailyRows);
+        if (!dailyRows.isEmpty()) {
+            addLatestMarketEvidence(items, dailyRows.get(0), reportPeriod);
+        }
+
+        List<Map<String, JsonNode>> basicRows = safeEtfQuery(
+                "fund_basic",
+                Map.of("ts_code", subject.fullCode()),
+                "ts_code,name,management,custodian,fund_type,list_date,m_fee,c_fee,benchmark,invest_type",
+                items,
+                reportPeriod,
+                "ETF基础资料"
+        );
+        List<Map<String, JsonNode>> navRows = safeEtfQuery(
+                "fund_nav",
+                navParams(subject, reportPeriod),
+                "ts_code,ann_date,nav_date,unit_nav,accum_nav,total_netasset",
+                items,
+                reportPeriod,
+                "ETF净值"
+        );
+        EtfDeepData deepData = etfDeepData(basicRows, navRows, dailyRows);
+        addEtfDeepEvidence(items, deepData, reportPeriod);
+        if (items.isEmpty()) {
+            items.add(dataMissing(reportPeriod, "TuShare Pro 未返回可用 ETF 深度数据。"));
+        }
+        return new FinancialDataCollection(items, null, marketSeries, deepData);
+    }
+
+    private void addLatestMarketEvidence(
+            List<FinancialEvidenceItem> items,
+            Map<String, JsonNode> latest,
+            String reportPeriod
+    ) {
+        String period = text(latest, "trade_date", reportPeriod);
         addRawMetric(items, period, FinancialMetricInputNames.ETF_CLOSE, latest, "close", "ETF收盘价");
         addRawMetric(items, period, FinancialMetricInputNames.ETF_PCT_CHANGE, latest, "pct_chg", "ETF涨跌幅");
         addRawMetric(items, period, FinancialMetricInputNames.ETF_AMOUNT, latest, "amount", "ETF成交额");
-        return items;
+    }
+
+    private List<MarketDataPoint> marketSeries(List<Map<String, JsonNode>> rows) {
+        return rows.stream()
+                .limit(60)
+                .map(row -> new MarketDataPoint(
+                        text(row, "trade_date", ""),
+                        decimal(row, "open"),
+                        decimal(row, "high"),
+                        decimal(row, "low"),
+                        decimal(row, "close"),
+                        decimal(row, "pre_close"),
+                        decimal(row, "pct_chg"),
+                        decimal(row, "vol"),
+                        decimal(row, "amount")
+                ))
+                .sorted(Comparator.comparing(MarketDataPoint::tradeDate))
+                .toList();
+    }
+
+    private EtfDeepData etfDeepData(
+            List<Map<String, JsonNode>> basicRows,
+            List<Map<String, JsonNode>> navRows,
+            List<Map<String, JsonNode>> dailyRows
+    ) {
+        Map<String, JsonNode> basic = basicRows.isEmpty() ? Map.of() : basicRows.get(0);
+        List<Map<String, JsonNode>> sortedNav = sortByDate(navRows, "nav_date");
+        Map<String, JsonNode> nav = sortedNav.isEmpty() ? Map.of() : sortedNav.get(0);
+        String navDate = text(nav, "nav_date", "");
+        BigDecimal unitNav = decimal(nav, "unit_nav");
+        BigDecimal sameDayClose = dailyRows.stream()
+                .filter(row -> navDate.equals(text(row, "trade_date", "")))
+                .map(row -> decimal(row, "close"))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        BigDecimal premiumDiscountRate = unitNav == null || sameDayClose == null
+                || BigDecimal.ZERO.compareTo(unitNav) == 0
+                ? null
+                : sameDayClose.subtract(unitNav)
+                        .divide(unitNav, 8, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .setScale(4, RoundingMode.HALF_UP);
+        return new EtfDeepData(
+                text(basic, "name", ""),
+                text(basic, "management", ""),
+                text(basic, "custodian", ""),
+                text(basic, "fund_type", ""),
+                text(basic, "invest_type", ""),
+                text(basic, "benchmark", ""),
+                text(basic, "list_date", ""),
+                decimal(basic, "m_fee"),
+                decimal(basic, "c_fee"),
+                navDate,
+                unitNav,
+                decimal(nav, "accum_nav"),
+                decimal(nav, "total_netasset"),
+                premiumDiscountRate
+        );
+    }
+
+    private void addEtfDeepEvidence(
+            List<FinancialEvidenceItem> items,
+            EtfDeepData deepData,
+            String reportPeriod
+    ) {
+        String period = deepData.navDate().isBlank() ? reportPeriod : deepData.navDate();
+        addEtfValue(items, period, FinancialMetricInputNames.ETF_UNIT_NAV,
+                deepData.unitNav(), "ETF单位净值");
+        addEtfValue(items, period, FinancialMetricInputNames.ETF_ACCUMULATED_NAV,
+                deepData.accumulatedNav(), "ETF累计净值");
+        addEtfValue(items, period, FinancialMetricInputNames.ETF_TOTAL_NET_ASSET,
+                deepData.totalNetAsset(), "ETF合计资产净值（数据源原始口径）");
+        addEtfValue(items, period, FinancialMetricInputNames.ETF_PREMIUM_DISCOUNT_RATE,
+                deepData.premiumDiscountRate(), "ETF同日折溢价率");
+        if (!deepData.fundName().isBlank() || !deepData.management().isBlank() || !deepData.benchmark().isBlank()) {
+            String excerpt = "ETF资料：简称=" + blankToDefault(deepData.fundName(), "-")
+                    + "，管理人=" + blankToDefault(deepData.management(), "-")
+                    + "，托管人=" + blankToDefault(deepData.custodian(), "-")
+                    + "，基金类型=" + blankToDefault(deepData.fundType(), "-")
+                    + "，业绩比较基准=" + blankToDefault(deepData.benchmark(), "-");
+            items.add(evidence(period, FinancialMetricInputNames.ETF_PROFILE, null, null, excerpt));
+        }
+    }
+
+    private void addEtfValue(
+            List<FinancialEvidenceItem> items,
+            String period,
+            String metricName,
+            BigDecimal value,
+            String label
+    ) {
+        if (value != null) {
+            items.add(evidence(period, metricName, value, value, label + " " + value.toPlainString()));
+        }
+    }
+
+    private List<Map<String, JsonNode>> safeEtfQuery(
+            String apiName,
+            Map<String, Object> params,
+            String fields,
+            List<FinancialEvidenceItem> items,
+            String reportPeriod,
+            String label
+    ) {
+        try {
+            return sortByDate(query(apiName, params, fields), dateField(apiName));
+        } catch (RuntimeException e) {
+            items.add(metricMissing(reportPeriod, "ETF_" + apiName.toUpperCase(java.util.Locale.ROOT),
+                    label + "不可用：" + e.getMessage()));
+            return List.of();
+        }
+    }
+
+    private String dateField(String apiName) {
+        return "fund_nav".equals(apiName) ? "nav_date" : "fund_daily".equals(apiName) ? "trade_date" : "list_date";
+    }
+
+    private Map<String, Object> marketSeriesParams(StockSubject subject, String reportPeriod) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("ts_code", subject.fullCode());
+        LocalDate endDate = parsePeriod(reportPeriod);
+        if (endDate != null) {
+            params.put("start_date", endDate.minusDays(120).format(BASIC_DATE));
+            params.put("end_date", endDate.format(BASIC_DATE));
+        }
+        return params;
+    }
+
+    private Map<String, Object> navParams(StockSubject subject, String reportPeriod) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("ts_code", subject.fullCode());
+        LocalDate endDate = parsePeriod(reportPeriod);
+        if (endDate != null) {
+            params.put("start_date", endDate.minusDays(120).format(BASIC_DATE));
+            params.put("end_date", endDate.format(BASIC_DATE));
+        }
+        return params;
     }
 
     /** 选择唯一财报版本，并严格匹配相差一年的上年同期利润表。 */
@@ -261,6 +445,10 @@ public class TushareMarketDataProvider implements FinancialDataProvider {
                 params.put("end_date", reportPeriod);
             }
         }
+        return query(apiName, params, fields);
+    }
+
+    private List<Map<String, JsonNode>> query(String apiName, Map<String, Object> params, String fields) {
         JsonNode response = restClient.post()
                 .uri("")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -4,6 +4,8 @@ import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
+import com.zzy.finsight.domain.stock.BullBearResearchResult;
+import com.zzy.finsight.domain.stock.ResearchClaim;
 import com.zzy.finsight.domain.stock.StockAssetType;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
@@ -111,6 +113,26 @@ class InvestmentReportWriterTest {
         assertThat(report).doesNotContain("A股投研报告");
         assertThat(report).doesNotContain("ROE");
         assertThat(report).doesNotContain("毛利率");
+    }
+
+    @Test
+    void appendsEvidenceBoundBullBearResearchToFinalChapter() {
+        FinancialSnapshot snapshot = etfSnapshot();
+        BullBearResearchResult research = new BullBearResearchResult(
+                List.of(new ResearchClaim(
+                        "BULL", "正向指标", "ETF涨跌幅为 2.15%，构成待验证的正向条件。", List.of("E2"), "MEDIUM"
+                )),
+                List.of(new ResearchClaim(
+                        "BEAR", "数据缺口", "单位净值尚未取得，折溢价无法复核。", List.of(), "LOW"
+                )),
+                "多空结论只用于证据复核，不构成投资建议。",
+                "COMPLETED"
+        );
+
+        String report = writer.write(snapshot, etfMetrics(), risk(snapshot), research, null);
+
+        assertThat(report).contains("### 多空研究 Agent", "**多头角色**", "**空头角色**", "[E2]");
+        assertThat(report.indexOf("### 多空研究 Agent")).isLessThan(report.indexOf("## 引用与数据快照"));
     }
 
     @Test

@@ -39,7 +39,9 @@ public class FinancialMetricEngine {
             return List.of(
                     etfMetric("etf_close", inputs),
                     etfMetric("etf_pct_change", inputs),
-                    etfMetric("etf_amount", inputs)
+                    etfMetric("etf_amount", inputs),
+                    etfMetric("etf_unit_nav", inputs),
+                    etfMetric("etf_premium_discount", inputs)
             );
         }
         return List.of(
@@ -62,7 +64,7 @@ public class FinancialMetricEngine {
         }
         BigDecimal value = item.normalizedValue();
         String display = value.setScale("ETF涨跌幅".equals(name) ? 2 : 3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
-        if ("ETF涨跌幅".equals(name)) {
+        if ("ETF涨跌幅".equals(name) || "ETF折溢价率".equals(name)) {
             display = display + "%";
         }
         return result(definition, value, display, "OK", "");

@@ -49,6 +49,8 @@ public class FinancialEvidenceValidator {
                 items,
                 snapshot.stageResults(),
                 snapshot.retrievalResults(),
+                snapshot.marketSeries(),
+                snapshot.etfDeepData(),
                 snapshot.createdAt()
         );
     }

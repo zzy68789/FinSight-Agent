@@ -7,6 +7,7 @@ import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.BullBearResearchResult;
 import com.zzy.finsight.dto.stock.StockReportRequest;
 import com.zzy.finsight.component.analysis.FinancialMetricEngine;
 import com.zzy.finsight.component.analysis.FinancialRiskScorer;
@@ -15,9 +16,11 @@ import com.zzy.finsight.component.review.CitationReviewer;
 import com.zzy.finsight.component.review.FinancialComplianceReviewer;
 import com.zzy.finsight.component.review.FinancialEvaluator;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
+import com.zzy.finsight.component.review.BullBearResearchAgent;
 
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
@@ -30,6 +33,7 @@ public class StockReportWorkflow {
     private final FinancialSnapshotBuilder snapshotBuilder;
     private final FinancialMetricEngine metricEngine;
     private final FinancialRiskScorer riskScorer;
+    private final BullBearResearchAgent bullBearResearchAgent;
     private final InvestmentReportWriter reportWriter;
     private final CitationReviewer citationReviewer;
     private final FinancialComplianceReviewer complianceReviewer;
@@ -45,10 +49,27 @@ public class StockReportWorkflow {
             FinancialComplianceReviewer complianceReviewer,
             FinancialEvaluator evaluator
     ) {
+        this(stockCodeResolver, snapshotBuilder, metricEngine, riskScorer, new BullBearResearchAgent(),
+                reportWriter, citationReviewer, complianceReviewer, evaluator);
+    }
+
+    @Autowired
+    public StockReportWorkflow(
+            StockCodeResolver stockCodeResolver,
+            FinancialSnapshotBuilder snapshotBuilder,
+            FinancialMetricEngine metricEngine,
+            FinancialRiskScorer riskScorer,
+            BullBearResearchAgent bullBearResearchAgent,
+            InvestmentReportWriter reportWriter,
+            CitationReviewer citationReviewer,
+            FinancialComplianceReviewer complianceReviewer,
+            FinancialEvaluator evaluator
+    ) {
         this.stockCodeResolver = stockCodeResolver;
         this.snapshotBuilder = snapshotBuilder;
         this.metricEngine = metricEngine;
         this.riskScorer = riskScorer;
+        this.bullBearResearchAgent = bullBearResearchAgent;
         this.reportWriter = reportWriter;
         this.citationReviewer = citationReviewer;
         this.complianceReviewer = complianceReviewer;
@@ -75,6 +96,15 @@ public class StockReportWorkflow {
         return riskScorer.assess(metrics, snapshot.evidenceItems());
     }
 
+    /** 让多头与空头研究角色基于同一证据快照形成条件化论据。 */
+    public BullBearResearchResult bullBearResearch(
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment
+    ) {
+        return bullBearResearchAgent.analyze(snapshot, metrics, riskAssessment);
+    }
+
     /** 生成带证据引用的投研报告正文。 */
     public String write(
             FinancialSnapshot snapshot,
@@ -83,6 +113,17 @@ public class StockReportWorkflow {
             CitationReviewResult previousReview
     ) {
         return reportWriter.write(snapshot, metrics, riskAssessment, previousReview);
+    }
+
+    /** 将多空研究结果合并到报告草稿后生成带证据引用的正文。 */
+    public String write(
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment,
+            BullBearResearchResult bullBearResearch,
+            CitationReviewResult previousReview
+    ) {
+        return reportWriter.write(snapshot, metrics, riskAssessment, bullBearResearch, previousReview);
     }
 
     /** 审查报告中的引用和指标一致性。 */

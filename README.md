@@ -11,10 +11,13 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **证券代码报告链路**：`POST /api/stock-reports` 通过 SSE 推送证券代码解析、数据快照、指标计算、风险评分、证据收集、报告撰写、引用/合规审查和自动评测结果。
 - **A股/ETF 解析**：普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`；常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
 - **金融数据快照**：通过 `FinancialDataProvider` 扩展点聚合上传报告、本地主档、Tavily fallback 和 TuShare Pro 数据源。
+- **ETF 深度快照**：ETF 聚合 TuShare `fund_daily`、`fund_basic`、`fund_nav`，保存 60 日 OHLC/成交量/成交额、基金资料、单位/累计净值、资产净值和同日折溢价；单接口失败按项降级。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
 - **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，`ReportReuseCoordinator` 只复用同一用户下已通过评审且重新评测通过的报告，并以有限等待的 single-flight 合并并发生成。
 - **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；步骤日志、Checkpoint 与租约心跳在同一事务中提交，SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
+- **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
+- **证据约束多空角色**：`BullBearResearchAgent` 基于同一确定性指标/风险快照输出多头和空头条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 除检查证据数量、报告期和就近引用外，还会抽取正文中的百分比、倍数和金额并逐项对齐确定性指标/冻结证据；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
 - **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
@@ -28,7 +31,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - 通用 deep-research 已从前后端完整移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService`、`ChatRequest`、`/api/chat` 控制器及前端 `streamChat`/双模式入口。
 - 金融投研链路已按严格 Spring MVC 职责拆分：`controller` 只依赖 `service` 接口，具体实现位于 `service/impl`；计算、采集、审查和工作流位于 `component`；MyBatis 类型转换、数据源和序列化适配位于 `infrastructure`。公开入口仍为 `/api/stock-reports`。
 - RAG、搜索、报告库、用户、管理员后台等基础设施继续复用，但定位为金融投研链路的支撑能力。
-- 前端 Run 工作区只保留证券代码分析，直接输入 A股或 ETF 代码进入 `/api/stock-reports`，执行轨迹固定展示金融报告阶段。
+- 前端 Run 工作区只保留证券代码分析，直接输入 A股或 ETF 代码进入 `/api/stock-reports`；报告库可跳转到独立研究页查看行情、证据、多空论据和版本差异。
 
 ## 技术栈
 
@@ -53,6 +56,8 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - markdown-it
 - markdown-it-katex
 - lucide-vue-next
+- Vue Router
+- ECharts
 
 ## 金融工作流
 
@@ -62,6 +67,7 @@ StockResolve
   -> MetricEngine
   -> RiskAssessment
   -> EvidenceCollect
+  -> BullBearResearch
   -> InvestmentWriter
   -> CitationReviewer + ComplianceReviewer
   -> Evaluation
@@ -300,6 +306,14 @@ POST /api/reports/{reportId}/knowledge-base
 DELETE /api/reports/{reportId}
 ```
 
+登录后可从报告库点击“独立研究页”，或直接访问前端路由：
+
+```text
+/reports/{reportId}
+```
+
+该页面仍通过现有归属校验 API 读取报告、同会话版本、任务回放和步骤日志，不创建跨用户读取入口。
+
 ### 管理员后台
 
 ```http
@@ -373,5 +387,5 @@ npm.cmd run build
 
 - 当前仓库聚焦金融投研报告 Agent，不再对外提供通用 `/api/chat` deep-research 链路。
 - 前端不再包含通用研究按钮、自由主题输入或失效的通用报告修订入口；报告库继续提供查看、收藏、加入 RAG 和导出能力。
-- TuShare 真实 token、缓存、限速、接口权限错误提示和更多行情序列仍需继续硬化。
-- ETF 深度数据、ECharts 行情图、多空辩论、评测趋势管理页面和真实 MySQL 迁移集成测试属于后续增强。
+- TuShare 真实 token、缓存、限速、接口权限错误提示仍需继续硬化；ETF `total_netasset` 展示单位也需真实数据复核。
+- ETF 持仓、跟踪误差、申赎清单、普通股票行情图、高级技术指标、风险裁判、评测趋势管理页面和真实 MySQL 迁移集成实跑属于后续增强。

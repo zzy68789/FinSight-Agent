@@ -24,6 +24,11 @@ public final class FinancialMetricInputNames {
     public static final String ETF_CLOSE = "ETF_CLOSE";
     public static final String ETF_PCT_CHANGE = "ETF_PCT_CHANGE";
     public static final String ETF_AMOUNT = "ETF_AMOUNT";
+    public static final String ETF_UNIT_NAV = "ETF_UNIT_NAV";
+    public static final String ETF_ACCUMULATED_NAV = "ETF_ACCUMULATED_NAV";
+    public static final String ETF_TOTAL_NET_ASSET = "ETF_TOTAL_NET_ASSET";
+    public static final String ETF_PREMIUM_DISCOUNT_RATE = "ETF_PREMIUM_DISCOUNT_RATE";
+    public static final String ETF_PROFILE = "ETF_PROFILE";
 
     private FinancialMetricInputNames() {
     }

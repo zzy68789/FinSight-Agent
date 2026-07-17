@@ -73,8 +73,9 @@ class FinancialMetricEngineTest {
         List<FinancialMetricResult> results = engine.compute(snapshot);
 
         assertThat(results).extracting(FinancialMetricResult::metricName)
-                .containsExactly("ETF收盘价", "ETF涨跌幅", "ETF成交额");
-        assertThat(results).allMatch(result -> "OK".equals(result.status()));
+                .containsExactly("ETF收盘价", "ETF涨跌幅", "ETF成交额", "ETF单位净值", "ETF折溢价率");
+        assertThat(results.subList(0, 3)).allMatch(result -> "OK".equals(result.status()));
+        assertThat(results.subList(3, 5)).allMatch(result -> "MISSING_INPUT".equals(result.status()));
         assertThat(results).noneMatch(result -> "ROE".equals(result.metricName()) || "毛利率".equals(result.metricName()));
     }
 

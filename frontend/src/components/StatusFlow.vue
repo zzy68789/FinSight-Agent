@@ -75,12 +75,13 @@ const steps = [
   { id: 'metric_engine', code: 'METRIC', label: '指标计算', desc: '用 Java 确定性计算核心财务指标', icon: FilePenLineIcon },
   { id: 'risk_assessment', code: 'RISK', label: '风险评分', desc: '按基本面、技术面、情绪、消息和市场环境评分', icon: ShieldCheckIcon },
   { id: 'evidence_collect', code: 'LEDGER', label: '证据账本', desc: '沉淀引用、缺失项和置信度', icon: SearchIcon },
+  { id: 'bull_bear_research', code: 'DEBATE', label: '多空研究', desc: '以同一证据快照形成正反条件化论据', icon: BrainCircuitIcon },
   { id: 'writer', code: 'DRAFT', label: '撰写', desc: '生成固定八章节证券投研报告', icon: FileTextIcon },
   { id: 'reviewer', code: 'CITATION', label: '引用审查', desc: '检查数字、口径和证据充分性', icon: ShieldCheckIcon },
   { id: 'evaluation', code: 'EVAL', label: '自动评测', desc: '检查关键点、数字一致性和引用命中率', icon: ClipboardCheckIcon }
 ];
 
-const flowSubtitle = 'Resolve → Snapshot → Metric → Risk → Evidence → Writer → Reviewer → Evaluation';
+const flowSubtitle = 'Resolve → Snapshot → Metric → Risk → Evidence → Debate → Writer → Reviewer → Evaluation';
 const seenSteps = ref(new Set());
 
 watch(

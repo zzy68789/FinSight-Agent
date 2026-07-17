@@ -3,6 +3,7 @@ package com.zzy.finsight.component.workflow;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.MarketDataPoint;
 import com.zzy.finsight.domain.stock.metric.MetricDefinitionCatalog;
 
 
@@ -74,6 +75,32 @@ class FinancialReportFingerprinterTest {
 
         assertThat(service.dataSnapshotHash(first)).isNotEqualTo(service.dataSnapshotHash(changedUrl));
         assertThat(service.dataSnapshotHash(first)).isNotEqualTo(service.dataSnapshotHash(changedPage));
+    }
+
+    @Test
+    void dataHashChangesWhenEtfMarketSeriesChanges() {
+        FinancialSnapshot first = etfSnapshot("1.234");
+        FinancialSnapshot changed = etfSnapshot("1.235");
+
+        assertThat(service.dataSnapshotHash(first)).isNotEqualTo(service.dataSnapshotHash(changed));
+    }
+
+    private FinancialSnapshot etfSnapshot(String close) {
+        return new FinancialSnapshot(
+                new StockSubject("588200", "SH", "588200.SH", "科创芯片ETF", "ETF"),
+                "latest",
+                "hybrid",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(new MarketDataPoint(
+                        "20260717", new BigDecimal("1.20"), new BigDecimal("1.25"),
+                        new BigDecimal("1.19"), new BigDecimal(close), new BigDecimal("1.21"),
+                        new BigDecimal("1.98"), new BigDecimal("280000"), new BigDecimal("35000")
+                )),
+                null,
+                LocalDateTime.of(2026, 7, 17, 10, 0)
+        );
     }
 
     private FinancialSnapshot snapshot(List<FinancialEvidenceItem> evidence, LocalDateTime createdAt) {

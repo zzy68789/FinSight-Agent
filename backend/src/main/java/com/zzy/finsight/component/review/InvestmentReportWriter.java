@@ -8,6 +8,9 @@ import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialRiskDimension;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.BullBearResearchResult;
+import com.zzy.finsight.domain.stock.ResearchClaim;
+import com.zzy.finsight.domain.stock.EtfDeepData;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 
 
@@ -26,7 +29,7 @@ import java.util.stream.Collectors;
  */
 @Component
 public class InvestmentReportWriter {
-    public static final String WRITER_VERSION = "investment-report-writer-v5-cited-period-aware";
+    public static final String WRITER_VERSION = "investment-report-writer-v6-etf-debate";
     private static final Logger log = LoggerFactory.getLogger(InvestmentReportWriter.class);
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final String GENERATION_MODE_PREFIX = "<!-- FinSight generation-mode: ";
@@ -44,14 +47,27 @@ public class InvestmentReportWriter {
             FinancialRiskAssessment riskAssessment,
             CitationReviewResult previousReview
     ) {
-        String deterministicReport = writeDeterministic(snapshot, metrics, riskAssessment, previousReview);
+        return write(snapshot, metrics, riskAssessment, BullBearResearchResult.empty(), previousReview);
+    }
+
+    /** 根据快照、指标、风险评估和多空研究结果生成投研报告。 */
+    public String write(
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment,
+            BullBearResearchResult bullBearResearch,
+            CitationReviewResult previousReview
+    ) {
+        String deterministicReport = writeDeterministic(
+                snapshot, metrics, riskAssessment, bullBearResearch, previousReview
+        );
         try {
             String generatedReport = llmClient.generate(
                     buildPrompt(deterministicReport, snapshot),
                     LlmClient.ModelType.SMART
             );
             String normalizedReport = ensureComplianceDisclaimer(normalizeGeneratedReport(generatedReport));
-            validateGeneratedNarrative(normalizedReport, snapshot);
+            validateGeneratedNarrative(normalizedReport, snapshot, bullBearResearch);
             return withGenerationMode(
                     mergeDeterministicAppendix(normalizedReport, deterministicReport),
                     "llm"
@@ -67,11 +83,12 @@ public class InvestmentReportWriter {
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics,
             FinancialRiskAssessment riskAssessment,
+            BullBearResearchResult bullBearResearch,
             CitationReviewResult previousReview
     ) {
         StockSubject subject = snapshot.subject();
         if (subject.isEtf()) {
-            return writeEtfReport(snapshot, metrics, riskAssessment, previousReview);
+            return writeEtfReport(snapshot, metrics, riskAssessment, bullBearResearch, previousReview);
         }
         StringBuilder report = new StringBuilder();
         report.append("# ").append(subject.fullCode()).append(" A股投研报告\n\n");
@@ -132,6 +149,7 @@ public class InvestmentReportWriter {
         report.append("## 8. 结论与后续观察点\n\n");
         report.append("- 结论：").append(missingDataSummary(snapshot, metrics)).append("\n");
         report.append("- 后续观察：优先补齐上述缺口，并复核公告、财务报告和结构化行情的原始来源后更新分析。\n\n");
+        appendBullBearSection(report, bullBearResearch);
 
         appendCitationSection(report, snapshot, metrics, riskAssessment);
         return report.toString();
@@ -157,6 +175,7 @@ public class InvestmentReportWriter {
                 12. “核心业务与行业位置”只有在证据明确包含业务、渠道或竞争信息时才能展开；证据不足时直接说明缺口，不得重复公司身份冒充业务分析。
                 13. 行情与估值优先使用结构化 PE_TTM、PB 和总市值证据；不得把不同网页、不同日期的成交额和换手率拼成一组。
                 14. 不得使用“股价修复可期”“上涨空间明确”“分红托底”等无充分证据的方向性措辞；新闻观点必须说明来源及证据限制。
+                15. 若第 8 节包含“### 多空研究 Agent”，必须逐字保留该子标题、多头/空头角色、条件化表述及其证据编号，不得改写为买卖建议。
 
                 证券代码：%s
                 资产类型：%s
@@ -218,7 +237,11 @@ public class InvestmentReportWriter {
         return disclaimer + "\n\n" + report;
     }
 
-    private void validateGeneratedNarrative(String report, FinancialSnapshot snapshot) {
+    private void validateGeneratedNarrative(
+            String report,
+            FinancialSnapshot snapshot,
+            BullBearResearchResult bullBearResearch
+    ) {
         if (report.length() < 300) {
             throw new IllegalStateException("LLM 报告长度不足");
         }
@@ -232,6 +255,11 @@ public class InvestmentReportWriter {
             if (!report.contains("## " + section + ".")) {
                 throw new IllegalStateException("LLM 报告缺少第 " + section + " 节");
             }
+        }
+        if (bullBearResearch != null
+                && !bullBearResearch.bullCases().isEmpty()
+                && !report.contains("### 多空研究 Agent")) {
+            throw new IllegalStateException("LLM 报告缺少多空研究 Agent 子节");
         }
     }
 
@@ -318,6 +346,7 @@ public class InvestmentReportWriter {
             FinancialSnapshot snapshot,
             List<FinancialMetricResult> metrics,
             FinancialRiskAssessment riskAssessment,
+            BullBearResearchResult bullBearResearch,
             CitationReviewResult previousReview
     ) {
         StockSubject subject = snapshot.subject();
@@ -335,19 +364,21 @@ public class InvestmentReportWriter {
         report.append("- 报告期口径：").append(reportPeriodSummary(snapshot)).append("\n\n");
 
         report.append("## 2. 跟踪标的与产品信息\n\n");
-        report.append(evidenceSentence(snapshot, "LOCAL_CONTEXT", "当前公开资料或上传材料不足以稳定识别跟踪指数、基金管理人、费率和持仓结构，需结合基金招募说明书或定期报告复核。")).append("\n\n");
+        report.append(evidenceSentence(snapshot, FinancialMetricInputNames.ETF_PROFILE,
+                "当前公开资料或上传材料不足以稳定识别跟踪指数、基金管理人、费率和持仓结构，需结合基金招募说明书或定期报告复核。")).append("\n\n");
 
         report.append("## 3. 二级市场行情\n\n");
         appendOptionalMetric(report, snapshot, metrics, "ETF收盘价");
         appendOptionalMetric(report, snapshot, metrics, "ETF涨跌幅");
         appendOptionalMetric(report, snapshot, metrics, "ETF成交额");
+        appendOptionalMetric(report, snapshot, metrics, "ETF单位净值");
+        appendOptionalMetric(report, snapshot, metrics, "ETF折溢价率");
 
         report.append("## 4. 流动性与交易观察\n\n");
         report.append(evidenceSentence(snapshot, FinancialMetricInputNames.ETF_AMOUNT, "暂未取得可复核成交额或流动性数据，不能判断交易活跃度。")).append("\n\n");
 
         report.append("## 5. 净值、规模与持仓缺口\n\n");
-        report.append("- 当前 MVP 优先接入 ETF 二级市场行情；基金净值、规模、持仓、跟踪误差和申赎清单仍需后续数据源补齐。\n");
-        report.append("- 若数据快照中存在 `DATA_MISSING` 或 `MISSING_INPUT`，应优先补齐基金定期报告、净值和持仓数据后再复核。\n\n");
+        appendEtfDepth(report, snapshot);
 
         report.append("## 6. 新闻与催化因素\n\n");
         report.append(evidenceSentence(snapshot, "NEWS_SUMMARY", "未取得足够 ETF 新闻、指数或行业催化摘要，暂不输出方向性判断。")).append("\n\n");
@@ -372,9 +403,48 @@ public class InvestmentReportWriter {
         report.append("## 8. 结论与后续观察点\n\n");
         report.append("- 结论：优先复核 ETF 净值、持仓、规模、成交额和跟踪误差数据，不输出买卖建议。\n");
         report.append("- 后续观察：补齐基金定期报告、行情序列和指数信息后，重新运行本工作流。\n\n");
+        appendBullBearSection(report, bullBearResearch);
 
         appendCitationSection(report, snapshot, metrics, riskAssessment);
         return report.toString();
+    }
+
+    private void appendEtfDepth(StringBuilder report, FinancialSnapshot snapshot) {
+        EtfDeepData data = snapshot.etfDeepData();
+        if (data == null) {
+            report.append("- 未取得基金资料与净值快照，需补齐净值、规模、持仓和跟踪误差数据。\n\n");
+            return;
+        }
+        report.append("- 基金简称：").append(blankToDash(data.fundName())).append("\n");
+        report.append("- 管理人 / 托管人：").append(blankToDash(data.management()))
+                .append(" / ").append(blankToDash(data.custodian())).append("\n");
+        report.append("- 业绩比较基准：").append(blankToDash(data.benchmark())).append("\n");
+        report.append("- 最新净值日期：").append(blankToDash(data.navDate())).append("\n");
+        report.append("- 合计资产净值：")
+                .append(data.totalNetAsset() == null ? "数据缺失" : data.totalNetAsset().toPlainString() + "（数据源原始口径）")
+                .append(data.totalNetAsset() == null
+                        ? ""
+                        : citationRefs(snapshot, List.of(FinancialMetricInputNames.ETF_TOTAL_NET_ASSET)))
+                .append("\n");
+        report.append("- 持仓、跟踪误差和申赎清单仍需结合基金定期报告或交易所清单补齐。\n\n");
+    }
+
+    private void appendBullBearSection(StringBuilder report, BullBearResearchResult result) {
+        if (result == null || result.bullCases().isEmpty() || result.bearCases().isEmpty()) {
+            return;
+        }
+        report.append("### 多空研究 Agent\n\n");
+        report.append("**多头角色**\n\n");
+        result.bullCases().forEach(claim -> appendResearchClaim(report, claim));
+        report.append("\n**空头角色**\n\n");
+        result.bearCases().forEach(claim -> appendResearchClaim(report, claim));
+        report.append("\n- 中立综合：").append(result.synthesis()).append("\n\n");
+    }
+
+    private void appendResearchClaim(StringBuilder report, ResearchClaim claim) {
+        report.append("- ").append(claim.title()).append("：").append(claim.statement());
+        claim.evidenceRefs().forEach(ref -> report.append("[").append(ref).append("]"));
+        report.append("\n");
     }
 
     private void appendMetric(

@@ -577,3 +577,21 @@ Writer 改为发送最多 18 条有效紧凑证据索引，并要求关键事实
 ### 结果
 
 2026-07-17 执行后端全量 `mvn.cmd test`，156 个测试零失败、零错误，跳过 3 项；新增单元测试已覆盖背压、Provider 超时、全文数字、事务边界和报告复用并发。Judge 与真实 Provider 冒烟按默认配置跳过；本机 Docker 未启动，MySQL Testcontainers 用例也按设计跳过，因此容器迁移仍需在 Docker 可用环境取得实际通过证据。
+
+## 033. 报告能力散落在工作台且 ETF 只具备单点行情
+
+### 发生了什么
+
+报告只能在工作台内预览，用户无法在一个独立页面同时复核版本、正文和证据；ETF 只有最新收盘价、涨跌幅、成交额三个点状指标，没有历史行情、净值和产品资料。多空观点也没有结构化角色或证据绑定，无法判断方向性分析来自哪条快照证据。
+
+### 原因
+
+前端没有路由和图表依赖，报告库只复用通用预览卡片；`FinancialSnapshot` 只能保存证据文本，Provider 也只返回 `List<FinancialEvidenceItem>`，无法携带时间序列和 ETF 深度对象。原工作流从证据收集直接进入 Writer，没有独立的正反论证步骤。
+
+### 解决方式
+
+扩展 `FinancialDataCollection` / `FinancialSnapshot`，新增 `MarketDataPoint` 与 `EtfDeepData`；TuShare ETF 链路聚合 `fund_daily`、`fund_basic`、`fund_nav`，用 `BigDecimal` 计算同日折溢价，并让行情序列和深度字段参与 SHA-256。新增 `BullBearResearchAgent` 与结构化论据模型，在 Writer 前执行并持久化 `bull_bear_research` 步骤。前端引入 Vue Router 和按路由懒加载的 ECharts，新增 `/reports/:reportId`，组合现有报告、版本、回放和日志 API，提供版本对比、证据锚点/筛选、ETF 图表及多空双栏。
+
+### 结果
+
+2026-07-17 后端全量 `mvn.cmd test` 为 160 个测试零失败、零错误、跳过 3 项；新增覆盖 ETF 三接口映射、旧快照 JSON 兼容、行情指纹、多空证据绑定、Writer/Runner 集成。前端 `npm.cmd run build` 成功，独立研究页和 ECharts 被拆成懒加载 chunk。真实 TuShare token、ETF 持仓/跟踪误差/申赎清单及 Docker MySQL 实跑仍未在本轮完成，已保留在待实现与待解决文档。

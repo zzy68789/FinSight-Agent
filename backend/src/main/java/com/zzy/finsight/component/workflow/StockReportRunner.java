@@ -9,6 +9,7 @@ import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.PersistedFinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.stock.BullBearResearchResult;
 import com.zzy.finsight.domain.WorkflowCheckpointRecord;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
 import com.zzy.finsight.dto.stock.StockReportRequest;
@@ -203,6 +204,22 @@ public class StockReportRunner {
                 return;
             }
 
+            publish(taskId, threadId, progress, "evidence_collect", mapOf(
+                    "evidence", snapshot.evidenceItems(),
+                    "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count(),
+                    "stageResults", snapshot.stageResults(),
+                    "retrievalResults", snapshot.retrievalResults(),
+                    "marketSeries", snapshot.marketSeries(),
+                    "etfDeepData", snapshot.etfDeepData()
+            ), 0L, 1);
+
+            startedAt = System.nanoTime();
+            BullBearResearchResult bullBearResearch = workflow.bullBearResearch(snapshot, metrics, riskAssessment);
+            publish(taskId, threadId, progress, "bull_bear_research", mapOf(
+                    "research", bullBearResearch,
+                    "policyVersion", com.zzy.finsight.component.review.BullBearResearchAgent.POLICY_VERSION
+            ), elapsedMs(startedAt), 1);
+
             ReportReuseCoordinator.ReuseOutcome reuseOutcome = reuseCoordinator.coordinate(
                     ownerId,
                     generationContextHash,
@@ -210,13 +227,6 @@ public class StockReportRunner {
                             candidate, origin, taskId, threadId, progress, snapshot, metrics, generationContextHash
                     ),
                     () -> {
-            publish(taskId, threadId, progress, "evidence_collect", mapOf(
-                    "evidence", snapshot.evidenceItems(),
-                    "effectiveCount", snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count(),
-                    "stageResults", snapshot.stageResults(),
-                    "retrievalResults", snapshot.retrievalResults()
-            ), 0L, 1);
-
             CitationReviewResult review = CitationReviewResult.fail("NOT_REVIEWED");
             FinancialComplianceReviewResult compliance = new FinancialComplianceReviewResult("FAIL", BigDecimal.ZERO, List.of());
             String report = "";
@@ -289,7 +299,9 @@ public class StockReportRunner {
                 for (int attempt = nextWriterAttempt; attempt <= MAX_WRITER_ATTEMPTS; attempt++) {
                     writerAttempts = attempt;
                     long writerStartedAt = System.nanoTime();
-                    report = workflow.write(snapshot, metrics, riskAssessment, attempt == 1 ? null : review);
+                    report = workflow.write(
+                            snapshot, metrics, riskAssessment, bullBearResearch, attempt == 1 ? null : review
+                    );
                     String generationMode = InvestmentReportWriter.generationMode(report);
                     String fallbackReason = InvestmentReportWriter.fallbackReason(report);
                     publish(taskId, threadId, progress, "writer", mapOf(
