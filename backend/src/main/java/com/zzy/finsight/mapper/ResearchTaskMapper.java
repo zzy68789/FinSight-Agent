@@ -1,7 +1,7 @@
 package com.zzy.finsight.mapper;
 
 import com.zzy.finsight.domain.ResearchTaskRecord;
-import com.zzy.finsight.domain.WorkflowTaskExecutionRecord;
+import com.zzy.finsight.domain.TaskExecutionRecord;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -16,11 +16,32 @@ import java.util.Optional;
  */
 @Mapper
 public interface ResearchTaskMapper {
-    default long create(long ownerId, String threadId, String query, String searchMode) {
-        return create(ownerId, threadId, query, searchMode, null);
+    /** 创建由 Research Agent Runtime 执行的研究任务。 */
+    default long createAgent(
+            long ownerId,
+            String threadId,
+            String query,
+            String searchMode,
+            String requestPayload,
+            String plannerVersion,
+            String toolsetVersion,
+            String policyVersion
+    ) {
+        return createTask(ownerId, threadId, query, searchMode, requestPayload,
+                "RESEARCH_AGENT", plannerVersion, toolsetVersion, policyVersion);
     }
 
-    default long create(long ownerId, String threadId, String query, String searchMode, String requestPayload) {
+    private long createTask(
+            long ownerId,
+            String threadId,
+            String query,
+            String searchMode,
+            String requestPayload,
+            String runtimeType,
+            String plannerVersion,
+            String toolsetVersion,
+            String policyVersion
+    ) {
         LocalDateTime now = LocalDateTime.now();
         Map<String, Object> command = new LinkedHashMap<>();
         command.put("ownerId", ownerId);
@@ -28,6 +49,10 @@ public interface ResearchTaskMapper {
         command.put("query", query);
         command.put("searchMode", searchMode);
         command.put("requestPayload", requestPayload);
+        command.put("runtimeType", runtimeType);
+        command.put("plannerVersion", plannerVersion);
+        command.put("toolsetVersion", toolsetVersion);
+        command.put("policyVersion", policyVersion);
         command.put("createdAt", now);
         command.put("updatedAt", now);
         insertTask(command);
@@ -40,12 +65,6 @@ public interface ResearchTaskMapper {
 
     int insertTask(Map<String, Object> command);
 
-    default void markRunning(long taskId) {
-        updateStatus(taskId, "RUNNING", LocalDateTime.now());
-    }
-
-    int updateStatus(@Param("taskId") long taskId, @Param("status") String status, @Param("now") LocalDateTime now);
-
     default boolean startAttempt(long taskId, String leaseOwner, LocalDateTime leaseUntil) {
         return acquireAttempt(taskId, leaseOwner, leaseUntil, LocalDateTime.now()) == 1;
     }
@@ -57,34 +76,40 @@ public interface ResearchTaskMapper {
             @Param("now") LocalDateTime now
     );
 
-    default boolean updateStage(long taskId, String stage, String leaseOwner, LocalDateTime leaseUntil) {
-        return updateRunningStage(taskId, stage, leaseOwner, leaseUntil, LocalDateTime.now()) == 1;
+    /** 更新 Agent 当前阶段和已消耗预算。 */
+    default boolean updateAgentProgress(
+            long taskId,
+            String stage,
+            int turnCount,
+            int toolCallCount,
+            String leaseOwner,
+            LocalDateTime leaseUntil
+    ) {
+        return updateRunningAgentProgress(
+                taskId, stage, turnCount, toolCallCount, leaseOwner, leaseUntil, LocalDateTime.now()
+        ) == 1;
     }
 
-    int updateRunningStage(
+    int updateRunningAgentProgress(
             @Param("taskId") long taskId,
             @Param("stage") String stage,
+            @Param("turnCount") int turnCount,
+            @Param("toolCallCount") int toolCallCount,
             @Param("leaseOwner") String leaseOwner,
             @Param("leaseUntil") LocalDateTime leaseUntil,
             @Param("now") LocalDateTime now
     );
 
-    default void markCompleted(long taskId) {
-        finish(taskId, "COMPLETED", "COMPLETED", null, LocalDateTime.now());
+    /** 以完成、证据不足或失败状态结束 Agent 任务。 */
+    default void finishAgent(long taskId, String status, String stopReason, String error) {
+        finishAgentTask(taskId, status, status, stopReason, error, LocalDateTime.now());
     }
 
-    default void markFailed(long taskId) {
-        markFailed(taskId, null);
-    }
-
-    default void markFailed(long taskId, String error) {
-        finish(taskId, "FAILED", "FAILED", error, LocalDateTime.now());
-    }
-
-    int finish(
+    int finishAgentTask(
             @Param("taskId") long taskId,
             @Param("status") String status,
             @Param("stage") String stage,
+            @Param("stopReason") String stopReason,
             @Param("error") String error,
             @Param("now") LocalDateTime now
     );
@@ -109,12 +134,12 @@ public interface ResearchTaskMapper {
             @Param("now") LocalDateTime now
     );
 
-    Optional<WorkflowTaskExecutionRecord> findExecution(
+    Optional<TaskExecutionRecord> findExecution(
             @Param("ownerId") long ownerId,
             @Param("taskId") long taskId
     );
 
-    List<WorkflowTaskExecutionRecord> findStaleRunning(
+    List<TaskExecutionRecord> findStaleAgentRunning(
             @Param("heartbeatBefore") LocalDateTime heartbeatBefore,
             @Param("limit") int limit
     );

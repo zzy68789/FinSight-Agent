@@ -2,6 +2,14 @@
 
 这份文档只记录明确指定要沉淀的问题。每条记录保持同一结构：发生了什么、原因、解决方式、结果。
 
+## 优先级总览
+
+| 优先级 | 编号 | 问题 | 状态 |
+| --- | --- | --- | --- |
+| P0 | 034 | 新增反思重写不等于去除固定工作流 | 已完成首版改造，真实模型验收待补 |
+| P1 | 033 | 报告能力散落且 ETF 只有单点行情 | 已完成首版 |
+| P1 | 032 | 有配置和组件不代表可靠性闭环 | 已完成首版，数据库容器实跑待补 |
+
 ## 001. 通用调研 Agent 不能直接输入 A 股股票代码生成投研报告
 
 ### 发生了什么
@@ -595,3 +603,21 @@ Writer 改为发送最多 18 条有效紧凑证据索引，并要求关键事实
 ### 结果
 
 2026-07-17 后端全量 `mvn.cmd test` 为 160 个测试零失败、零错误、跳过 3 项；新增覆盖 ETF 三接口映射、旧快照 JSON 兼容、行情指纹、多空证据绑定、Writer/Runner 集成。前端 `npm.cmd run build` 成功，独立研究页和 ECharts 被拆成懒加载 chunk。真实 TuShare token、ETF 持仓/跟踪误差/申赎清单及 Docker MySQL 实跑仍未在本轮完成，已保留在待实现与待解决文档。
+
+## 034. 增加 Reviewer 反思回写不等于真正去除固定工作流
+
+### 发生了什么
+
+原项目虽然包含 Writer、Reviewer、重写和多个数据源，但证券解析、全量采集、指标、风险、写作和审查仍由 Java 固定顺序执行。只把 Reviewer 反馈继续交给 Writer，或在固定顺序中增加更多角色，控制流仍然不是由研究问题和工具观察决定。
+
+### 原因
+
+执行权集中在 `StockReportWorkflow` 与 `StockReportRunner`，Provider 每次无条件 fan-out；自然语言问题只影响报告 prompt，不影响证据需求、工具选择、补证据和停止条件。同时继续保留旧 Runner 会形成两套执行内核，使项目名为 Agent、实际仍可能走工作流。
+
+### 解决方式
+
+新增 `ResearchPlanner`、`ResearchAgentRuntime`、`ResearchToolRegistry`、`ToolPolicyGuard`、`EvidenceMemory`、预算守卫、AgentState Checkpoint、轮次/工具持久化和动态 SSE；Planner 只能选择只读白名单工具，问题会进入计划、工具选择和公开证据 query，Reviewer 证据不足可触发 Replan。删除旧 Workflow、Runner、恢复调度、阶段 Checkpoint、single-flight 协调器和 `component.workflow` 包，旧 `/api/stock-reports` 只转换请求后进入同一 Runtime。
+
+### 结果
+
+2026-08-12 后端全量 `mvn.cmd test` 为 151 个测试零失败、零错误、跳过 3 项；前端 `npm.cmd run build` 成功。测试已覆盖问题导向规划、只读工具权限、参数/重复调用、预算、动态停止、证据工具来源绑定和兼容 API。真实 LLM 不同问题工具序列、Reviewer 补证据完整集成链路，以及 Docker MySQL 中断恢复仍未验证，已保留为 P0，不能提前宣称全部 Agent 验收完成。

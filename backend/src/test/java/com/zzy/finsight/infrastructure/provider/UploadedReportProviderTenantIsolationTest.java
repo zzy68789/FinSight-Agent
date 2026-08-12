@@ -16,7 +16,7 @@ import static org.mockito.Mockito.when;
 class UploadedReportProviderTenantIsolationTest {
 
     @Test
-    void retrievalUsesWorkflowOwnerKnowledgeSpace() {
+    void retrievalUsesCurrentOwnerKnowledgeSpace() {
         RagService ragService = mock(RagService.class);
         UploadedReportProvider provider = new UploadedReportProvider(ragService, new FinancialEvidenceParser());
         StockSubject subject = new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料");

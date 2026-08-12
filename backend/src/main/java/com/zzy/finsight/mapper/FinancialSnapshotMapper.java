@@ -33,6 +33,35 @@ public interface FinancialSnapshotMapper {
             String status,
             String dataSnapshotHash
     ) {
+        return saveSnapshotInternal(
+                ownerId, taskId, threadId, snapshot, status, dataSnapshotHash, null
+        );
+    }
+
+    /** 创建首个 Agent 快照，并把已有证据绑定到产生它们的工具调用。 */
+    default long saveAgentSnapshot(
+            long ownerId,
+            long taskId,
+            String threadId,
+            FinancialSnapshot snapshot,
+            String status,
+            String dataSnapshotHash,
+            long toolCallId
+    ) {
+        return saveSnapshotInternal(
+                ownerId, taskId, threadId, snapshot, status, dataSnapshotHash, toolCallId
+        );
+    }
+
+    private long saveSnapshotInternal(
+            long ownerId,
+            long taskId,
+            String threadId,
+            FinancialSnapshot snapshot,
+            String status,
+            String dataSnapshotHash,
+            Long toolCallId
+    ) {
         StockSubject subject = snapshot.subject();
         LocalDateTime now = LocalDateTime.now();
         Map<String, Object> command = new LinkedHashMap<>();
@@ -57,7 +86,7 @@ public interface FinancialSnapshotMapper {
         }
         long snapshotId = id.longValue();
         for (FinancialEvidenceItem item : snapshot.evidenceItems()) {
-            insertEvidence(evidenceCommand(snapshotId, taskId, item));
+            insertEvidence(evidenceCommand(snapshotId, taskId, toolCallId, item));
         }
         return snapshotId;
     }
@@ -65,6 +94,27 @@ public interface FinancialSnapshotMapper {
     int insertSnapshot(Map<String, Object> command);
 
     int insertEvidence(Map<String, Object> command);
+
+    /** 将本轮工具新增证据追加到账本，并绑定工具调用。 */
+    default void appendEvidence(
+            long snapshotId,
+            long taskId,
+            Long toolCallId,
+            List<FinancialEvidenceItem> evidenceItems
+    ) {
+        for (FinancialEvidenceItem item : evidenceItems == null ? List.<FinancialEvidenceItem>of() : evidenceItems) {
+            insertEvidence(evidenceCommand(snapshotId, taskId, toolCallId, item));
+        }
+    }
+
+    /** 更新增量证据合并后的快照内容与指纹。 */
+    int updateSnapshot(
+            @Param("snapshotId") long snapshotId,
+            @Param("snapshot") FinancialSnapshot snapshot,
+            @Param("dataSnapshotHash") String dataSnapshotHash,
+            @Param("status") String status,
+            @Param("updatedAt") LocalDateTime updatedAt
+    );
 
     default void saveMetrics(long snapshotId, long taskId, List<FinancialMetricResult> metrics) {
         if (countMetrics(taskId) > 0) {
@@ -86,6 +136,14 @@ public interface FinancialSnapshotMapper {
             insertMetric(command);
         }
     }
+
+    /** 用当前证据对应的最新指标替换旧派生结果。 */
+    default void replaceMetrics(long snapshotId, long taskId, List<FinancialMetricResult> metrics) {
+        deleteMetrics(taskId);
+        saveMetrics(snapshotId, taskId, metrics);
+    }
+
+    int deleteMetrics(@Param("taskId") long taskId);
 
     int countMetrics(@Param("taskId") long taskId);
 
@@ -133,10 +191,17 @@ public interface FinancialSnapshotMapper {
 
     List<String> findMetricJson(@Param("taskId") long taskId);
 
-    private static Map<String, Object> evidenceCommand(long snapshotId, long taskId, FinancialEvidenceItem item) {
+    private static Map<String, Object> evidenceCommand(
+            long snapshotId,
+            long taskId,
+            Long toolCallId,
+            FinancialEvidenceItem item
+    ) {
         Map<String, Object> command = new LinkedHashMap<>();
         command.put("snapshotId", snapshotId);
         command.put("taskId", taskId);
+        command.put("toolCallId", toolCallId);
+        command.put("evidenceKey", evidenceKey(item));
         command.put("sourceType", item.sourceType());
         command.put("sourceName", item.sourceName());
         command.put("url", item.url());
@@ -151,5 +216,26 @@ public interface FinancialSnapshotMapper {
         command.put("issueCode", item.issueCode());
         command.put("createdAt", LocalDateTime.now());
         return command;
+    }
+
+    private static String evidenceKey(FinancialEvidenceItem item) {
+        String canonical = String.join("|",
+                safe(item.sourceType()), safe(item.sourceName()), safe(item.url()),
+                item.pageNumber() == null ? "" : item.pageNumber().toString(),
+                safe(item.reportPeriod()), safe(item.metricName()),
+                item.rawValue() == null ? "" : item.rawValue().stripTrailingZeros().toPlainString(),
+                safe(item.excerpt())
+        );
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("当前 JDK 不支持 SHA-256", exception);
+        }
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 }

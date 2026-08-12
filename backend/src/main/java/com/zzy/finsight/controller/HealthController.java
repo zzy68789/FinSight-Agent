@@ -10,13 +10,13 @@ import java.util.Map;
  */
 @RestController
 public class HealthController {
-    /** 返回后端运行状态和当前工作流标识。 */
+    /** 返回后端运行状态和当前 Agent Runtime 标识。 */
     @GetMapping("/")
     public Map<String, String> health() {
         return Map.of(
                 "status", "running",
                 "backend", "java",
-                "workflow", "stock-report-pipeline"
+                "runtime", "bounded-research-agent"
         );
     }
 }

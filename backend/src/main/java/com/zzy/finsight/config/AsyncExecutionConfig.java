@@ -15,19 +15,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 配置股票工作流和金融数据采集的有界执行器。
+ * 配置 Research Agent 和金融数据工具的有界执行器。
  */
 @Configuration
 public class AsyncExecutionConfig {
 
-    @Bean(name = "workflowExecutor", destroyMethod = "shutdown")
-    public ExecutorService workflowExecutor(
-            @Value("${finsight.async.workflow-threads:8}") int threadCount,
-            @Value("${finsight.async.workflow-queue-capacity:32}") int queueCapacity,
+    @Bean(name = "agentExecutor", destroyMethod = "shutdown")
+    public ExecutorService agentExecutor(
+            @Value("${finsight.async.agent-threads:8}") int threadCount,
+            @Value("${finsight.async.agent-queue-capacity:32}") int queueCapacity,
             MeterRegistry meterRegistry
     ) {
         return boundedExecutor(
-                "workflow", threadCount, queueCapacity, "finsight-workflow-", meterRegistry
+                "research_agent", threadCount, queueCapacity, "finsight-agent-", meterRegistry
         );
     }
 

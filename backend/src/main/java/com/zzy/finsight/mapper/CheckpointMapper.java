@@ -1,6 +1,6 @@
 package com.zzy.finsight.mapper;
 
-import com.zzy.finsight.domain.WorkflowCheckpointRecord;
+import com.zzy.finsight.domain.CheckpointRecord;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -12,20 +12,16 @@ import java.util.Optional;
  */
 @Mapper
 public interface CheckpointMapper {
-    default void save(String threadId, long taskId, Object state) {
-        save(threadId, taskId, "UNKNOWN", 1, null, state);
-    }
-
-    /** 保存带阶段和生成上下文的可恢复检查点。 */
-    default void save(
+    /** 保存 Research Agent 某一轮的可恢复状态。 */
+    default void saveAgent(
             String threadId,
             long taskId,
-            String stage,
-            int attemptNo,
-            String generationContextHash,
+            int turnNo,
+            String contextHash,
             Object state
     ) {
-        insert(threadId, taskId, stage, attemptNo, generationContextHash, state, LocalDateTime.now());
+        insert(threadId, taskId, "AGENT_STATE", Math.max(1, turnNo), contextHash,
+                "agent-state-v1", Math.max(0, turnNo), state, LocalDateTime.now());
     }
 
     int insert(
@@ -34,11 +30,13 @@ public interface CheckpointMapper {
             @Param("stage") String stage,
             @Param("attemptNo") int attemptNo,
             @Param("generationContextHash") String generationContextHash,
+            @Param("stateVersion") String stateVersion,
+            @Param("turnNo") int turnNo,
             @Param("state") Object state,
             @Param("createdAt") LocalDateTime createdAt
     );
 
-    Optional<WorkflowCheckpointRecord> findLatest(
+    Optional<CheckpointRecord> findLatest(
             @Param("taskId") long taskId,
             @Param("stage") String stage,
             @Param("generationContextHash") String generationContextHash

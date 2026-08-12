@@ -30,7 +30,10 @@ public interface AgentStepLogMapper {
             String status,
             String errorMessage
     ) {
-        String normalizedStatus = "DEGRADED".equals(status) ? "DEGRADED" : "SUCCESS";
+        String normalizedStatus = switch (status == null ? "" : status) {
+            case "DEGRADED", "FAILED", "RUNNING" -> status;
+            default -> "SUCCESS";
+        };
         insertStep(
                 taskId,
                 stepName,

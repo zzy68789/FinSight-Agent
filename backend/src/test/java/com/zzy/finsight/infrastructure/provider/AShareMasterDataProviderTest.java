@@ -3,7 +3,7 @@ package com.zzy.finsight.infrastructure.provider;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.reference.AShareCompanyDirectory;
-import com.zzy.finsight.component.workflow.StockCodeResolver;
+import com.zzy.finsight.component.analysis.StockCodeResolver;
 
 
 import org.junit.jupiter.api.Test;

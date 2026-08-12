@@ -1,6 +1,5 @@
 package com.zzy.finsight.mapper;
 
-import com.zzy.finsight.component.workflow.WorkflowStagePersistence;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,10 +14,9 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 在真实 MySQL 上验证 Flyway 迁移、任务租约、检查点往返和报告租户隔离。
+ * 在真实 MySQL 上验证 Agent 迁移、任务租约、轮次工具轨迹、检查点和报告租户隔离。
  */
 @SpringBootTest(properties = {
         "spring.task.scheduling.enabled=false",
@@ -49,38 +47,81 @@ class MySqlPersistenceIntegrationTest {
     @Autowired
     private ReportMapper reportMapper;
     @Autowired
-    private WorkflowStagePersistence stagePersistence;
+    private AgentRuntimeMapper agentRuntimeMapper;
 
     @Test
-    void migratesAndPersistsWorkflowReliabilityContracts() {
+    void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '3'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '4'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
 
-        long taskId = taskMapper.create(
-                7L, "mysql-integration-thread", "分析 600519", "stock-hybrid", "{\"ticker\":\"600519\"}"
+        long taskId = taskMapper.createAgent(
+                7L,
+                "mysql-integration-thread",
+                "分析 600519 的盈利质量",
+                "agent-hybrid",
+                "{\"ticker\":\"600519\"}",
+                "planner-v1",
+                "toolset-v1",
+                "policy-v1"
         );
         LocalDateTime leaseUntil = LocalDateTime.now().plusMinutes(5);
         assertThat(taskMapper.startAttempt(taskId, "runner-a", leaseUntil)).isTrue();
         assertThat(taskMapper.startAttempt(taskId, "runner-b", leaseUntil)).isFalse();
 
-        checkpointMapper.save(
+        long turnId = agentRuntimeMapper.saveTurn(
+                taskId,
+                1,
+                "RESEARCH",
+                "CALL_TOOLS",
+                Map.of("toolCalls", 1),
+                "",
+                "RUNNING",
+                10,
+                5,
+                0L
+        );
+        long toolCallId = agentRuntimeMapper.startToolCall(
+                taskId,
+                turnId,
+                "call-1",
+                "get_financial_statements",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                Map.of("ticker", "600519"),
+                1
+        );
+        agentRuntimeMapper.completeToolCall(
+                toolCallId,
+                Map.of("evidenceCount", 3),
+                "SUCCESS",
+                12L,
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        agentRuntimeMapper.completeTurn(turnId, "已补充财务报表证据", "SUCCESS", 18L);
+
+        assertThat(agentRuntimeMapper.findTurns(taskId)).singleElement()
+                .satisfies(turn -> assertThat(turn.actionType()).isEqualTo("CALL_TOOLS"));
+        assertThat(agentRuntimeMapper.findToolCalls(taskId)).singleElement()
+                .satisfies(call -> assertThat(call.status()).isEqualTo("SUCCESS"));
+
+        checkpointMapper.saveAgent(
                 "mysql-integration-thread",
                 taskId,
-                "WRITER",
-                2,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                Map.of("finalReport", "检查点报告", "attempt", 2)
+                1,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                Map.of("turnNo", 1, "phase", "RESEARCH")
         );
         assertThat(checkpointMapper.findLatest(
                 taskId,
-                "WRITER",
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                "AGENT_STATE",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         )).hasValueSatisfying(checkpoint -> {
-            assertThat(checkpoint.attemptNo()).isEqualTo(2);
-            assertThat(checkpoint.stateJson()).contains("检查点报告");
+            assertThat(checkpoint.attemptNo()).isEqualTo(1);
+            assertThat(checkpoint.stateJson()).contains("RESEARCH");
         });
 
         long reportId = reportMapper.save(
@@ -91,44 +132,24 @@ class MySqlPersistenceIntegrationTest {
                 "PASS",
                 "",
                 null,
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
                 null
         );
         assertThat(reportMapper.findReusable(
-                7L, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                7L, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         )).hasValueSatisfying(report -> assertThat(report.id()).isEqualTo(reportId));
         assertThat(reportMapper.findReusable(
-                8L, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                8L, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         )).isEmpty();
 
         reportMapper.softDelete(7L, reportId);
         assertThat(reportMapper.findReusable(
-                7L, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                7L, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         )).isEmpty();
 
-        long taskWithoutLease = taskMapper.create(
-                7L, "rollback-thread", "验证事务回滚", "stock-hybrid", "{\"ticker\":\"600519\"}"
-        );
-        assertThatThrownBy(() -> stagePersistence.persist(new WorkflowStagePersistence.StageCommit(
-                taskWithoutLease,
-                "rollback-thread",
-                "writer",
-                "WRITER",
-                Map.of("finalReport", "不应落库"),
-                1L,
-                1,
-                "SUCCESS",
-                null,
-                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-                "missing-runner",
-                LocalDateTime.now().plusMinutes(5)
-        ))).isInstanceOf(IllegalStateException.class).hasMessageContaining("租约已失效");
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM agent_step_log WHERE task_id = ?", Integer.class, taskWithoutLease
-        )).isZero();
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM checkpoint WHERE task_id = ?", Integer.class, taskWithoutLease
-        )).isZero();
+        assertThat(taskMapper.updateAgentProgress(
+                taskId, "SYNTHESIS", 1, 1, "runner-a", LocalDateTime.now().plusMinutes(5)
+        )).isTrue();
     }
 }

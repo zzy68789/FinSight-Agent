@@ -3,13 +3,14 @@ package com.zzy.finsight.architecture;
 import com.zzy.finsight.component.analysis.FinancialMetricEngine;
 import com.zzy.finsight.component.marketdata.FinancialSnapshotBuilder;
 import com.zzy.finsight.component.review.CitationReviewer;
-import com.zzy.finsight.component.workflow.StockReportWorkflow;
+import com.zzy.finsight.agent.runtime.ResearchAgentRuntime;
 import com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.FinancialSnapshotJsonTypeHandler;
 import com.zzy.finsight.service.AdminService;
 import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.service.ReportExportService;
 import com.zzy.finsight.service.ReportService;
 import com.zzy.finsight.service.RagService;
+import com.zzy.finsight.service.ResearchAgentService;
 import com.zzy.finsight.service.SseService;
 import com.zzy.finsight.service.StockReportService;
 import com.zzy.finsight.service.TaskQueryService;
@@ -19,6 +20,7 @@ import com.zzy.finsight.service.impl.AuthServiceImpl;
 import com.zzy.finsight.service.impl.ReportExportServiceImpl;
 import com.zzy.finsight.service.impl.ReportServiceImpl;
 import com.zzy.finsight.service.impl.RagServiceImpl;
+import com.zzy.finsight.service.impl.ResearchAgentServiceImpl;
 import com.zzy.finsight.service.impl.SseServiceImpl;
 import com.zzy.finsight.service.impl.StockReportServiceImpl;
 import com.zzy.finsight.service.impl.TaskQueryServiceImpl;
@@ -48,6 +50,7 @@ class ArchitectureLayeringTest {
                 ReportExportService.class,
                 ReportService.class,
                 RagService.class,
+                ResearchAgentService.class,
                 SseService.class,
                 StockReportService.class,
                 TaskQueryService.class,
@@ -60,6 +63,7 @@ class ArchitectureLayeringTest {
         assertThat(ReportExportService.class).isAssignableFrom(ReportExportServiceImpl.class);
         assertThat(ReportService.class).isAssignableFrom(ReportServiceImpl.class);
         assertThat(RagService.class).isAssignableFrom(RagServiceImpl.class);
+        assertThat(ResearchAgentService.class).isAssignableFrom(ResearchAgentServiceImpl.class);
         assertThat(SseService.class).isAssignableFrom(SseServiceImpl.class);
         assertThat(StockReportService.class).isAssignableFrom(StockReportServiceImpl.class);
         assertThat(TaskQueryService.class).isAssignableFrom(TaskQueryServiceImpl.class);
@@ -71,7 +75,7 @@ class ArchitectureLayeringTest {
         assertThat(FinancialMetricEngine.class.getPackageName()).isEqualTo("com.zzy.finsight.component.analysis");
         assertThat(FinancialSnapshotBuilder.class.getPackageName()).isEqualTo("com.zzy.finsight.component.marketdata");
         assertThat(CitationReviewer.class.getPackageName()).isEqualTo("com.zzy.finsight.component.review");
-        assertThat(StockReportWorkflow.class.getPackageName()).isEqualTo("com.zzy.finsight.component.workflow");
+        assertThat(ResearchAgentRuntime.class.getPackageName()).isEqualTo("com.zzy.finsight.agent.runtime");
         assertThat(FinancialSnapshotJsonTypeHandler.class.getPackageName())
                 .isEqualTo("com.zzy.finsight.infrastructure.persistence.mybatis.typehandler");
     }

@@ -38,17 +38,24 @@
     </insert>
 
     <insert id="insertEvidence" parameterType="map">
-        INSERT INTO stock_evidence_item(
-          snapshot_id, task_id, source_type, source_name, url, page_number, report_period,
+        INSERT IGNORE INTO stock_evidence_item(
+          snapshot_id, task_id, tool_call_id, evidence_key, source_type, source_name, url, page_number, report_period,
           metric_name, raw_value, normalized_value, excerpt, confidence, as_of_time,
           issue_code, created_at
         )
         VALUES (
-          #{snapshotId}, #{taskId}, #{sourceType}, #{sourceName}, #{url}, #{pageNumber}, #{reportPeriod},
+          #{snapshotId}, #{taskId}, #{toolCallId}, #{evidenceKey}, #{sourceType}, #{sourceName}, #{url}, #{pageNumber}, #{reportPeriod},
           #{metricName}, #{rawValue}, #{normalizedValue}, #{excerpt}, #{confidence}, #{asOfTime},
           #{issueCode}, #{createdAt}
         )
     </insert>
+
+    <update id="updateSnapshot">
+        UPDATE stock_analysis_snapshot
+        SET snapshot_json = #{snapshot,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.FinancialSnapshotJsonTypeHandler},
+            data_snapshot_hash = #{dataSnapshotHash}, status = #{status}, updated_at = #{updatedAt}
+        WHERE id = #{snapshotId}
+    </update>
 
     <select id="countMetrics" resultType="int">
         SELECT COUNT(*) FROM stock_metric_result WHERE task_id = #{taskId}
@@ -66,6 +73,10 @@
           #{createdAt}
         )
     </insert>
+
+    <delete id="deleteMetrics">
+        DELETE FROM stock_metric_result WHERE task_id = #{taskId}
+    </delete>
 
     <select id="findSnapshot" resultMap="persistedSnapshotResult">
         SELECT id, snapshot_json, data_snapshot_hash

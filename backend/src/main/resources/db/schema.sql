@@ -19,12 +19,20 @@ CREATE TABLE IF NOT EXISTS research_task (
   thread_id VARCHAR(64) NOT NULL COMMENT '会话线程ID',
   query LONGTEXT NOT NULL COMMENT '原始调研问题',
   search_mode VARCHAR(32) NOT NULL COMMENT '调研工作流使用的搜索模式',
+  runtime_type VARCHAR(32) NOT NULL DEFAULT 'LEGACY_WORKFLOW' COMMENT '任务执行内核类型',
   status VARCHAR(32) NOT NULL COMMENT '任务执行状态',
   revision_number INT NOT NULL DEFAULT 0 COMMENT '当前评审修订次数',
   stage VARCHAR(64) NOT NULL DEFAULT 'CREATED' COMMENT '金融工作流当前持久化阶段',
   attempt_count INT NOT NULL DEFAULT 0 COMMENT '工作流执行尝试次数',
+  turn_count INT NOT NULL DEFAULT 0 COMMENT '已完成的Agent决策轮次',
+  tool_call_count INT NOT NULL DEFAULT 0 COMMENT '已执行的工具调用次数',
   request_payload LONGTEXT COMMENT '可恢复执行所需的请求JSON',
   last_error LONGTEXT COMMENT '最近一次执行失败原因',
+  stop_reason VARCHAR(128) COMMENT '任务停止原因',
+  planner_version VARCHAR(64) COMMENT 'Planner策略版本',
+  toolset_version VARCHAR(64) COMMENT '白名单工具集版本',
+  policy_version VARCHAR(64) COMMENT 'Agent运行策略版本',
+  completed_at DATETIME COMMENT '任务完成或停止时间',
   heartbeat_at DATETIME COMMENT '工作流最近心跳时间',
   lease_owner VARCHAR(128) COMMENT '当前任务租约持有者',
   lease_until DATETIME COMMENT '当前任务租约到期时间',
@@ -32,7 +40,8 @@ CREATE TABLE IF NOT EXISTS research_task (
   updated_at DATETIME NOT NULL COMMENT '记录最后更新时间',
   INDEX idx_research_task_owner_id (owner_id),
   INDEX idx_research_task_thread_id (thread_id),
-  INDEX idx_research_task_recovery (status, heartbeat_at)
+  INDEX idx_research_task_recovery (status, heartbeat_at),
+  INDEX idx_research_task_runtime_recovery (runtime_type, status, heartbeat_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_step_log (
@@ -80,10 +89,50 @@ CREATE TABLE IF NOT EXISTS checkpoint (
   stage VARCHAR(64) NOT NULL DEFAULT 'UNKNOWN' COMMENT '检查点对应的工作流阶段',
   attempt_no INT NOT NULL DEFAULT 1 COMMENT '阶段执行尝试次数',
   generation_context_hash CHAR(64) COMMENT '检查点对应的报告生成上下文SHA-256',
+  state_version VARCHAR(32) NOT NULL DEFAULT 'workflow-v1' COMMENT '检查点状态结构版本',
+  turn_no INT NOT NULL DEFAULT 0 COMMENT '检查点对应Agent轮次',
   state_json LONGTEXT NOT NULL COMMENT '序列化后的工作流状态快照',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   INDEX idx_checkpoint_thread_id (thread_id),
   INDEX idx_checkpoint_task_stage_context (task_id, stage, generation_context_hash, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_turn (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+  task_id BIGINT NOT NULL COMMENT '关联的Research Agent任务ID',
+  turn_no INT NOT NULL COMMENT 'Agent决策轮次',
+  phase VARCHAR(32) NOT NULL COMMENT '当前运行阶段',
+  action_type VARCHAR(64) NOT NULL COMMENT 'Planner选择的结构化动作类型',
+  action_json LONGTEXT NOT NULL COMMENT 'Planner动作JSON',
+  observation_summary LONGTEXT COMMENT '本轮观察摘要',
+  status VARCHAR(32) NOT NULL COMMENT '本轮执行状态',
+  input_tokens INT NOT NULL DEFAULT 0 COMMENT 'Planner输入Token数',
+  output_tokens INT NOT NULL DEFAULT 0 COMMENT 'Planner输出Token数',
+  duration_ms BIGINT NOT NULL DEFAULT 0 COMMENT '本轮执行耗时毫秒数',
+  created_at DATETIME NOT NULL COMMENT '记录创建时间',
+  UNIQUE KEY uk_agent_turn_task_no (task_id, turn_no),
+  INDEX idx_agent_turn_task (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_tool_call (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+  task_id BIGINT NOT NULL COMMENT '关联的Research Agent任务ID',
+  turn_id BIGINT NOT NULL COMMENT '关联的Agent轮次ID',
+  call_id VARCHAR(64) NOT NULL COMMENT '单次工具调用唯一标识',
+  tool_name VARCHAR(128) NOT NULL COMMENT '白名单工具名称',
+  arguments_hash CHAR(64) NOT NULL COMMENT '规范化工具参数SHA-256',
+  arguments_json LONGTEXT NOT NULL COMMENT '工具参数JSON',
+  result_json LONGTEXT COMMENT '工具结构化结果JSON',
+  status VARCHAR(32) NOT NULL COMMENT '工具调用状态',
+  attempt_no INT NOT NULL DEFAULT 1 COMMENT '工具调用尝试次数',
+  duration_ms BIGINT NOT NULL DEFAULT 0 COMMENT '工具调用耗时毫秒数',
+  error_code VARCHAR(64) COMMENT '稳定错误分类',
+  error_message LONGTEXT COMMENT '工具调用失败说明',
+  started_at DATETIME NOT NULL COMMENT '工具调用开始时间',
+  completed_at DATETIME COMMENT '工具调用完成时间',
+  UNIQUE KEY uk_agent_tool_call_id (call_id),
+  INDEX idx_agent_tool_task (task_id, id),
+  INDEX idx_agent_tool_dedup (task_id, tool_name, arguments_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (
@@ -125,6 +174,8 @@ CREATE TABLE IF NOT EXISTS stock_evidence_item (
   id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
   snapshot_id BIGINT NOT NULL COMMENT '关联的数据快照ID',
   task_id BIGINT NOT NULL COMMENT '关联的股票分析任务ID',
+  tool_call_id BIGINT COMMENT '产生该证据的工具调用ID',
+  evidence_key CHAR(64) COMMENT '证据稳定去重摘要',
   source_type VARCHAR(64) NOT NULL COMMENT '证据来源类型',
   source_name VARCHAR(255) NOT NULL COMMENT '证据来源名称',
   url VARCHAR(1024) COMMENT '网页证据URL',
@@ -140,7 +191,9 @@ CREATE TABLE IF NOT EXISTS stock_evidence_item (
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   INDEX idx_stock_evidence_snapshot (snapshot_id),
   INDEX idx_stock_evidence_task (task_id),
-  INDEX idx_stock_evidence_metric (metric_name)
+  INDEX idx_stock_evidence_metric (metric_name),
+  INDEX idx_stock_evidence_tool_call (tool_call_id),
+  UNIQUE KEY uk_stock_evidence_task_key (task_id, evidence_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS stock_metric_result (

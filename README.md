@@ -8,16 +8,16 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 
 ## 功能特性
 
-- **证券代码报告链路**：`POST /api/stock-reports` 通过 SSE 推送证券代码解析、数据快照、指标计算、风险评分、证据收集、报告撰写、引用/合规审查和自动评测结果。
+- **受约束 Research Agent**：`POST /api/research-runs` 接收证券代码和自然语言研究问题，由 Planner 动态选择只读白名单工具，并通过 SSE 推送计划、工具调用、观察、重规划、综合、门禁和停止事件；`POST /api/stock-reports` 仅作为兼容入口转入同一 Runtime。
 - **A股/ETF 解析**：普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`；常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
-- **金融数据快照**：通过 `FinancialDataProvider` 扩展点聚合上传报告、本地主档、Tavily fallback 和 TuShare Pro 数据源。
+- **增量证据账本**：Planner 可按问题选择公司主档、TuShare 财务、公开行情、用户上传报告和问题导向的公开网页检索工具；每次工具观察增量合并、校验和去重证据，不再无条件执行全部 Provider。
 - **ETF 深度快照**：ETF 聚合 TuShare `fund_daily`、`fund_basic`、`fund_nav`，保存 60 日 OHLC/成交量/成交额、基金资料、单位/累计净值、资产净值和同日折溢价；单接口失败按项降级。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
-- **公式审计与报告复用**：指标公式由 `MetricDefinitionCatalog` 版本化管理；数据快照和生成规则分别计算 SHA-256，`ReportReuseCoordinator` 只复用同一用户下已通过评审且重新评测通过的报告，并以有限等待的 single-flight 合并并发生成。
-- **可恢复工作流**：任务持久化阶段、请求、尝试次数、心跳和数据库租约；步骤日志、Checkpoint 与租约心跳在同一事务中提交，SSE 客户端断开不影响后台执行，超时任务最多恢复 3 次。
+- **公式审计与上下文隔离**：指标公式由 `MetricDefinitionCatalog` 版本化管理；报告复用摘要包含研究问题、截止日期、观察区间、研究深度、最终快照以及 Planner/toolset/policy 版本，历史 PASS 报告仍需重新通过当前门禁。
+- **可恢复 Agent Runtime**：任务持久化请求、轮次、工具调用、预算消耗、停止原因、心跳、租约和 AgentState Checkpoint；SSE 客户端断开不影响后台执行，过期任务从最近完整轮次恢复，最多尝试 3 次。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
-- **证据约束多空角色**：`BullBearResearchAgent` 基于同一确定性指标/风险快照输出多头和空头条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
+- **证据约束多空工具**：`BullBearCaseBuilder` 由 `build_bull_bear_cases` 工具调用，基于同一确定性指标/风险快照输出正反条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 除检查证据数量、报告期和就近引用外，还会抽取正文中的百分比、倍数和金额并逐项对齐确定性指标/冻结证据；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
 - **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
@@ -28,10 +28,10 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 
 ## 当前重构状态
 
-- 通用 deep-research 已从前后端完整移除，包括 `agent/graph`、通用 `agent/node`、通用 `ResearchTaskService`、`ChatRequest`、`/api/chat` 控制器及前端 `streamChat`/双模式入口。
-- 金融投研链路已按严格 Spring MVC 职责拆分：`controller` 只依赖 `service` 接口，具体实现位于 `service/impl`；计算、采集、审查和工作流位于 `component`；MyBatis 类型转换、数据源和序列化适配位于 `infrastructure`。公开入口仍为 `/api/stock-reports`。
-- RAG、搜索、报告库、用户、管理员后台等基础设施继续复用，但定位为金融投研链路的支撑能力。
-- 前端 Run 工作区只保留证券代码分析，直接输入 A股或 ETF 代码进入 `/api/stock-reports`；报告库可跳转到独立研究页查看行情、证据、多空论据和版本差异。
+- 固定的 `StockReportWorkflow`、`StockReportRunner`、旧恢复调度和阶段式检查点代码已经删除，`component.workflow` 包不再存在。
+- 新执行内核位于 `agent/runtime`、`agent/planning`、`agent/tool`、`agent/memory` 和 `agent/event`；金融确定性计算、数据源和最终审查仍作为受控能力保留。
+- 前端 Run 工作区已迁移到 `/api/research-runs`，支持研究问题、截止日期、观察区间和研究深度，并展示动态计划与工具轨迹。
+- 旧 `/api/stock-reports` 请求会转换为默认研究问题后进入同一 Agent Runtime；反馈、回放和历史轨迹接口继续兼容。
 
 ## 技术栈
 
@@ -59,33 +59,27 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - Vue Router
 - ECharts
 
-## 金融工作流
+## Research Agent 运行循环
 
 ```text
-StockResolve
-  -> DataSnapshot
-  -> MetricEngine
-  -> RiskAssessment
-  -> EvidenceCollect
-  -> BullBearResearch
-  -> InvestmentWriter
-  -> CitationReviewer + ComplianceReviewer
-  -> Evaluation
-  -> END
+ResearchQuestion -> Plan -> SelectTool -> Act -> Observe
+                         ^                    |
+                         |------ Replan ------|
+                                              v
+                                      Synthesize -> Guard -> Stop
 ```
 
-股票报告 SSE 示例：
+Agent SSE 示例：
 
 ```text
-data: {"step":"stock_resolve","data":{...}}
-data: {"step":"data_snapshot","data":{...}}
-data: {"step":"metric_engine","data":{...}}
-data: {"step":"risk_assessment","data":{...}}
-data: {"step":"evidence_collect","data":{...}}
-data: {"step":"writer","data":{...}}
-data: {"step":"reviewer","data":{...}}
-data: {"step":"evaluation","data":{...}}
-data: {"step":"done","data":{...}}
+data: {"step":"run_created","data":{...}}
+data: {"step":"plan_created","data":{...}}
+data: {"step":"tool_started","data":{...}}
+data: {"step":"tool_completed","data":{...}}
+data: {"step":"replanned","data":{...}}
+data: {"step":"synthesis_completed","data":{...}}
+data: {"step":"review_completed","data":{...}}
+data: {"step":"run_completed","data":{...}}
 data: [DONE]
 ```
 
@@ -98,7 +92,8 @@ FinSight-Agent/
 │   ├── src/main/
 │       ├── java/com/zzy/finsight/
 │       │   ├── auth/              # Bearer Token、密码和用户上下文支撑
-│       │   ├── component/         # analysis/evaluation/marketdata/review/workflow 业务组件
+│       │   ├── agent/             # Runtime、Planner、工具、状态、事件与恢复
+│       │   ├── component/         # analysis/evaluation/marketdata/review 确定性组件
 │       │   ├── config/            # CORS、LLM、异步执行器等配置
 │       │   ├── controller/        # REST API 与 SSE 接口
 │       │   ├── domain/stock/      # 股票领域模型、metric 指标定义和 reference 主档
@@ -143,20 +138,25 @@ spring:
 
 finsight:
   async:
-    workflow-threads: 8
-    workflow-queue-capacity: 32
+    agent-threads: 8
+    agent-queue-capacity: 32
     financial-provider-threads: 6
     financial-provider-queue-capacity: 24
     financial-provider-timeout: PT15S
-  workflow:
-    singleflight-wait-timeout: PT7M
+  agent:
+    max-turns: 8
+    max-tool-calls: 12
+    max-replans: 3
+    max-parallel-tools: 4
+    timeout: PT180S
+    tool-timeout: PT30S
 ```
 
-工作流和 Provider 执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。Provider 聚合、TuShare 连接/读取和 single-flight 等待均有显式超时，不会无限占用线程。
+Agent 和工具执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。单次工具和整体运行都有显式超时，不会无限占用线程。
 
-数据库由 Flyway 自动管理：空库依次执行 `V1__init.sql`、`V2__stock_report_reliability.sql`、`V3__workflow_checkpoint_resume.sql` 和后续迁移；已有旧库通过 `baseline-version=1` 接管后执行增量迁移。`schema.sql` 保留为当前完整结构参考，不再由 Spring SQL Init 自动执行。
+数据库由 Flyway 自动管理：空库依次执行 V1～V4；V4 新增 Agent 轮次、工具调用、预算/停止原因、证据去重与 AgentState Checkpoint 字段。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
 
-如需临时关闭自动迁移，可在 `application.yml` 中把 `spring.flyway.enabled` 改为 `false`；关闭后需自行按顺序执行 `upgrade-stock-report-observability.sql`、`upgrade-workflow-checkpoint-resume.sql`，保证数据库结构与代码一致。
+如需临时关闭自动迁移，需按顺序执行历史手动升级脚本，最后执行 `upgrade-research-agent.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -183,7 +183,7 @@ curl http://localhost:8000/
 {
   "status": "running",
   "backend": "java",
-  "workflow": "stock-report-pipeline"
+  "runtime": "bounded-research-agent"
 }
 ```
 
@@ -252,10 +252,10 @@ POST /api/clear
 
 > 从旧版全局知识库升级时，原 `finsight_docs` 中未带 `knowledge_space` metadata 的记录不会自动归属任何用户；请重新上传 PDF，或在报告库重新执行“加入知识库”。
 
-### 启动证券代码研究报告
+### 启动 Research Agent
 
 ```http
-POST /api/stock-reports
+POST /api/research-runs
 Content-Type: application/json
 Accept: text/event-stream
 ```
@@ -264,21 +264,38 @@ Accept: text/event-stream
 
 ```json
 {
-  "ticker": "588200",
-  "thread_id": "demo-stock-thread",
-  "report_period": "latest",
-  "search_mode": "hybrid"
+  "ticker": "600519",
+  "research_question": "最近两个季度毛利率变化的主要原因是什么？",
+  "thread_id": "optional",
+  "as_of_date": "2026-08-12",
+  "time_horizon": "2Y",
+  "research_depth": "standard",
+  "search_mode": "hybrid",
+  "budget": {
+    "max_turns": 8,
+    "max_tool_calls": 12,
+    "timeout_seconds": 180
+  }
 }
 ```
 
 字段说明：
 
 - `ticker`：普通 A 股或常见 ETF 的 6 位代码，也支持 `.SH` / `.SZ` 后缀。
-- `thread_id`：可选；不传时后端生成证券研究报告线程 ID。
-- `report_period`：报告期口径，默认 `latest`。
+- `research_question`：必填，决定计划、证据需求和工具选择。
+- `as_of_date`、`time_horizon`：限定研究时点与观察区间。
+- `research_depth`：支持 `quick`、`standard`、`deep`，映射到服务端预算上限。
 - `search_mode`：支持 `document`、`hybrid`、`web`。
+- `budget`：可选且只能收紧服务端预算。
 
-Bad Case 反馈与回放：
+Agent 重试与动态轨迹：
+
+```http
+POST /api/research-runs/{taskId}/retry
+GET /api/research-runs/{taskId}/trace
+```
+
+旧 `POST /api/stock-reports` 继续接受原请求并转入同一 Runtime。历史报告的 Bad Case、回放和旧轨迹接口继续保留：
 
 ```http
 POST /api/stock-reports/{taskId}/feedback
@@ -334,7 +351,9 @@ GET /api/admin/system/health
 - `research_task`：任务主表。
 - `agent_step_log`：Agent 阶段执行日志。
 - `report`：报告内容和版本。
-- `checkpoint`：带阶段、尝试次数和生成上下文指纹的工作流状态快照，可从 Writer/Reviewer 安全恢复。
+- `agent_turn`：Planner 每轮结构化动作、观察摘要、Token 和耗时。
+- `agent_tool_call`：工具名称、参数摘要、结果、重试次数和稳定错误分类。
+- `checkpoint`：带状态版本、轮次和请求上下文指纹的 AgentState 快照。
 - `stock_analysis_snapshot`：股票报告生成时的数据快照。
 - `stock_evidence_item`：金融证据账本。
 - `stock_metric_result`：Java 指标引擎计算结果。
@@ -351,7 +370,7 @@ cd backend
 mvn.cmd test
 ```
 
-测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V3，并验证 Checkpoint、任务租约、报告复用租户隔离和事务回滚；未启动 Docker 时该用例会明确跳过。
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V4，并验证 Agent turn、tool call、Checkpoint、任务租约和报告租户隔离；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 
@@ -386,6 +405,7 @@ npm.cmd run build
 ## 当前边界
 
 - 当前仓库聚焦金融投研报告 Agent，不再对外提供通用 `/api/chat` deep-research 链路。
-- 前端不再包含通用研究按钮、自由主题输入或失效的通用报告修订入口；报告库继续提供查看、收藏、加入 RAG 和导出能力。
+- 第一版是单体受约束 Agent，不引入 Supervisor、多 Agent、SQL/反射工具、交易执行、仓位建议或回测能力。
+- 未配置真实 LLM 时 Planner 会明确标记 `DETERMINISTIC_FALLBACK`；该模式用于本地可运行和机制测试，不代表已经验证真实模型的规划质量。
 - TuShare 真实 token、缓存、限速、接口权限错误提示仍需继续硬化；ETF `total_netasset` 展示单位也需真实数据复核。
 - ETF 持仓、跟踪误差、申赎清单、普通股票行情图、高级技术指标、风险裁判、评测趋势管理页面和真实 MySQL 迁移集成实跑属于后续增强。

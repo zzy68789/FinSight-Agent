@@ -88,12 +88,18 @@ finsight:
   redis:
     runtime-ttl: PT24H
   async:
-    workflow-threads: 8
-    workflow-queue-capacity: 32
+    agent-threads: 8
+    agent-queue-capacity: 32
     financial-provider-threads: 6
     financial-provider-queue-capacity: 24
     financial-provider-timeout: PT15S
-  workflow:
+  agent:
+    max-turns: 8
+    max-tool-calls: 12
+    max-replans: 3
+    max-parallel-tools: 4
+    max-report-rewrites: 2
+    timeout: PT180S
+    tool-timeout: PT30S
     recovery-interval-ms: 60000
     recovery-stale-after: PT5M
-    singleflight-wait-timeout: PT7M

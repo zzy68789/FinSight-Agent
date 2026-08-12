@@ -11,6 +11,7 @@ import com.zzy.finsight.mapper.AppUserMapper;
 import com.zzy.finsight.mapper.CheckpointMapper;
 import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
+import com.zzy.finsight.mapper.AgentRuntimeMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,9 @@ class ApplicationSmokeTest {
     ResearchTaskMapper taskMapper;
 
     @MockitoBean
+    AgentRuntimeMapper agentRuntimeMapper;
+
+    @MockitoBean
     AgentStepLogMapper stepLogMapper;
 
     @MockitoBean
@@ -75,7 +79,6 @@ class ApplicationSmokeTest {
     @BeforeEach
     void setUp() {
         when(userContext.currentUserId()).thenReturn(7L);
-        when(taskMapper.create(org.mockito.ArgumentMatchers.eq(7L), anyString(), anyString(), anyString())).thenReturn(1L);
         when(reportMapper.findLatestByThread(org.mockito.ArgumentMatchers.eq(7L), anyString())).thenReturn(Optional.empty());
     }
 
@@ -86,7 +89,7 @@ class ApplicationSmokeTest {
 
         assertThat(response).containsEntry("status", "running");
         assertThat(response).containsEntry("backend", "java");
-        assertThat(response).containsEntry("workflow", "stock-report-pipeline");
+        assertThat(response).containsEntry("runtime", "bounded-research-agent");
     }
 
     @Test

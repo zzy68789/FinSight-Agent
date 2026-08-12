@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project
 
-FinSight 是基于 **Spring Boot 3.4.3 (Java 17) + MyBatis + Vue 3** 的 A股/ETF 投研报告生成系统。核心是证券代码研究工作流 + RAG 检索 + SSE 流式推送。
+FinSight 是基于 **Spring Boot 3.4.3 (Java 17) + MyBatis + Vue 3** 的 A股/ETF 投研报告生成系统。核心是受约束 Research Agent Runtime + RAG 检索 + SSE 流式推送。
 
 环境为 **Windows / PowerShell**，命令用 `mvn.cmd`、`npm.cmd`（带 `.cmd` 后缀）。后端无 Maven wrapper，直接用 `mvn.cmd`。
 
@@ -26,14 +26,14 @@ npm.cmd run dev
 npm.cmd run build
 ```
 
-后端端口 **8000**；健康检查 `curl http://localhost:8000/` 返回 `{"status":"running","backend":"java","workflow":"stock-report-pipeline"}`。
+后端端口 **8000**；健康检查 `curl http://localhost:8000/` 返回 `{"status":"running","backend":"java","runtime":"bounded-research-agent"}`。
 
 ## Architecture
 
-**证券代码研究链路** —— `component/workflow/StockReportWorkflow.java`
-  `StockResolve → DataSnapshot → MetricEngine → RiskAssessment → EvidenceCollect → InvestmentWriter → CitationReviewer + ComplianceReviewer → Evaluation`。
+**Research Agent 主链** —— `agent/runtime/ResearchAgentRuntime.java`
+  `Plan → SelectTool → Act → Observe → Replan/Synthesize → Citation + Compliance + Evaluation → Stop`。Planner 只能调用 `agent/tool` 注册的只读白名单工具，Java 继续负责预算、恢复、金融计算和最终门禁。
 
-**后端分层**（`backend/src/main/java/com/zzy/finsight/`）：`controller` → `service` 接口 → `service.impl` 实现 → `mapper`(MyBatis XML)。业务计算、数据采集、审查和工作流分别位于 `component.analysis`、`component.marketdata`、`component.review`、`component.workflow`；金融模型位于 `domain.stock`，请求响应位于 `dto`，Provider、MyBatis TypeHandler 和序列化适配位于 `infrastructure`。另有 `rag`、`llm`、`search` 基础模块。
+**后端分层**（`backend/src/main/java/com/zzy/finsight/`）：`controller` → `service` 接口 → `service.impl` 实现 → `mapper`(MyBatis XML)。Agent Runtime、Planner、工具、状态和事件位于 `agent`；确定性计算、数据采集和审查分别位于 `component.analysis`、`component.marketdata`、`component.review`；金融模型位于 `domain.stock`，请求响应位于 `dto`，Provider、MyBatis TypeHandler 和序列化适配位于 `infrastructure`。另有 `rag`、`llm`、`search` 基础模块。
 
 **外部依赖与降级**：MySQL 长期持久化；Redis 存运行态（未启动降级为进程内内存）；ChromaDB 向量检索（未启动降级为进程内向量库，重启丢失）；LLM / Tavily / TuShare 未配置 key 时走本地 fallback，可跑通完整流程。RAG 默认 `BM25 + vector` 融合 + 相关性阈值。
 
@@ -46,7 +46,7 @@ npm.cmd run build
 - **投研报告合规**：报告必须标注"仅作研究辅助，不构成投资建议"；不做荐股、仓位、保证收益、自动交易、回测。最终报告需同时通过 `CitationReviewer` 和 `ComplianceReviewer`。
 - **不引入 Python**：金融/图表能力用 Java + 前端 ECharts 实现，不接 yfinance / akshare / matplotlib。
 - **结构化输出**：金融报告的引用审查、合规审查和评测输出保持结构化，非法结果 fail-closed，不得绕过最终门控。
-- **前端 SSE 契约**：不轻改 `/api/stock-reports` 的路径、请求体和 SSE 字段。后端字段使用 `finalReport`/`reviewStatus` 等既有命名。
+- **前端 SSE 契约**：新入口使用 `/api/research-runs` 和动态 Agent 事件；`/api/stock-reports` 作为兼容入口继续保留，后端字段使用 `finalReport`/`reviewStatus` 等既有命名。
 - **注释统一用中文**：所有代码注释（类/方法 Javadoc、行内注释）一律用中文。新增或修改公开类、接口、Controller 映射方法以及包含业务规则的非平凡方法时，必须补充简洁的中文 Javadoc；数据载体的每个字段都要说明含义，Java `record` 使用类级 `@param` 说明组件字段。不要给 getter、setter、构造器或显而易见的代码堆砌无意义注释。
 
 ## Progress Docs

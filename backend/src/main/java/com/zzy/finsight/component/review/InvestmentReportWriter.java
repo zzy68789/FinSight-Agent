@@ -47,7 +47,7 @@ public class InvestmentReportWriter {
             FinancialRiskAssessment riskAssessment,
             CitationReviewResult previousReview
     ) {
-        return write(snapshot, metrics, riskAssessment, BullBearResearchResult.empty(), previousReview);
+        return write("", snapshot, metrics, riskAssessment, BullBearResearchResult.empty(), previousReview);
     }
 
     /** 根据快照、指标、风险评估和多空研究结果生成投研报告。 */
@@ -58,12 +58,24 @@ public class InvestmentReportWriter {
             BullBearResearchResult bullBearResearch,
             CitationReviewResult previousReview
     ) {
-        String deterministicReport = writeDeterministic(
+        return write("", snapshot, metrics, riskAssessment, bullBearResearch, previousReview);
+    }
+
+    /** 围绕自然语言研究问题生成受证据约束的投研报告。 */
+    public String write(
+            String researchQuestion,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics,
+            FinancialRiskAssessment riskAssessment,
+            BullBearResearchResult bullBearResearch,
+            CitationReviewResult previousReview
+    ) {
+        String deterministicReport = withResearchQuestion(writeDeterministic(
                 snapshot, metrics, riskAssessment, bullBearResearch, previousReview
-        );
+        ), researchQuestion);
         try {
             String generatedReport = llmClient.generate(
-                    buildPrompt(deterministicReport, snapshot),
+                    buildPrompt(deterministicReport, snapshot, researchQuestion),
                     LlmClient.ModelType.SMART
             );
             String normalizedReport = ensureComplianceDisclaimer(normalizeGeneratedReport(generatedReport));
@@ -155,7 +167,11 @@ public class InvestmentReportWriter {
         return report.toString();
     }
 
-    private String buildPrompt(String deterministicReport, FinancialSnapshot snapshot) {
+    private String buildPrompt(
+            String deterministicReport,
+            FinancialSnapshot snapshot,
+            String researchQuestion
+    ) {
         String compactDraft = compactNarrativeDraft(deterministicReport);
         return """
                 你是 FinSight 金融投研报告撰写 Agent。请在不改变事实、数字、报告期和证据编号的前提下，增强下面的确定性报告草稿。
@@ -180,6 +196,7 @@ public class InvestmentReportWriter {
                 证券代码：%s
                 资产类型：%s
                 报告期：%s
+                本次研究问题：%s
 
                 确定性报告草稿：
                 %s
@@ -190,9 +207,22 @@ public class InvestmentReportWriter {
                 snapshot.subject().fullCode(),
                 snapshot.subject().assetType(),
                 reportPeriodSummary(snapshot),
+                researchQuestion == null || researchQuestion.isBlank() ? "生成完整证券研究报告" : researchQuestion,
                 compactDraft,
                 buildCompactEvidenceContext(snapshot)
         );
+    }
+
+    private String withResearchQuestion(String report, String researchQuestion) {
+        if (researchQuestion == null || researchQuestion.isBlank()) {
+            return report;
+        }
+        int firstParagraphEnd = report.indexOf("\n\n");
+        if (firstParagraphEnd < 0) {
+            return report;
+        }
+        String focus = "\n\n> 本次研究问题：" + researchQuestion.strip().replaceAll("\\s+", " ") + "。";
+        return report.substring(0, firstParagraphEnd) + focus + report.substring(firstParagraphEnd);
     }
 
     /** 移除最终由 Java 覆盖的引用附录，避免重复发送大量证据、公式和风险明细。 */

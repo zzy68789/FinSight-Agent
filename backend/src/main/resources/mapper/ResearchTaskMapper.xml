@@ -14,7 +14,7 @@
         </constructor>
     </resultMap>
 
-    <resultMap id="executionResult" type="com.zzy.finsight.domain.WorkflowTaskExecutionRecord">
+    <resultMap id="executionResult" type="com.zzy.finsight.domain.TaskExecutionRecord">
         <constructor>
             <idArg column="id" javaType="_long"/>
             <arg column="owner_id" javaType="_long"/>
@@ -33,18 +33,16 @@
 
     <insert id="insertTask" parameterType="map" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO research_task(
-          owner_id, thread_id, query, search_mode, status, revision_number,
-          stage, attempt_count, request_payload, created_at, updated_at
+          owner_id, thread_id, query, search_mode, runtime_type, status, revision_number,
+          stage, attempt_count, request_payload, planner_version, toolset_version, policy_version,
+          created_at, updated_at
         )
         VALUES (
-          #{ownerId}, #{threadId}, #{query}, #{searchMode}, 'CREATED', 0,
-          'CREATED', 0, #{requestPayload}, #{createdAt}, #{updatedAt}
+          #{ownerId}, #{threadId}, #{query}, #{searchMode}, #{runtimeType}, 'CREATED', 0,
+          'CREATED', 0, #{requestPayload}, #{plannerVersion}, #{toolsetVersion}, #{policyVersion},
+          #{createdAt}, #{updatedAt}
         )
     </insert>
-
-    <update id="updateStatus">
-        UPDATE research_task SET status = #{status}, updated_at = #{now} WHERE id = #{taskId}
-    </update>
 
     <update id="acquireAttempt">
         UPDATE research_task
@@ -57,16 +55,18 @@
           AND (lease_until IS NULL OR lease_until &lt; #{now} OR lease_owner = #{leaseOwner})
     </update>
 
-    <update id="updateRunningStage">
+    <update id="updateRunningAgentProgress">
         UPDATE research_task
-        SET stage = #{stage}, heartbeat_at = #{now}, lease_until = #{leaseUntil}, updated_at = #{now}
+        SET stage = #{stage}, turn_count = #{turnCount}, tool_call_count = #{toolCallCount},
+            heartbeat_at = #{now}, lease_until = #{leaseUntil}, updated_at = #{now}
         WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
     </update>
 
-    <update id="finish">
+    <update id="finishAgentTask">
         UPDATE research_task
-        SET status = #{status}, stage = #{stage}, last_error = #{error},
-            heartbeat_at = #{now}, lease_owner = NULL, lease_until = NULL, updated_at = #{now}
+        SET status = #{status}, stage = #{stage}, stop_reason = #{stopReason}, last_error = #{error},
+            heartbeat_at = #{now}, completed_at = #{now}, lease_owner = NULL, lease_until = NULL,
+            updated_at = #{now}
         WHERE id = #{taskId}
     </update>
 
@@ -92,12 +92,12 @@
         WHERE owner_id = #{ownerId} AND id = #{taskId}
     </select>
 
-    <select id="findStaleRunning" resultMap="executionResult">
+    <select id="findStaleAgentRunning" resultMap="executionResult">
         SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
                last_error, heartbeat_at, lease_owner, lease_until, updated_at
         FROM research_task
         WHERE status = 'RUNNING'
-          AND search_mode LIKE 'stock-%'
+          AND runtime_type = 'RESEARCH_AGENT'
           AND COALESCE(heartbeat_at, updated_at) &lt; #{heartbeatBefore}
         ORDER BY updated_at ASC
         LIMIT #{limit}

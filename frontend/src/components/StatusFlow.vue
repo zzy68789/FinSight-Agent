@@ -48,6 +48,26 @@
         </div>
       </li>
     </ol>
+    <div v-if="events.length" class="border-t border-slate-700 px-5 py-4">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">动态 Turn / Tool Timeline</p>
+      <ol class="mt-3 space-y-2">
+        <li
+          v-for="event in events.slice(-10)"
+          :key="event.id"
+          class="flex items-start justify-between gap-3 rounded-md border border-slate-700 bg-slate-900/60 px-3 py-2"
+        >
+          <div class="min-w-0">
+            <p class="truncate text-xs font-semibold text-slate-200">
+              Turn {{ event.turnNo || 0 }} · {{ event.toolName || eventTypeLabel(event.type) }}
+            </p>
+            <p v-if="event.summary" class="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{{ event.summary }}</p>
+          </div>
+          <span class="shrink-0 text-[10px] font-semibold" :class="event.status === 'FAILED' ? 'text-rose-300' : event.status === 'DEGRADED' ? 'text-amber-200' : 'text-emerald-300'">
+            {{ event.status }}
+          </span>
+        </li>
+      </ol>
+    </div>
   </section>
 </template>
 
@@ -66,22 +86,21 @@ import {
 
 const props = defineProps({
   currentStep: { type: String, default: 'idle' },
-  completedSteps: { type: Array, default: () => [] }
+  completedSteps: { type: Array, default: () => [] },
+  events: { type: Array, default: () => [] }
 });
 
 const steps = [
-  { id: 'stock_resolve', code: 'RESOLVE', label: '证券解析', desc: '标准化 A股或 ETF 代码与交易所', icon: BrainCircuitIcon },
-  { id: 'data_snapshot', code: 'SNAPSHOT', label: '数据快照', desc: '拉取或复用财报、行情、新闻证据', icon: SearchIcon },
-  { id: 'metric_engine', code: 'METRIC', label: '指标计算', desc: '用 Java 确定性计算核心财务指标', icon: FilePenLineIcon },
-  { id: 'risk_assessment', code: 'RISK', label: '风险评分', desc: '按基本面、技术面、情绪、消息和市场环境评分', icon: ShieldCheckIcon },
-  { id: 'evidence_collect', code: 'LEDGER', label: '证据账本', desc: '沉淀引用、缺失项和置信度', icon: SearchIcon },
-  { id: 'bull_bear_research', code: 'DEBATE', label: '多空研究', desc: '以同一证据快照形成正反条件化论据', icon: BrainCircuitIcon },
-  { id: 'writer', code: 'DRAFT', label: '撰写', desc: '生成固定八章节证券投研报告', icon: FileTextIcon },
-  { id: 'reviewer', code: 'CITATION', label: '引用审查', desc: '检查数字、口径和证据充分性', icon: ShieldCheckIcon },
-  { id: 'evaluation', code: 'EVAL', label: '自动评测', desc: '检查关键点、数字一致性和引用命中率', icon: ClipboardCheckIcon }
+  { id: 'run_created', code: 'RUN', label: '运行上下文', desc: '建立任务、预算、租约和可恢复状态', icon: BrainCircuitIcon },
+  { id: 'plan_created', code: 'PLAN', label: '研究规划', desc: '根据自然语言问题生成假设和证据需求', icon: ClipboardCheckIcon },
+  { id: 'tool_started', code: 'ACT', label: '工具与观察', desc: '自主选择白名单工具并更新证据账本', icon: SearchIcon },
+  { id: 'replanned', code: 'REPLAN', label: '证据补充', desc: '根据观察或审查失败动态调整研究计划', icon: BrainCircuitIcon, optional: true },
+  { id: 'synthesis_started', code: 'SYNTH', label: '报告综合', desc: '围绕研究问题组织确定性事实和引用', icon: FileTextIcon },
+  { id: 'review_completed', code: 'GUARD', label: '最终门禁', desc: '执行数字、引用、合规和质量检查', icon: ShieldCheckIcon },
+  { id: 'run_completed', code: 'STOP', label: '受控停止', desc: '通过后发布，证据不足或预算耗尽时明确停止', icon: CheckIcon }
 ];
 
-const flowSubtitle = 'Resolve → Snapshot → Metric → Risk → Evidence → Debate → Writer → Reviewer → Evaluation';
+const flowSubtitle = 'Plan → Tool → Observe → Replan / Synthesize → Guard → Stop';
 const seenSteps = ref(new Set());
 
 watch(
@@ -99,9 +118,26 @@ const completedStepSet = computed(() => new Set([...props.completedSteps, ...see
 
 const statusLabel = computed(() => {
   if (props.currentStep === 'idle') return '待开始';
-  if (props.currentStep === 'done') return '已完成';
+  if (props.currentStep === 'done' || props.currentStep === 'run_completed') return '已完成';
+  if (props.currentStep === 'run_stopped') return '已停止';
   return '进行中';
 });
+
+const eventTypeLabel = (type) => {
+  const labels = {
+    run_created: '任务创建',
+    plan_created: '研究规划',
+    tool_started: '工具开始',
+    tool_completed: '工具观察',
+    replanned: '重新规划',
+    synthesis_started: '开始综合',
+    synthesis_completed: '报告生成',
+    review_completed: '确定性门禁',
+    run_completed: '任务完成',
+    run_stopped: '受控停止'
+  };
+  return labels[type] || type;
+};
 
 const isActive = (step) => props.currentStep === step.id;
 

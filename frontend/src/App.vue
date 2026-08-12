@@ -228,14 +228,48 @@
               :disabled="isLoading"
             />
             <select
-              v-model="stockReportPeriod"
+              v-model="researchTimeHorizon"
               class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               :disabled="isLoading"
             >
-              <option value="latest">最新期</option>
-              <option value="annual">年报</option>
-              <option value="quarterly">季报</option>
+              <option value="6M">近 6 个月</option>
+              <option value="1Y">近 1 年</option>
+              <option value="2Y">近 2 年</option>
+              <option value="5Y">近 5 年</option>
             </select>
+          </div>
+          <label for="research-question" class="mt-4 block text-sm font-semibold text-blue-950">研究问题</label>
+          <textarea
+            id="research-question"
+            v-model="researchQuestion"
+            rows="4"
+            maxlength="500"
+            class="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50"
+            placeholder="例如：最近两个季度毛利率变化的主要原因是什么？"
+            :disabled="isLoading"
+          ></textarea>
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <label class="text-xs font-medium text-slate-600">
+              研究截止日
+              <input
+                v-model="researchAsOfDate"
+                type="date"
+                class="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                :disabled="isLoading"
+              />
+            </label>
+            <label class="text-xs font-medium text-slate-600">
+              研究深度
+              <select
+                v-model="researchDepth"
+                class="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                :disabled="isLoading"
+              >
+                <option value="quick">快速</option>
+                <option value="standard">标准</option>
+                <option value="deep">深度</option>
+              </select>
+            </label>
           </div>
           <button
             type="button"
@@ -245,11 +279,11 @@
           >
             <Loader2Icon v-if="isLoading" class="h-4 w-4 animate-spin" aria-hidden="true" />
             <SendIcon v-else class="h-4 w-4" aria-hidden="true" />
-            <span>{{ isLoading ? '运行中' : '生成证券报告' }}</span>
+            <span>{{ isLoading ? 'Agent 运行中' : '启动研究 Agent' }}</span>
           </button>
         </section>
 
-        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" />
+        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" :events="agentEvents" />
 
         <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
           <div class="mb-3 flex items-center justify-between gap-3">
@@ -957,10 +991,10 @@ import {
 } from 'lucide-vue-next';
 import {
     uploadFiles,
-    streamStockReport,
+    streamResearchRun,
     saveStockFeedback,
     getStockReplay,
-    getStockTrace,
+    getResearchRunTrace,
     clearContext,
     listTasks,
     getTask,
@@ -1008,7 +1042,13 @@ const triggerWarning = (msg) => {
 };
 
 const stockTicker = ref('600519');
-const stockReportPeriod = ref('latest');
+const researchQuestion = ref('分析该证券近期财务表现、估值观察、主要风险和后续需要跟踪的证据。');
+const researchAsOfDate = ref(new Date().toISOString().slice(0, 10));
+const researchDepth = ref('standard');
+const researchTimeHorizon = ref('2Y');
+const agentPlan = ref(null);
+const agentBudget = ref(null);
+const agentEvents = ref([]);
 const latestStockTaskId = ref(null);
 const financialMetrics = ref([]);
 const financialEvidence = ref([]);
@@ -1093,7 +1133,8 @@ const workspaceTabs = computed(() => {
     return tabs;
 });
 
-const canStartRun = computed(() => /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim()));
+const canStartRun = computed(() => /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim())
+    && researchQuestion.value.trim().length > 0);
 
 const riskScorePercent = computed(() => {
     const score = Number(financialRiskAssessment.value?.finalScore || 0);
@@ -1231,6 +1272,16 @@ const searchModeLabel = (mode) => {
 const currentStepLabel = (step) => {
     const labels = {
         idle: '就绪',
+        run_created: '任务创建',
+        plan_created: '研究规划',
+        tool_started: '工具执行',
+        tool_completed: '观察更新',
+        replanned: '重新规划',
+        synthesis_started: '综合撰写',
+        synthesis_completed: '报告生成',
+        review_completed: '确定性门禁',
+        run_completed: '已完成',
+        run_stopped: '已停止',
         stock_resolve: '证券解析',
         data_snapshot: '数据快照',
         metric_engine: '指标计算',
@@ -1501,7 +1552,7 @@ const startStockResearch = async () => {
     if (!canStartRun.value) return;
 
     isLoading.value = true;
-    currentStep.value = 'stock_resolve';
+    currentStep.value = 'run_created';
     completedSteps.value = [];
     logs.value = [];
     displayedReport.value = '';
@@ -1516,7 +1567,10 @@ const startStockResearch = async () => {
     financialProviderStages.value = [];
     stockReplay.value = null;
     stockTrace.value = null;
-    logs.value.push(`[初始化] 证券代码分析：${stockTicker.value.trim().toUpperCase()}，检索模式：${searchModeLabel(searchMode.value)}`);
+    agentPlan.value = null;
+    agentBudget.value = null;
+    agentEvents.value = [];
+    logs.value.push(`[初始化] Research Agent：${stockTicker.value.trim().toUpperCase()}，问题：${researchQuestion.value.trim()}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
 
@@ -1531,15 +1585,20 @@ const startStockResearch = async () => {
             logs.value.push('[系统] 上下文已清理，将使用公开数据源与降级缺失标记。');
         }
 
-        streamStockReport(
-            stockTicker.value.trim().toUpperCase(),
-            actualMode,
-            stockReportPeriod.value,
+        streamResearchRun(
+            {
+                ticker: stockTicker.value.trim().toUpperCase(),
+                research_question: researchQuestion.value.trim(),
+                as_of_date: researchAsOfDate.value,
+                time_horizon: researchTimeHorizon.value,
+                research_depth: researchDepth.value,
+                search_mode: actualMode
+            },
             handleStockEvent,
             () => {
                 isLoading.value = false;
                 currentStep.value = 'done';
-                logs.value.push('[完成] 证券报告流程已结束。');
+                logs.value.push('[完成] Research Agent 已结束运行。');
                 loadTasks();
                 loadReports(activeThreadId.value);
                 scrollToBottom();
@@ -1566,7 +1625,61 @@ const handleStockEvent = (event) => {
         }
     }
     const payload = event.data || {};
-    if (event.step === 'stock_resolve') {
+    agentEvents.value = [...agentEvents.value, {
+        id: payload.eventId || `${event.step}-${Date.now()}-${agentEvents.value.length}`,
+        type: event.step,
+        status: payload.status || 'SUCCESS',
+        turnNo: payload.turnNo || 0,
+        toolName: payload.toolName || '',
+        summary: payload.summary || payload.reason || ''
+    }].slice(-30);
+    if (event.step === 'run_created') {
+        agentBudget.value = payload.budget || null;
+        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
+        logs.value.push(`[运行时] 任务 #${payload.taskId || '-'} 已创建，最大 ${payload.budget?.maxTurns || '-'} 轮。`);
+    } else if (event.step === 'plan_created' || event.step === 'replanned') {
+        agentPlan.value = payload.plan || null;
+        logs.value.push(`[规划] ${agentPlan.value?.goal || researchQuestion.value}`);
+        if (payload.degraded) logs.value.push(`[规划降级] ${payload.degradedReason || 'LLM 不可用，使用确定性策略'}`);
+    } else if (event.step === 'tool_started') {
+        logs.value.push(`[工具] 第 ${payload.turnNo || '-'} 轮调用 ${payload.toolName || '-'}。`);
+    } else if (event.step === 'tool_completed') {
+        const result = payload.result || {};
+        logs.value.push(`[观察] ${payload.summary || `${payload.toolName || '工具'} 执行完成`}`);
+        if (result.subject) {
+            const subject = result.subject;
+            logs.value.push(`[证券解析] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别证券'}`);
+        }
+        if (result.evidence) {
+            const existing = new Map(financialEvidence.value.map((item) => [JSON.stringify(item), item]));
+            result.evidence.forEach((item) => existing.set(JSON.stringify(item), item));
+            financialEvidence.value = [...existing.values()];
+            financialSnapshotSummary.value = {
+                evidenceCount: financialEvidence.value.length,
+                missingCount: financialEvidence.value.filter((item) => item.issueCode).length
+            };
+        }
+        if (result.metrics) financialMetrics.value = result.metrics;
+        if (result.riskAssessment) financialRiskAssessment.value = result.riskAssessment;
+        if (result.research) bullBearResearch.value = result.research;
+    } else if (event.step === 'synthesis_completed') {
+        const finalReport = payload.finalReport;
+        if (finalReport) {
+            displayedReport.value = '';
+            typeWriterEffect(finalReport);
+        }
+        logs.value.push(`[综合] 第 ${payload.attempt || 1} 版研究报告已生成。`);
+    } else if (event.step === 'review_completed') {
+        financialCompliance.value = payload.compliance || null;
+        financialEvaluation.value = payload.evaluation || null;
+        logs.value.push(payload.reviewStatus === 'PASS' ? '[门禁] 引用、合规和评测已通过。' : `[门禁] 未通过：${payload.critique || '请查看轨迹'}`);
+    } else if (event.step === 'run_completed') {
+        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
+        logs.value.push(`[完成] 任务 #${latestStockTaskId.value || '-'} 已写入报告库。`);
+    } else if (event.step === 'run_stopped') {
+        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
+        logs.value.push(`[停止] ${payload.reason || 'Agent 未能在预算内形成可发布报告'}`);
+    } else if (event.step === 'stock_resolve') {
         const subject = payload.subject || {};
         const assetLabel = subject.assetType === 'ETF' ? 'ETF解析' : '股票解析';
         logs.value.push(`[${assetLabel}] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别上市公司'}`);
@@ -1647,7 +1760,7 @@ const loadStockReplay = async () => {
     try {
         const [replay, trace] = await Promise.all([
             getStockReplay(latestStockTaskId.value),
-            getStockTrace(latestStockTaskId.value)
+            getResearchRunTrace(latestStockTaskId.value)
         ]);
         stockReplay.value = replay;
         stockTrace.value = trace;

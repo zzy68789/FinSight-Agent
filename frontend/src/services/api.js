@@ -282,6 +282,21 @@ export async function streamStockReport(ticker, search_mode, report_period, onDa
   }, onData, onDone, onError);
 }
 
+export async function streamResearchRun(request, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
+  return streamSse('/research-runs', {
+      ...request,
+      thread_id: request.thread_id || threadId
+  }, onData, onDone, onError);
+}
+
+export async function getResearchRunTrace(taskId) {
+  return requestJson(`/research-runs/${taskId}/trace`);
+}
+
+export async function retryResearchRun(taskId) {
+  return requestJson(`/research-runs/${taskId}/retry`, { method: 'POST' });
+}
+
 export async function saveStockFeedback(taskId, feedbackType, detail = '') {
   return requestJson(`/stock-reports/${taskId}/feedback`, {
       method: 'POST',

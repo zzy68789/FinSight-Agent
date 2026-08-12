@@ -3,6 +3,8 @@ package com.zzy.finsight.controller;
 import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.stock.StockReportRequest;
+import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.service.ResearchAgentService;
 import com.zzy.finsight.service.StockReportService;
 import com.zzy.finsight.service.SseService;
 import com.zzy.finsight.service.impl.SseServiceImpl;
@@ -36,13 +38,16 @@ class StockReportControllerTest {
     StockReportService stockReportService;
 
     @MockitoBean
+    ResearchAgentService researchAgentService;
+
+    @MockitoBean
     UserContext userContext;
 
     @MockitoBean
     AuthService authService;
 
     @Test
-    void stockReportEndpointStartsSseWorkflowForCurrentUser() throws Exception {
+    void legacyStockReportEndpointAdaptsRequestToResearchAgent() throws Exception {
         when(userContext.currentUserId()).thenReturn(7L);
 
         mockMvc.perform(post("/api/stock-reports")
@@ -58,10 +63,11 @@ class StockReportControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted());
 
-        ArgumentCaptor<StockReportRequest> requestCaptor = ArgumentCaptor.forClass(StockReportRequest.class);
-        verify(stockReportService).run(org.mockito.ArgumentMatchers.eq(7L), requestCaptor.capture(), any(SseEmitter.class));
+        ArgumentCaptor<ResearchRunRequest> requestCaptor = ArgumentCaptor.forClass(ResearchRunRequest.class);
+        verify(researchAgentService).run(org.mockito.ArgumentMatchers.eq(7L), requestCaptor.capture(), any(SseEmitter.class));
         assertThat(requestCaptor.getValue().getTicker()).isEqualTo("600519");
         assertThat(requestCaptor.getValue().getThreadId()).isEqualTo("thread-1");
+        assertThat(requestCaptor.getValue().getResearchQuestion()).contains("财务表现");
     }
 
     @Test
@@ -71,7 +77,7 @@ class StockReportControllerTest {
             SseEmitter emitter = invocation.getArgument(2);
             new SseServiceImpl().error(emitter, new IllegalArgumentException("当前仅支持沪深 A 股普通股票代码"));
             return null;
-        }).when(stockReportService).run(any(Long.class), any(StockReportRequest.class), any(SseEmitter.class));
+        }).when(researchAgentService).run(any(Long.class), any(ResearchRunRequest.class), any(SseEmitter.class));
 
         MvcResult result = mockMvc.perform(post("/api/stock-reports")
                         .contentType("application/json")
