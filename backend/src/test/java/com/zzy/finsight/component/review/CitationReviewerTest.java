@@ -1,5 +1,6 @@
 package com.zzy.finsight.component.review;
 
+import com.zzy.finsight.component.marketdata.FinancialEvidenceValidator;
 import com.zzy.finsight.domain.stock.CitationReviewResult;
 import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
@@ -159,6 +160,20 @@ class CitationReviewerTest {
         assertThat(result.reason()).contains("EVIDENCE_SEMANTIC_INVALID", "PRIOR_PERIOD_MISMATCH");
     }
 
+    @Test
+    void emitsStableEvidenceConflictCodeForUnresolvedSourceConflict() {
+        FinancialSnapshot validated = new FinancialEvidenceValidator().validate(snapshot(List.of(
+                evidence("UPLOADED_REPORT", "来源A", "净利润", "100"),
+                evidence("UPLOADED_REPORT", "来源B", "净利润", "120")
+        )));
+
+        CitationReviewResult result = reviewer.review("## 报告", validated, List.of());
+
+        assertThat(result.status()).isEqualTo("FAIL");
+        assertThat(result.code()).isEqualTo("EVIDENCE_CONFLICT");
+        assertThat(result.reason()).contains("净利润@2025", "无法安全选择");
+    }
+
     private FinancialSnapshot snapshot(List<FinancialEvidenceItem> evidenceItems) {
         return new FinancialSnapshot(
                 new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
@@ -178,16 +193,37 @@ class CitationReviewerTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String issueCode, String period) {
+        return evidence("FINANCIAL_REPORT", "年报", metricName, BigDecimal.TEN.toPlainString(), issueCode, period);
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String value
+    ) {
+        return evidence(sourceType, sourceName, metricName, value, "", "2025");
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String value,
+            String issueCode,
+            String period
+    ) {
+        BigDecimal number = new BigDecimal(value);
         return new FinancialEvidenceItem(
-                "FINANCIAL_REPORT",
-                "年报",
+                sourceType,
+                sourceName,
                 "",
                 1,
                 period,
                 metricName,
-                BigDecimal.TEN,
-                BigDecimal.TEN,
-                metricName + " 10",
+                number,
+                number,
+                metricName + " " + value,
                 new BigDecimal("0.9"),
                 LocalDateTime.of(2026, 7, 3, 10, 0),
                 issueCode

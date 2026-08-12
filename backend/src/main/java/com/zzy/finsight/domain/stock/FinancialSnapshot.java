@@ -12,6 +12,7 @@ import java.util.List;
  * @param reportPeriod 报告期。
  * @param searchMode 检索模式。
  * @param evidenceItems 金融证据列表。
+ * @param evidenceArbitrations 同指标多来源证据仲裁结论。
  * @param stageResults 数据源执行结果列表。
  * @param retrievalResults 检索结果列表。
  * @param marketSeries 可视化使用的行情序列。
@@ -23,6 +24,7 @@ public record FinancialSnapshot(
         String reportPeriod,
         String searchMode,
         List<FinancialEvidenceItem> evidenceItems,
+        List<FinancialEvidenceArbitration> evidenceArbitrations,
         List<FinancialAgentStageResult> stageResults,
         List<RagRetrievalResult> retrievalResults,
         List<MarketDataPoint> marketSeries,
@@ -31,9 +33,26 @@ public record FinancialSnapshot(
 ) {
     public FinancialSnapshot {
         evidenceItems = evidenceItems == null ? List.of() : List.copyOf(evidenceItems);
+        evidenceArbitrations = evidenceArbitrations == null ? List.of() : List.copyOf(evidenceArbitrations);
         stageResults = stageResults == null ? List.of() : List.copyOf(stageResults);
         retrievalResults = retrievalResults == null ? List.of() : List.copyOf(retrievalResults);
         marketSeries = marketSeries == null ? List.of() : List.copyOf(marketSeries);
+    }
+
+    /** 保留未携带仲裁结果的旧快照构造方式。 */
+    public FinancialSnapshot(
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode,
+            List<FinancialEvidenceItem> evidenceItems,
+            List<FinancialAgentStageResult> stageResults,
+            List<RagRetrievalResult> retrievalResults,
+            List<MarketDataPoint> marketSeries,
+            EtfDeepData etfDeepData,
+            LocalDateTime createdAt
+    ) {
+        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), stageResults, retrievalResults,
+                marketSeries, etfDeepData, createdAt);
     }
 
     public FinancialSnapshot(
@@ -45,7 +64,7 @@ public record FinancialSnapshot(
             List<RagRetrievalResult> retrievalResults,
             LocalDateTime createdAt
     ) {
-        this(subject, reportPeriod, searchMode, evidenceItems, stageResults, retrievalResults,
+        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), stageResults, retrievalResults,
                 List.of(), null, createdAt);
     }
 
@@ -57,7 +76,8 @@ public record FinancialSnapshot(
             List<FinancialAgentStageResult> stageResults,
             LocalDateTime createdAt
     ) {
-        this(subject, reportPeriod, searchMode, evidenceItems, stageResults, List.of(), List.of(), null, createdAt);
+        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), stageResults, List.of(), List.of(), null,
+                createdAt);
     }
 
     public FinancialSnapshot(
@@ -67,6 +87,7 @@ public record FinancialSnapshot(
             List<FinancialEvidenceItem> evidenceItems,
             LocalDateTime createdAt
     ) {
-        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), List.of(), List.of(), null, createdAt);
+        this(subject, reportPeriod, searchMode, evidenceItems, List.of(), List.of(), List.of(), List.of(), null,
+                createdAt);
     }
 }

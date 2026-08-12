@@ -671,6 +671,9 @@ public class ResearchAgentRuntime {
         }
         if (state.getSnapshotId() != null && state.getSnapshot() != null) {
             String hash = fingerprinter.dataSnapshotHash(state.getSnapshot());
+            snapshotMapper.synchronizeEvidenceIssues(
+                    state.getSnapshotId(), state.getTaskId(), state.getSnapshot().evidenceItems()
+            );
             snapshotMapper.updateSnapshot(
                     state.getSnapshotId(), state.getSnapshot(), hash, "COLLECTING", LocalDateTime.now()
             );

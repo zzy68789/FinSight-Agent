@@ -659,3 +659,21 @@ Reviewer 已能把证据问题路由回 Planner，但原 Runtime 只执行 Repla
 ### 结果
 
 2026-08-12 后端全量 `mvn.cmd test` 为 164 个测试零失败、零错误、跳过 3 项。新增回归覆盖连续 query 差异、非证据动作拦截、确定性工具重执行、Checkpoint 恢复，以及补证据后重新综合并通过门禁的完整链路；真实 Tavily/TuShare 的证据相关性和多来源冲突仲裁仍需联网验证。
+
+## 037. 一次性冲突标记会阻止补证据后的重仲裁
+
+### 发生了什么
+
+同一指标出现不同来源数值时，如果只给原证据写入冲突问题码，后续校验会因为这些证据已经失效而直接跳过它们；即使 Agent 补到更高优先级来源，也无法重新比较并解除旧冲突。扩展 `FinancialSnapshot` 保存结构化仲裁结果时，还暴露出 `StockSubject.isEtf()` 被 Jackson 当成额外 `etf` 字段序列化、旧快照反序列化失败的问题。
+
+### 原因
+
+原证据校验器把所有 `issueCode` 都视为永久事实，没有区分基础数据质量问题和可随新证据变化的临时仲裁决策；快照持久化此前也只有写入路径的间接覆盖，没有对完整 JSON 往返和缺字段旧记录做兼容回归。Java Bean 的派生 `isXxx()` 方法又会默认参与 Jackson 序列化，但 record 构造器没有对应组件。
+
+### 解决方式
+
+把 `SOURCE_CORROBORATING`、`SOURCE_CONFLICT_REJECTED` 和 `EVIDENCE_CONFLICT` 定义为临时仲裁码，每次完整校验先清除旧决策，再执行基础语义校验和来源仲裁；重仲裁后的问题码同步回证据账本。快照新增结构化 `FinancialEvidenceArbitration` 并把空字段归一化为空列表；`StockSubject.isEtf()` 标记 `@JsonIgnore`，同时增加新快照仲裁结果往返和旧 JSON 缺少仲裁字段的兼容测试。
+
+### 结果
+
+2026-08-12 后端全量 `mvn.cmd test` 为 175 个测试零失败、零错误、跳过 3 项，`mvn.cmd package -DskipTests` 成功。测试已证明同级冲突可 fail-closed、更高优先级新证据可以解除旧冲突、指标选择不受证据顺序影响，且新旧快照均可反序列化；真实联网冲突样本和来源权重校准仍保留为后续验证项。

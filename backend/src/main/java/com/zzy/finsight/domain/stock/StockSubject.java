@@ -1,5 +1,6 @@
 package com.zzy.finsight.domain.stock;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * 表示已解析的股票或 ETF 研究主体。
@@ -26,6 +27,8 @@ public record StockSubject(
         assetType = assetType == null ? StockAssetType.EQUITY : assetType;
     }
 
+    /** 判断当前研究主体是否为 ETF，不把派生布尔值重复写入快照 JSON。 */
+    @JsonIgnore
     public boolean isEtf() {
         return StockAssetType.ETF.equals(assetType);
     }

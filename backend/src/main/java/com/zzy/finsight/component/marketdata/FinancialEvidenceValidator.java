@@ -4,6 +4,7 @@ import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -21,17 +22,28 @@ import java.util.Set;
  */
 @Component
 public class FinancialEvidenceValidator {
-    public static final String POLICY_VERSION = "financial-evidence-policy-v1";
+    public static final String POLICY_VERSION = "financial-evidence-policy-v2-source-arbitration";
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final Clock clock;
+    private final FinancialEvidenceConflictResolver conflictResolver;
 
     public FinancialEvidenceValidator() {
-        this(Clock.systemDefaultZone());
+        this(Clock.systemDefaultZone(), new FinancialEvidenceConflictResolver());
+    }
+
+    @Autowired
+    public FinancialEvidenceValidator(FinancialEvidenceConflictResolver conflictResolver) {
+        this(Clock.systemDefaultZone(), conflictResolver);
     }
 
     FinancialEvidenceValidator(Clock clock) {
+        this(clock, new FinancialEvidenceConflictResolver());
+    }
+
+    FinancialEvidenceValidator(Clock clock, FinancialEvidenceConflictResolver conflictResolver) {
         this.clock = clock;
+        this.conflictResolver = conflictResolver;
     }
 
     /** 返回写入问题编码后的不可变金融快照。 */
@@ -39,14 +51,17 @@ public class FinancialEvidenceValidator {
         if (snapshot == null) {
             throw new IllegalArgumentException("金融快照不能为空");
         }
-        List<FinancialEvidenceItem> items = markBasicIssues(snapshot.evidenceItems());
+        List<FinancialEvidenceItem> items = conflictResolver.clearPreviousDecisions(snapshot.evidenceItems());
+        items = markBasicIssues(items);
         items = markPriorPeriodMismatch(items);
         items = markInvalidFinancialRelation(items);
+        FinancialEvidenceConflictResolver.Resolution resolution = conflictResolver.resolve(items);
         return new FinancialSnapshot(
                 snapshot.subject(),
                 snapshot.reportPeriod(),
                 snapshot.searchMode(),
-                items,
+                resolution.evidenceItems(),
+                resolution.arbitrations(),
                 snapshot.stageResults(),
                 snapshot.retrievalResults(),
                 snapshot.marketSeries(),

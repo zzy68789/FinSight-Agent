@@ -79,6 +79,19 @@ class FinancialMetricEngineTest {
         assertThat(results).noneMatch(result -> "ROE".equals(result.metricName()) || "毛利率".equals(result.metricName()));
     }
 
+    @Test
+    void choosesHigherPriorityMetricInputRegardlessOfEvidenceOrder() {
+        FinancialSnapshot snapshot = snapshot(
+                evidence("UPLOADED_REPORT", "上传报告", FinancialMetricInputNames.OPERATING_REVENUE, "100"),
+                evidence("AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.OPERATING_REVENUE, "120"),
+                evidence(FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, "100")
+        );
+
+        List<FinancialMetricResult> results = engine.compute(snapshot);
+
+        assertThat(metric(results, "营收同比").value()).isEqualByComparingTo("20.00");
+    }
+
     private FinancialMetricResult metric(List<FinancialMetricResult> results, String name) {
         return results.stream()
                 .filter(result -> result.metricName().equals(name))
@@ -97,9 +110,13 @@ class FinancialMetricEngineTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String value) {
+        return evidence("FINANCIAL_REPORT", "年报", metricName, value);
+    }
+
+    private FinancialEvidenceItem evidence(String sourceType, String sourceName, String metricName, String value) {
         return new FinancialEvidenceItem(
-                "FINANCIAL_REPORT",
-                "年报",
+                sourceType,
+                sourceName,
                 "",
                 1,
                 "2025",

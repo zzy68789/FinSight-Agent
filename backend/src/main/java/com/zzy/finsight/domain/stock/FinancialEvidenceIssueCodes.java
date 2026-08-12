@@ -12,11 +12,21 @@ public final class FinancialEvidenceIssueCodes {
     public static final String INVALID_FINANCIAL_RELATION = "INVALID_FINANCIAL_RELATION";
     public static final String LOW_QUALITY_CONTENT = "LOW_QUALITY_CONTENT";
     public static final String FUTURE_DATA = "FUTURE_DATA";
+    public static final String SOURCE_CORROBORATING = "SOURCE_CORROBORATING";
+    public static final String SOURCE_CONFLICT_REJECTED = "SOURCE_CONFLICT_REJECTED";
+    public static final String EVIDENCE_CONFLICT = "EVIDENCE_CONFLICT";
 
     private static final Set<String> CRITICAL_CODES = Set.of(
             PRIOR_PERIOD_MISMATCH,
             INVALID_FINANCIAL_RELATION,
-            FUTURE_DATA
+            FUTURE_DATA,
+            EVIDENCE_CONFLICT
+    );
+
+    private static final Set<String> ARBITRATION_CODES = Set.of(
+            SOURCE_CORROBORATING,
+            SOURCE_CONFLICT_REJECTED,
+            EVIDENCE_CONFLICT
     );
 
     private FinancialEvidenceIssueCodes() {
@@ -25,5 +35,10 @@ public final class FinancialEvidenceIssueCodes {
     /** 判断问题是否会破坏关键财务指标的语义正确性。 */
     public static boolean critical(String issueCode) {
         return issueCode != null && CRITICAL_CODES.contains(issueCode);
+    }
+
+    /** 判断问题码是否为可在新增证据后重新计算的临时仲裁结论。 */
+    public static boolean arbitration(String issueCode) {
+        return issueCode != null && ARBITRATION_CODES.contains(issueCode);
     }
 }

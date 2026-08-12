@@ -1,5 +1,6 @@
 package com.zzy.finsight.component.analysis;
 
+import com.zzy.finsight.component.marketdata.FinancialEvidenceSourcePriorityPolicy;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
@@ -9,6 +10,7 @@ import com.zzy.finsight.domain.stock.metric.MetricDefinitionCatalog;
 
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -23,13 +25,27 @@ import java.util.Map;
 public class FinancialMetricEngine {
     private static final int SCALE = 2;
     private final MetricDefinitionCatalog catalog;
+    private final FinancialEvidenceSourcePriorityPolicy sourcePriorityPolicy;
 
     public FinancialMetricEngine() {
-        this(new MetricDefinitionCatalog());
+        this(new MetricDefinitionCatalog(), new FinancialEvidenceSourcePriorityPolicy());
+    }
+
+    @Autowired
+    public FinancialMetricEngine(FinancialEvidenceSourcePriorityPolicy sourcePriorityPolicy) {
+        this(new MetricDefinitionCatalog(), sourcePriorityPolicy);
     }
 
     public FinancialMetricEngine(MetricDefinitionCatalog catalog) {
+        this(catalog, new FinancialEvidenceSourcePriorityPolicy());
+    }
+
+    FinancialMetricEngine(
+            MetricDefinitionCatalog catalog,
+            FinancialEvidenceSourcePriorityPolicy sourcePriorityPolicy
+    ) {
         this.catalog = catalog;
+        this.sourcePriorityPolicy = sourcePriorityPolicy;
     }
 
     /** 依据固定公式计算可复核的金融指标。 */
@@ -214,9 +230,41 @@ public class FinancialMetricEngine {
             if (item.metricName() == null || item.normalizedValue() == null || !item.effective()) {
                 continue;
             }
-            inputs.putIfAbsent(item.metricName(), item);
+            inputs.merge(item.metricName(), item, this::preferredInput);
         }
         return inputs;
+    }
+
+    /** 在调用方尚未完成仲裁时仍按固定来源优先级选择输入，避免并行返回顺序影响计算。 */
+    private FinancialEvidenceItem preferredInput(
+            FinancialEvidenceItem existing,
+            FinancialEvidenceItem candidate
+    ) {
+        int existingPriority = sourcePriorityPolicy.priority(existing);
+        int candidatePriority = sourcePriorityPolicy.priority(candidate);
+        if (existingPriority != candidatePriority) {
+            return candidatePriority > existingPriority ? candidate : existing;
+        }
+        BigDecimal existingConfidence = existing.confidence() == null ? BigDecimal.ZERO : existing.confidence();
+        BigDecimal candidateConfidence = candidate.confidence() == null ? BigDecimal.ZERO : candidate.confidence();
+        int confidenceComparison = candidateConfidence.compareTo(existingConfidence);
+        if (confidenceComparison != 0) {
+            return confidenceComparison > 0 ? candidate : existing;
+        }
+        int periodComparison = safe(candidate.reportPeriod()).compareTo(safe(existing.reportPeriod()));
+        if (periodComparison != 0) {
+            return periodComparison > 0 ? candidate : existing;
+        }
+        if (existing.asOf() != null && candidate.asOf() != null && !existing.asOf().equals(candidate.asOf())) {
+            return candidate.asOf().isAfter(existing.asOf()) ? candidate : existing;
+        }
+        String existingSource = safe(existing.sourceType()) + "|" + safe(existing.sourceName());
+        String candidateSource = safe(candidate.sourceType()) + "|" + safe(candidate.sourceName());
+        return candidateSource.compareTo(existingSource) < 0 ? candidate : existing;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     @FunctionalInterface

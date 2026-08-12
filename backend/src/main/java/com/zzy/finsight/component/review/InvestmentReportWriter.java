@@ -1,6 +1,7 @@
 package com.zzy.finsight.component.review;
 
 import com.zzy.finsight.domain.stock.CitationReviewResult;
+import com.zzy.finsight.domain.stock.FinancialEvidenceArbitration;
 import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
@@ -29,11 +31,29 @@ import java.util.stream.Collectors;
  */
 @Component
 public class InvestmentReportWriter {
-    public static final String WRITER_VERSION = "investment-report-writer-v6-etf-debate";
+    public static final String WRITER_VERSION = "investment-report-writer-v7-source-arbitration";
     private static final Logger log = LoggerFactory.getLogger(InvestmentReportWriter.class);
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final String GENERATION_MODE_PREFIX = "<!-- FinSight generation-mode: ";
     private static final String FALLBACK_REASON_PREFIX = "<!-- FinSight fallback-reason: ";
+    private static final Map<String, String> EVIDENCE_METRIC_LABELS = Map.ofEntries(
+            Map.entry(FinancialMetricInputNames.OPERATING_REVENUE, "营业收入"),
+            Map.entry(FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, "上年同期营业收入"),
+            Map.entry(FinancialMetricInputNames.GROSS_PROFIT, "毛利润"),
+            Map.entry(FinancialMetricInputNames.OPERATING_COST, "营业成本"),
+            Map.entry(FinancialMetricInputNames.NET_PROFIT, "净利润"),
+            Map.entry(FinancialMetricInputNames.BEGINNING_EQUITY, "年初归母权益"),
+            Map.entry(FinancialMetricInputNames.ENDING_EQUITY, "期末归母权益"),
+            Map.entry(FinancialMetricInputNames.AVERAGE_EQUITY, "平均净资产"),
+            Map.entry(FinancialMetricInputNames.TOTAL_LIABILITIES, "总负债"),
+            Map.entry(FinancialMetricInputNames.TOTAL_ASSETS, "总资产"),
+            Map.entry(FinancialMetricInputNames.OPERATING_CASH_FLOW, "经营活动现金流量净额"),
+            Map.entry(FinancialMetricInputNames.ETF_CLOSE, "ETF收盘价"),
+            Map.entry(FinancialMetricInputNames.ETF_PCT_CHANGE, "ETF涨跌幅"),
+            Map.entry(FinancialMetricInputNames.ETF_AMOUNT, "ETF成交额"),
+            Map.entry(FinancialMetricInputNames.ETF_UNIT_NAV, "ETF单位净值"),
+            Map.entry(FinancialMetricInputNames.ETF_PREMIUM_DISCOUNT_RATE, "ETF折溢价率")
+    );
     private final LlmClient llmClient;
 
     public InvestmentReportWriter(LlmClient llmClient) {
@@ -542,6 +562,7 @@ public class InvestmentReportWriter {
             }
             report.append("\n");
         }
+        appendEvidenceArbitrations(report, snapshot);
         report.append("\n### 指标计算公式\n\n");
         for (FinancialMetricResult metric : metrics) {
             report.append("- ").append(metric.metricName()).append("：")
@@ -562,6 +583,35 @@ public class InvestmentReportWriter {
                         .append(dimension.reason()).append("\n");
             }
         }
+    }
+
+    /** 把结构化来源优先级和冲突处理原因写入最终确定性附录。 */
+    private void appendEvidenceArbitrations(StringBuilder report, FinancialSnapshot snapshot) {
+        if (snapshot.evidenceArbitrations().isEmpty()) {
+            return;
+        }
+        report.append("\n### 证据来源仲裁\n\n");
+        for (FinancialEvidenceArbitration arbitration : snapshot.evidenceArbitrations()) {
+            report.append("- ").append(displayEvidenceMetric(arbitration.metricName()))
+                    .append("（").append(blankToDash(arbitration.reportPeriod())).append("）：")
+                    .append(arbitration.status());
+            if (arbitration.status() != FinancialEvidenceArbitration.Status.CONFLICT) {
+                report.append("；采用 ").append(blankToDash(arbitration.selectedSourceName()))
+                        .append(" / ").append(blankToDash(arbitration.selectedSourceType()))
+                        .append(" / ")
+                        .append(arbitration.selectedValue() == null
+                                ? "-" : arbitration.selectedValue().stripTrailingZeros().toPlainString());
+            } else {
+                report.append("；未采用任何冲突数值");
+            }
+            report.append("；原因：").append(arbitration.reason())
+                    .append("；策略：").append(arbitration.policyVersion())
+                    .append("\n");
+        }
+    }
+
+    private String displayEvidenceMetric(String metricName) {
+        return EVIDENCE_METRIC_LABELS.getOrDefault(metricName, blankToDash(metricName));
     }
 
     private String evidenceSentence(FinancialSnapshot snapshot, String metricName, String fallback) {

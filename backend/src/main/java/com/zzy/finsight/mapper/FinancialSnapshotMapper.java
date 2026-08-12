@@ -116,6 +116,30 @@ public interface FinancialSnapshotMapper {
             @Param("updatedAt") LocalDateTime updatedAt
     );
 
+    /** 将快照重仲裁后的证据问题码同步回证据账本。 */
+    default void synchronizeEvidenceIssues(
+            long snapshotId,
+            long taskId,
+            List<FinancialEvidenceItem> evidenceItems
+    ) {
+        for (FinancialEvidenceItem item : evidenceItems == null ? List.<FinancialEvidenceItem>of() : evidenceItems) {
+            updateEvidenceIssue(
+                    snapshotId,
+                    taskId,
+                    evidenceKey(item),
+                    item.issueCode() == null ? "" : item.issueCode()
+            );
+        }
+    }
+
+    /** 按稳定证据键更新单条证据的当前问题码。 */
+    int updateEvidenceIssue(
+            @Param("snapshotId") long snapshotId,
+            @Param("taskId") long taskId,
+            @Param("evidenceKey") String evidenceKey,
+            @Param("issueCode") String issueCode
+    );
+
     default void saveMetrics(long snapshotId, long taskId, List<FinancialMetricResult> metrics) {
         if (countMetrics(taskId) > 0) {
             return;

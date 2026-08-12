@@ -1,6 +1,8 @@
 package com.zzy.finsight.component.marketdata;
 
 import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
+import com.zzy.finsight.domain.stock.FinancialEvidenceArbitration;
+import com.zzy.finsight.domain.stock.FinancialEvidenceArbitrationCandidate;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
@@ -81,6 +83,138 @@ class FinancialEvidenceValidatorTest {
         assertThat(validated.evidenceItems().get(0).effective()).isTrue();
     }
 
+    @Test
+    void selectsHigherPrioritySourceAndRecordsStructuredResolution() {
+        FinancialSnapshot validated = validator.validate(snapshot(List.of(
+                evidence("UPLOADED_REPORT", "上传年报", FinancialMetricInputNames.OPERATING_REVENUE,
+                        "20260331", "100"),
+                evidence("AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.OPERATING_REVENUE,
+                        "20260331", "120")
+        )));
+
+        assertThat(validated.evidenceItems().get(0).issueCode())
+                .isEqualTo(FinancialEvidenceIssueCodes.SOURCE_CONFLICT_REJECTED);
+        assertThat(validated.evidenceItems().get(1).effective()).isTrue();
+        assertThat(validated.evidenceArbitrations()).singleElement().satisfies(arbitration -> {
+            assertThat(arbitration.status()).isEqualTo(FinancialEvidenceArbitration.Status.RESOLVED);
+            assertThat(arbitration.selectedSourceName()).isEqualTo("TuShare Pro");
+            assertThat(arbitration.selectedValue()).isEqualByComparingTo("120");
+            assertThat(arbitration.reason()).contains("唯一最高优先级来源胜出", "优先级 100");
+            assertThat(arbitration.candidates()).extracting(FinancialEvidenceArbitrationCandidate::decision)
+                    .containsExactly(
+                            FinancialEvidenceArbitrationCandidate.Decision.SELECTED,
+                            FinancialEvidenceArbitrationCandidate.Decision.REJECTED
+                    );
+        });
+    }
+
+    @Test
+    void failsClosedWhenHighestPrioritySourcesStillConflict() {
+        FinancialSnapshot validated = validator.validate(snapshot(List.of(
+                evidence("UPLOADED_REPORT", "来源A", FinancialMetricInputNames.NET_PROFIT,
+                        "20260331", "100"),
+                evidence("UPLOADED_REPORT", "来源B", FinancialMetricInputNames.NET_PROFIT,
+                        "20260331", "120")
+        )));
+
+        assertThat(validated.evidenceItems()).extracting(FinancialEvidenceItem::issueCode)
+                .containsOnly(FinancialEvidenceIssueCodes.EVIDENCE_CONFLICT);
+        assertThat(validated.evidenceItems()).noneMatch(FinancialEvidenceItem::effective);
+        assertThat(validated.evidenceArbitrations()).singleElement()
+                .satisfies(arbitration -> {
+                    assertThat(arbitration.status()).isEqualTo(FinancialEvidenceArbitration.Status.CONFLICT);
+                    assertThat(arbitration.selectedValue()).isNull();
+                    assertThat(arbitration.reason()).contains("无法安全选择");
+                });
+    }
+
+    @Test
+    void reArbitratesPreviouslyConflictingEvidenceAfterHigherPriorityEvidenceArrives() {
+        FinancialSnapshot conflicted = validator.validate(snapshot(List.of(
+                evidence("UPLOADED_REPORT", "来源A", FinancialMetricInputNames.NET_PROFIT,
+                        "20260331", "100"),
+                evidence("UPLOADED_REPORT", "来源B", FinancialMetricInputNames.NET_PROFIT,
+                        "20260331", "120")
+        )));
+        FinancialSnapshot recovered = validator.validate(snapshot(List.of(
+                conflicted.evidenceItems().get(0),
+                conflicted.evidenceItems().get(1),
+                evidence("AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.NET_PROFIT,
+                        "20260331", "120")
+        )));
+
+        assertThat(recovered.evidenceItems()).extracting(FinancialEvidenceItem::issueCode)
+                .containsExactly(
+                        FinancialEvidenceIssueCodes.SOURCE_CONFLICT_REJECTED,
+                        FinancialEvidenceIssueCodes.SOURCE_CORROBORATING,
+                        ""
+                );
+        assertThat(recovered.evidenceArbitrations()).singleElement().satisfies(arbitration -> {
+            assertThat(arbitration.status()).isEqualTo(FinancialEvidenceArbitration.Status.RESOLVED);
+            assertThat(arbitration.selectedSourceName()).isEqualTo("TuShare Pro");
+        });
+    }
+
+    @Test
+    void recordsConsistentLowerPriorityValueAsCorroboratingOnly() {
+        FinancialSnapshot validated = validator.validate(snapshot(List.of(
+                evidence("UPLOADED_REPORT", "上传年报", FinancialMetricInputNames.TOTAL_ASSETS,
+                        "20260331", "120.50"),
+                evidence("AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.TOTAL_ASSETS,
+                        "20260331", "120.00")
+        )));
+
+        assertThat(validated.evidenceItems().get(0).issueCode())
+                .isEqualTo(FinancialEvidenceIssueCodes.SOURCE_CORROBORATING);
+        assertThat(validated.evidenceArbitrations()).singleElement()
+                .extracting(FinancialEvidenceArbitration::status)
+                .isEqualTo(FinancialEvidenceArbitration.Status.CONSISTENT);
+    }
+
+    @Test
+    void prioritizesOfficialDisclosureAboveAuthorizedAndUploadedSources() {
+        FinancialEvidenceSourcePriorityPolicy policy = new FinancialEvidenceSourcePriorityPolicy();
+        FinancialEvidenceItem official = new FinancialEvidenceItem(
+                "PUBLIC_MARKET",
+                "上海证券交易所公告",
+                "https://www.sse.com.cn/disclosure/listedinfo/announcement/",
+                null,
+                "20260331",
+                FinancialMetricInputNames.OPERATING_REVENUE,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                "营业收入 1 亿元",
+                BigDecimal.ONE,
+                LocalDateTime.of(2026, 7, 13, 20, 0),
+                ""
+        );
+        FinancialEvidenceItem misleadingTitle = new FinancialEvidenceItem(
+                "PUBLIC_MARKET",
+                "上海证券交易所公告转载",
+                "https://example.com/copied-announcement",
+                null,
+                "20260331",
+                FinancialMetricInputNames.OPERATING_REVENUE,
+                BigDecimal.ONE,
+                BigDecimal.ONE,
+                "转载营业收入 1 亿元",
+                BigDecimal.ONE,
+                LocalDateTime.of(2026, 7, 13, 20, 0),
+                ""
+        );
+
+        assertThat(policy.priority(official)).isEqualTo(110);
+        assertThat(policy.priority(misleadingTitle)).isEqualTo(60);
+        assertThat(policy.priority(evidence(
+                "AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.OPERATING_REVENUE,
+                "20260331", "1"
+        ))).isEqualTo(100);
+        assertThat(policy.priority(evidence(
+                "UPLOADED_REPORT", "上传报告", FinancialMetricInputNames.OPERATING_REVENUE,
+                "20260331", "1"
+        ))).isEqualTo(80);
+    }
+
     private FinancialSnapshot snapshot(List<FinancialEvidenceItem> items) {
         return new FinancialSnapshot(
                 new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
@@ -92,10 +226,31 @@ class FinancialEvidenceValidatorTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String period, String value, String excerpt) {
+        return evidence("AUTHORIZED_MARKET", "TuShare Pro", metricName, period, value, excerpt);
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String period,
+            String value
+    ) {
+        return evidence(sourceType, sourceName, metricName, period, value, metricName + "=" + value);
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String period,
+            String value,
+            String excerpt
+    ) {
         BigDecimal number = value == null ? null : new BigDecimal(value);
         return new FinancialEvidenceItem(
-                "AUTHORIZED_MARKET",
-                "TuShare Pro",
+                sourceType,
+                sourceName,
                 "https://tushare.pro",
                 null,
                 period,

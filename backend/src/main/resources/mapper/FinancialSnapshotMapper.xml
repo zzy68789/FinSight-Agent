@@ -57,6 +57,14 @@
         WHERE id = #{snapshotId}
     </update>
 
+    <update id="updateEvidenceIssue">
+        UPDATE stock_evidence_item
+        SET issue_code = #{issueCode}
+        WHERE snapshot_id = #{snapshotId}
+          AND task_id = #{taskId}
+          AND evidence_key = #{evidenceKey}
+    </update>
+
     <select id="countMetrics" resultType="int">
         SELECT COUNT(*) FROM stock_metric_result WHERE task_id = #{taskId}
     </select>

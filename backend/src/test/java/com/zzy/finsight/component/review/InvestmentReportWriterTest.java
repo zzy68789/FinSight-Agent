@@ -10,6 +10,8 @@ import com.zzy.finsight.domain.stock.StockAssetType;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.stock.metric.FinancialMetricInputNames;
 import com.zzy.finsight.component.analysis.FinancialRiskScorer;
+import com.zzy.finsight.component.analysis.FinancialMetricEngine;
+import com.zzy.finsight.component.marketdata.FinancialEvidenceValidator;
 
 
 import com.zzy.finsight.llm.LlmClient;
@@ -173,6 +175,30 @@ class InvestmentReportWriterTest {
         assertThat(report).contains("[E1]", "[E2]", "本次结构化财务指标未发现");
     }
 
+    @Test
+    void explainsSelectedSourceAndReasonInDeterministicAppendix() {
+        FinancialSnapshot raw = new FinancialSnapshot(
+                new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"),
+                "20260331",
+                "hybrid",
+                List.of(
+                        evidence("UPLOADED_REPORT", "上传报告", FinancialMetricInputNames.NET_PROFIT, "100"),
+                        evidence("AUTHORIZED_MARKET", "TuShare Pro", FinancialMetricInputNames.NET_PROFIT, "120")
+                ),
+                LocalDateTime.of(2026, 8, 12, 10, 0)
+        );
+        FinancialSnapshot validated = new FinancialEvidenceValidator().validate(raw);
+
+        String report = writer.write(validated, new FinancialMetricEngine().compute(validated), null, null);
+
+        assertThat(report).contains(
+                "### 证据来源仲裁",
+                "净利润（20260331）：RESOLVED",
+                "采用 TuShare Pro / AUTHORIZED_MARKET / 120",
+                "唯一最高优先级来源胜出"
+        );
+    }
+
     private FinancialSnapshot etfSnapshot() {
         return new FinancialSnapshot(
                 new StockSubject("588200", "SH", "588200.SH", "待识别ETF", "ETF", StockAssetType.ETF),
@@ -240,15 +266,36 @@ class InvestmentReportWriterTest {
     }
 
     private FinancialEvidenceItem evidence(String metricName, String period, String excerpt) {
+        return evidence("AUTHORIZED_MARKET", "TuShare Pro", metricName, period, BigDecimal.ONE, excerpt);
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String value
+    ) {
+        BigDecimal number = new BigDecimal(value);
+        return evidence(sourceType, sourceName, metricName, "20260331", number, metricName + " " + value);
+    }
+
+    private FinancialEvidenceItem evidence(
+            String sourceType,
+            String sourceName,
+            String metricName,
+            String period,
+            BigDecimal value,
+            String excerpt
+    ) {
         return new FinancialEvidenceItem(
-                "AUTHORIZED_MARKET",
-                "TuShare Pro",
+                sourceType,
+                sourceName,
                 "https://tushare.pro",
                 null,
                 period,
                 metricName,
-                BigDecimal.ONE,
-                BigDecimal.ONE,
+                value,
+                value,
                 excerpt,
                 new BigDecimal("0.90"),
                 LocalDateTime.of(2026, 7, 6, 10, 0),

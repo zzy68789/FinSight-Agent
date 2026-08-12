@@ -12,6 +12,8 @@ import com.zzy.finsight.component.review.FinancialEvaluator;
 import com.zzy.finsight.component.review.InvestmentReportWriter;
 import com.zzy.finsight.component.review.BullBearCaseBuilder;
 import com.zzy.finsight.component.marketdata.FinancialEvidenceValidator;
+import com.zzy.finsight.component.marketdata.FinancialEvidenceConflictResolver;
+import com.zzy.finsight.component.marketdata.FinancialEvidenceSourcePriorityPolicy;
 
 
 import org.springframework.stereotype.Component;
@@ -120,6 +122,8 @@ public class FinancialReportFingerprinter {
         return sha256(String.join("|",
                 safe(dataSnapshotHash),
                 FinancialEvidenceValidator.POLICY_VERSION,
+                FinancialEvidenceConflictResolver.POLICY_VERSION,
+                FinancialEvidenceSourcePriorityPolicy.POLICY_VERSION,
                 metricCatalog.catalogVersion(),
                 BullBearCaseBuilder.POLICY_VERSION,
                 InvestmentReportWriter.WRITER_VERSION,
@@ -150,6 +154,8 @@ public class FinancialReportFingerprinter {
                 safe(toolsetVersion),
                 safe(agentPolicyVersion),
                 FinancialEvidenceValidator.POLICY_VERSION,
+                FinancialEvidenceConflictResolver.POLICY_VERSION,
+                FinancialEvidenceSourcePriorityPolicy.POLICY_VERSION,
                 metricCatalog.catalogVersion(),
                 BullBearCaseBuilder.POLICY_VERSION,
                 InvestmentReportWriter.WRITER_VERSION,

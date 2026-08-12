@@ -63,6 +63,22 @@ class QualityGateDecisionEngineTest {
     }
 
     @Test
+    void routesUnresolvedEvidenceConflictBackToCollection() {
+        QualityGateDecision decision = engine.decide(
+                CitationReviewResult.fail("EVIDENCE_CONFLICT", "EVIDENCE_CONFLICT: 净利润来源冲突"),
+                compliancePass(),
+                evaluationPass(),
+                snapshot(3)
+        );
+
+        assertThat(decision.route()).isEqualTo(QualityGateRoute.COLLECT_MORE_EVIDENCE);
+        assertThat(decision.issues()).singleElement().satisfies(issue -> {
+            assertThat(issue.type()).isEqualTo(QualityGateFailureType.EVIDENCE_INVALID);
+            assertThat(issue.code()).isEqualTo("EVIDENCE_CONFLICT");
+        });
+    }
+
+    @Test
     void routesNumericMismatchToDeterministicRecalculation() {
         QualityGateDecision decision = engine.decide(
                 CitationReviewResult.pass(),

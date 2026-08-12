@@ -1,6 +1,7 @@
 package com.zzy.finsight.component.review;
 
 import com.zzy.finsight.domain.stock.CitationReviewResult;
+import com.zzy.finsight.domain.stock.FinancialEvidenceArbitration;
 import com.zzy.finsight.domain.stock.FinancialEvidenceIssueCodes;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
@@ -25,7 +26,7 @@ import java.util.stream.Collectors;
  */
 @Component
 public class CitationReviewer {
-    public static final String POLICY_VERSION = "citation-policy-v4-full-numeric-facts";
+    public static final String POLICY_VERSION = "citation-policy-v5-evidence-conflict";
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final Pattern CITATION_PATTERN = Pattern.compile("\\[E(\\d+)]");
     private static final List<String> DIRECTIONAL_TOKENS = List.of(
@@ -44,6 +45,17 @@ public class CitationReviewer {
 
     /** 检查报告引用、报告期和指标展示是否可追溯。 */
     public CitationReviewResult review(String report, FinancialSnapshot snapshot, List<FinancialMetricResult> metrics) {
+        Optional<FinancialEvidenceArbitration> unresolvedConflict = snapshot.evidenceArbitrations().stream()
+                .filter(item -> item.status() == FinancialEvidenceArbitration.Status.CONFLICT)
+                .findFirst();
+        if (unresolvedConflict.isPresent()) {
+            FinancialEvidenceArbitration arbitration = unresolvedConflict.orElseThrow();
+            return CitationReviewResult.fail(
+                    "EVIDENCE_CONFLICT",
+                    "EVIDENCE_CONFLICT: " + arbitration.metricName() + "@"
+                            + arbitration.reportPeriod() + " " + arbitration.reason()
+            );
+        }
         Optional<FinancialEvidenceItem> criticalIssue = snapshot.evidenceItems().stream()
                 .filter(item -> FinancialEvidenceIssueCodes.critical(item.issueCode()))
                 .findFirst();
