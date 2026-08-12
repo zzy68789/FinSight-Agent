@@ -13,7 +13,7 @@ class AgentBudgetGuardTest {
     @Test
     void clientBudgetCanOnlyReduceServerLimits() {
         AgentBudgetGuard guard = new AgentBudgetGuard(
-                8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
         );
         ResearchRunRequest request = new ResearchRunRequest();
         request.setTicker("600519");

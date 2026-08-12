@@ -1,12 +1,16 @@
 package com.zzy.finsight.agent.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zzy.finsight.agent.event.AgentEvent;
+import com.zzy.finsight.agent.event.AgentEventDraft;
 import com.zzy.finsight.agent.event.AgentEventListener;
+import com.zzy.finsight.agent.event.AgentEventOutboxPublisher;
 import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.agent.planning.AgentAction;
 import com.zzy.finsight.agent.planning.AgentActionType;
 import com.zzy.finsight.agent.planning.PlannerOutput;
+import com.zzy.finsight.agent.planning.PlannerTelemetryModule;
 import com.zzy.finsight.agent.planning.ResearchPlan;
 import com.zzy.finsight.agent.planning.ResearchPlanner;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
@@ -16,6 +20,8 @@ import com.zzy.finsight.agent.tool.CheckEvidenceCoverageTool;
 import com.zzy.finsight.agent.tool.ToolContext;
 import com.zzy.finsight.agent.tool.ToolPolicyGuard;
 import com.zzy.finsight.agent.tool.ToolResult;
+import com.zzy.finsight.agent.tool.ToolPayload;
+import com.zzy.finsight.agent.tool.ToolStateReducer;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.quality.QualityGateDecisionEngine;
 import com.zzy.finsight.agent.quality.QualityGateRoute;
@@ -116,17 +122,23 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
-        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
+        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
 
         ResearchAgentRuntime runtime = new ResearchAgentRuntime(
                 planner,
                 registry,
                 mock(ToolPolicyGuard.class),
                 new AgentBudgetGuard(
-                        8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                stepLogMapper,
                 commitModule,
+                mock(AgentEventOutboxPublisher.class),
+                mock(PlannerTelemetryModule.class),
+                new ToolStateReducer(new EvidenceMemory(new FinancialEvidenceValidator())),
+                new ProgressFingerprint(
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(FinancialReportFingerprinter.class)
+                ),
                 runtimeStateService,
                 mock(InvestmentReportWriter.class),
                 mock(CitationReviewer.class),
@@ -143,7 +155,7 @@ class ResearchAgentRuntimeTest {
         ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
                 7L,
                 state,
-                new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
                 new LeaseToken(11L, "runner-1", 1L),
                 listener(done)
         );
@@ -153,9 +165,9 @@ class ResearchAgentRuntimeTest {
         assertThat(state.getTurnNo()).isEqualTo(1);
         assertThat(done).isTrue();
         verify(commitModule).commitTurn(any(AgentTurnCommit.class), any(LeaseToken.class));
-        verify(commitModule).finishTask(
+        verify(commitModule).finishTaskWithEvent(
                 eq(state), any(LeaseToken.class), eq("INSUFFICIENT_EVIDENCE"),
-                eq("公开证据不足，停止生成结论"), eq(null)
+                eq("公开证据不足，停止生成结论"), eq(null), any(AgentEventDraft.class)
         );
         verify(runtimeStateService).markStatus(11L, "INSUFFICIENT_EVIDENCE");
     }
@@ -186,7 +198,7 @@ class ResearchAgentRuntimeTest {
 
             @Override
             public ToolResult execute(ToolContext context, RawToolArguments arguments) {
-                return ToolResult.success("未发现新增有效证据", Map.of());
+                return ToolResult.success("未发现新增有效证据");
             }
         };
         ResearchToolRegistry registry = new ResearchToolRegistry(List.of(noEvidenceTool));
@@ -208,7 +220,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L, 32L);
-        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
+        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
         when(runtimeMapper.startToolCall(
                 anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()
         )).thenReturn(41L, 42L);
@@ -220,10 +232,16 @@ class ResearchAgentRuntimeTest {
                 registry,
                 new ToolPolicyGuard(registry, new ObjectMapper()),
                 new AgentBudgetGuard(
-                        8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                stepLogMapper,
                 commitModule,
+                mock(AgentEventOutboxPublisher.class),
+                mock(PlannerTelemetryModule.class),
+                new ToolStateReducer(new EvidenceMemory(new FinancialEvidenceValidator())),
+                new ProgressFingerprint(
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(FinancialReportFingerprinter.class)
+                ),
                 runtimeStateService,
                 mock(InvestmentReportWriter.class),
                 mock(CitationReviewer.class),
@@ -238,16 +256,16 @@ class ResearchAgentRuntimeTest {
         ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
                 7L,
                 state(),
-                new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
                 new LeaseToken(11L, "runner-1", 1L),
                 AgentEventListener.noop()
         );
 
         assertThat(outcome.status()).isEqualTo("INSUFFICIENT_EVIDENCE");
         assertThat(outcome.reason()).contains("连续 2 轮");
-        verify(commitModule).finishTask(
+        verify(commitModule).finishTaskWithEvent(
                 any(), any(), eq("INSUFFICIENT_EVIDENCE"),
-                eq("连续 2 轮证据采集未产生新增有效证据"), eq(null)
+                eq("连续 2 轮证据采集未产生新增有效证据"), eq(null), any(AgentEventDraft.class)
         );
     }
 
@@ -296,7 +314,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L, 32L);
-        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
+        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
         when(taskMapper.updateAgentProgress(
                 anyLong(), anyString(), anyInt(), anyInt(), anyString(), any()
         )).thenReturn(true);
@@ -319,10 +337,13 @@ class ResearchAgentRuntimeTest {
                 registry,
                 policyGuard,
                 new AgentBudgetGuard(
-                        8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                stepLogMapper,
                 commitModule,
+                mock(AgentEventOutboxPublisher.class),
+                mock(PlannerTelemetryModule.class),
+                new ToolStateReducer(new EvidenceMemory(new FinancialEvidenceValidator())),
+                new ProgressFingerprint(new ObjectMapper().findAndRegisterModules(), fingerprinter),
                 runtimeStateService,
                 reportWriter,
                 citationReviewer,
@@ -338,7 +359,7 @@ class ResearchAgentRuntimeTest {
         ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
                 7L,
                 state,
-                new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
                 new LeaseToken(11L, "runner-1", 1L),
                 AgentEventListener.noop()
         );
@@ -359,10 +380,10 @@ class ResearchAgentRuntimeTest {
     void completesEvidenceRecoveryWithNewQueryObservationAndDerivedRecalculation() {
         EvidenceMemory evidenceMemory = new EvidenceMemory(new FinancialEvidenceValidator());
         AtomicReference<ToolInvocation> recoveryInvocation = new AtomicReference<>();
-        ResearchTool recoveryTool = recoveryEvidenceTool(evidenceMemory, recoveryInvocation);
+        ResearchTool recoveryTool = recoveryEvidenceTool(recoveryInvocation);
         ResearchTool calculateTool = stateMutationTool(
                 "calculate_financial_metrics",
-                context -> context.state().setMetrics(List.of(new FinancialMetricResult(
+                new ToolPayload.Metrics(List.of(new FinancialMetricResult(
                         "ROE",
                         new BigDecimal("13.00"),
                         "13.00%",
@@ -374,7 +395,7 @@ class ResearchAgentRuntimeTest {
         );
         ResearchTool riskTool = stateMutationTool(
                 "assess_financial_risk",
-                context -> context.state().setRiskAssessment(new FinancialRiskAssessment(
+                new ToolPayload.Risk(new FinancialRiskAssessment(
                         new BigDecimal("18.00"), "LOW", List.of(), List.of()
                 ))
         );
@@ -405,8 +426,8 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
-        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
-        when(commitModule.journalToolStart(any(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()))
+        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
+        when(commitModule.journalToolStart(any(), any(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()))
                 .thenReturn(41L);
         when(runtimeMapper.startToolCall(
                 anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()
@@ -434,16 +455,23 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyString(), anyLong(), anyString(), anyString(), anyString(),
                 any(), anyString(), anyString(), any()
         )).thenReturn(99L);
+        when(commitModule.commitCompletedRun(
+                any(AgentTurnCommit.class), any(LeaseToken.class), any(FinalReportCommit.class),
+                any(AgentEventDraft.class)
+        )).thenReturn(new CompletedRunCommitResult(99L, List.of()));
 
         ResearchAgentRuntime runtime = new ResearchAgentRuntime(
                 planner,
                 registry,
                 policyGuard,
                 new AgentBudgetGuard(
-                        8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                stepLogMapper,
                 commitModule,
+                mock(AgentEventOutboxPublisher.class),
+                mock(PlannerTelemetryModule.class),
+                new ToolStateReducer(evidenceMemory),
+                new ProgressFingerprint(new ObjectMapper().findAndRegisterModules(), fingerprinter),
                 runtimeStateService,
                 reportWriter,
                 citationReviewer,
@@ -477,30 +505,12 @@ class ResearchAgentRuntimeTest {
                 policyGuard.callHash(new ToolInvocation("assess_financial_risk", Map.of())),
                 policyGuard.callHash(new ToolInvocation("check_evidence_coverage", Map.of()))
         ));
-        AtomicBoolean recoveryEvent = new AtomicBoolean();
-        AgentEventListener listener = new AgentEventListener() {
-            @Override
-            public void onEvent(String eventType, Object data) {
-                if ("evidence_recovery_progress".equals(eventType)) {
-                    recoveryEvent.set(true);
-                }
-            }
-
-            @Override
-            public void onDone() {
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-            }
-        };
-
         ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
                 7L,
                 state,
-                new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
                 new LeaseToken(11L, "runner-1", 1L),
-                listener
+                AgentEventListener.noop()
         );
 
         assertThat(outcome.status()).isEqualTo("COMPLETED");
@@ -514,7 +524,6 @@ class ResearchAgentRuntimeTest {
         assertThat(recoveryInvocation.get()).isNotNull();
         assertThat(recoveryInvocation.get().arguments().get("query"))
                 .isNotEqualTo(originalSearch.arguments().get("query"));
-        assertThat(recoveryEvent).isTrue();
         verify(reportWriter, times(2)).write(anyString(), any(), any(), any(), any(), any());
     }
 
@@ -608,10 +617,7 @@ class ResearchAgentRuntimeTest {
         );
     }
 
-    private ResearchTool<?> recoveryEvidenceTool(
-            EvidenceMemory evidenceMemory,
-            AtomicReference<ToolInvocation> invocationReference
-    ) {
+    private ResearchTool<?> recoveryEvidenceTool(AtomicReference<ToolInvocation> invocationReference) {
         return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
@@ -650,18 +656,13 @@ class ResearchAgentRuntimeTest {
                         LocalDateTime.of(2026, 8, 12, 12, 0),
                         ""
                 );
-                List<FinancialEvidenceItem> added = evidenceMemory.merge(
-                        context.state(),
-                        name(),
-                        FinancialDataCollection.evidenceOnly(List.of(evidence)),
-                        1L,
-                        "SUCCESS",
-                        ""
-                );
+                List<FinancialEvidenceItem> added = List.of(evidence);
                 return new ToolResult(
                         "SUCCESS",
                         "新增补充证据",
-                        Map.of("evidence", added),
+                        new ToolPayload.Evidence(
+                                name(), "", added, null, List.of(), null, added.size(), added.size()
+                        ),
                         added,
                         "",
                         false
@@ -670,10 +671,7 @@ class ResearchAgentRuntimeTest {
         };
     }
 
-    private ResearchTool<?> stateMutationTool(
-            String name,
-            java.util.function.Consumer<ToolContext> mutation
-    ) {
+    private ResearchTool<?> stateMutationTool(String name, ToolPayload payload) {
         return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
@@ -687,8 +685,7 @@ class ResearchAgentRuntimeTest {
 
             @Override
             public ToolResult execute(ToolContext context, RawToolArguments arguments) {
-                mutation.accept(context);
-                return ToolResult.success(name + " 完成", Map.of());
+                return ToolResult.success(name + " 完成", payload);
             }
         };
     }
@@ -696,7 +693,7 @@ class ResearchAgentRuntimeTest {
     private AgentEventListener listener(AtomicBoolean done) {
         return new AgentEventListener() {
             @Override
-            public void onEvent(String eventType, Object data) {
+            public void onEvent(AgentEvent event) {
             }
 
             @Override

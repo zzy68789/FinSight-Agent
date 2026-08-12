@@ -47,10 +47,27 @@ export function createAgentEventProjection() {
   };
 }
 
-/** 将 SSE 包装或数据库步骤日志规范化为同一事件契约。 */
+/** 将实时 SSE、版本化 outbox 或旧步骤日志规范化为同一事件契约。 */
 export function normalizeAgentEvent(event) {
   if (!event) return { step: '', data: {} };
   if (event.step) return { step: event.step, data: event.data || {} };
+  if (event.schemaVersion && event.type) {
+    return {
+      step: event.type,
+      data: {
+        ...(event.payload || {}),
+        schemaVersion: event.schemaVersion,
+        eventId: event.eventId,
+        sequence: event.sequence,
+        taskId: event.taskId,
+        turnNo: event.turnNo,
+        status: event.status,
+        errorMessage: event.errorMessage,
+        durationMs: event.durationMs,
+        timestamp: event.createdAt
+      }
+    };
+  }
   const data = parsePayload(event.outputSnapshot);
   return {
     step: event.stepName || event.type || '',
@@ -71,7 +88,9 @@ export function reduceAgentEvent(previous, rawEvent) {
   const payload = event.data || {};
   if (!step) return state;
 
-  const eventId = payload.eventId || stableFallbackId(step, payload);
+  const eventId = payload.taskId && payload.sequence
+    ? `${payload.taskId}:${payload.sequence}`
+    : payload.eventId || stableFallbackId(step, payload);
   if (state.seenEventIds.includes(eventId)) return state;
   state.seenEventIds = [...state.seenEventIds, eventId].slice(-200);
   state.currentStep = step;
@@ -107,6 +126,7 @@ export function reduceAgentEvent(previous, rawEvent) {
     state.logs.push(passed ? '[门禁] 引用、合规和评测已通过。' : `[门禁] 未通过：${payload.critique || '请查看轨迹'}`);
   } else if (step === 'run_completed' || step === 'done') {
     state.taskId = payload.taskId || state.taskId;
+    state.finalReport = payload.finalReport || state.finalReport;
     state.logs.push(`[完成] 任务 #${state.taskId || '-'} 已写入报告库。`);
   } else if (step === 'run_stopped') {
     state.taskId = payload.taskId || state.taskId;

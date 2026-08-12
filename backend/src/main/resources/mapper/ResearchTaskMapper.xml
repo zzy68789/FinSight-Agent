@@ -62,6 +62,20 @@
         WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
     </select>
 
+    <update id="incrementEventSequenceFenced">
+        UPDATE research_task
+        SET event_sequence = event_sequence + 1, updated_at = #{now}
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
+    </update>
+
+    <select id="findEventSequenceFenced" resultType="long">
+        SELECT event_sequence
+        FROM research_task
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
+    </select>
+
     <update id="updateRunningAgentProgress">
         UPDATE research_task
         SET stage = #{stage}, turn_count = #{turnCount}, tool_call_count = #{toolCallCount},

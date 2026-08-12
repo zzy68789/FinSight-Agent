@@ -1,6 +1,8 @@
 package com.zzy.finsight.mapper;
 
+import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.agent.memory.AgentState;
+import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.runtime.LeaseToken;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,11 +52,15 @@ class MySqlPersistenceIntegrationTest {
     private ReportMapper reportMapper;
     @Autowired
     private AgentRuntimeMapper agentRuntimeMapper;
+    @Autowired
+    private AgentPlannerCallMapper plannerCallMapper;
+    @Autowired
+    private AgentEventOutboxMapper eventOutboxMapper;
 
     @Test
     void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '5'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '6'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
@@ -74,20 +80,42 @@ class MySqlPersistenceIntegrationTest {
         assertThat(lease.epoch()).isEqualTo(1L);
         assertThat(taskMapper.startAttempt(taskId, "runner-b", leaseUntil)).isFalse();
 
-        long turnId = agentRuntimeMapper.saveTurn(
-                taskId,
+        plannerCallMapper.save(taskId, new PlannerOutput<>(
+                Map.of("type", "CALL_TOOL"), false, "", 12, 3, 40L,
+                "NEXT_ACTION", "FAST", "qwen-fast", 1, true
+        ), true);
+        assertThat(plannerCallMapper.findByTaskId(taskId)).singleElement()
+                .satisfies(call -> {
+                    assertThat(call.actualModel()).isEqualTo("qwen-fast");
+                    assertThat(call.routeCorrect()).isTrue();
+                });
+
+        long eventSequence = taskMapper.nextEventSequence(lease);
+        AgentEvent event = new AgentEvent(
+                0L, AgentEvent.CURRENT_SCHEMA_VERSION, taskId, "mysql-integration-thread",
+                eventSequence, "event-mysql-1", 0, "run_created", "SUCCESS",
+                Map.of("ticker", "600519"), "", 0L, null, LocalDateTime.now()
+        );
+        long eventId = eventOutboxMapper.insert(event);
+        assertThat(eventId).isPositive();
+        assertThat(eventOutboxMapper.findByTaskId(taskId)).singleElement()
+                .satisfies(saved -> {
+                    assertThat(saved.sequence()).isEqualTo(1L);
+                    assertThat(saved.payload()).containsEntry("ticker", "600519");
+                });
+
+        long turnId = agentRuntimeMapper.saveTurnFenced(
+                lease,
                 1,
                 "RESEARCH",
                 "CALL_TOOLS",
                 Map.of("toolCalls", 1),
-                "",
-                "RUNNING",
                 10,
                 5,
                 0L
         );
-        long toolCallId = agentRuntimeMapper.startToolCall(
-                taskId,
+        long toolCallId = agentRuntimeMapper.startToolCallFenced(
+                lease,
                 turnId,
                 "call-1",
                 "get_financial_statements",
@@ -130,7 +158,7 @@ class MySqlPersistenceIntegrationTest {
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         )).hasValueSatisfying(checkpoint -> {
             assertThat(checkpoint.attemptNo()).isEqualTo(1);
-            assertThat(checkpoint.stateVersion()).isEqualTo("agent-state-v2-lite");
+            assertThat(checkpoint.stateVersion()).isEqualTo("agent-state-v3-lite");
             assertThat(checkpoint.stateJson()).contains("RESEARCH");
         });
 

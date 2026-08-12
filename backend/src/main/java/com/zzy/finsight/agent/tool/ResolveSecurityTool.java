@@ -2,12 +2,9 @@ package com.zzy.finsight.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.component.analysis.StockCodeResolver;
-import com.zzy.finsight.domain.stock.FinancialSnapshot;
 import com.zzy.finsight.domain.stock.StockSubject;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,20 +44,10 @@ public class ResolveSecurityTool implements ResearchTool<NoToolArguments> {
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        StockSubject subject = resolver.resolve(context.request().getTicker());
-        context.state().setSubject(subject);
-        if (context.state().getSnapshot() == null) {
-            context.state().setSnapshot(new FinancialSnapshot(
-                    subject,
-                    context.request().getAsOfDate().toString(),
-                    context.request().getSearchMode(),
-                    List.of(),
-                    LocalDateTime.now()
-            ));
-        }
+        StockSubject subject = resolver.resolve(context.request().ticker());
         return ToolResult.success(
                 "已解析证券 " + subject.fullCode(),
-                Map.of("subject", subject, "disclaimer", "仅作研究辅助，不构成投资建议")
+                new ToolPayload.Security(subject, "仅作研究辅助，不构成投资建议")
         );
     }
 }

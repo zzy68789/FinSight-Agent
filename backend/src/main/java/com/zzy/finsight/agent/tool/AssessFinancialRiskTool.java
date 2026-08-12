@@ -44,16 +44,15 @@ public class AssessFinancialRiskTool implements ResearchTool<NoToolArguments> {
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        if (context.state().getSnapshot() == null || context.state().getMetrics().isEmpty()) {
+        if (context.snapshot() == null || context.metrics().isEmpty()) {
             return ToolResult.failure("风险评估需要快照和已计算指标", "METRICS_REQUIRED", false);
         }
         FinancialRiskAssessment assessment = riskScorer.assess(
-                context.state().getMetrics(), context.state().getSnapshot().evidenceItems()
+                context.metrics(), context.snapshot().evidenceItems()
         );
-        context.state().setRiskAssessment(assessment);
         return ToolResult.success(
                 "风险等级 %s，综合分 %s".formatted(assessment.riskLevel(), assessment.finalScore()),
-                Map.of("riskAssessment", assessment)
+                new ToolPayload.Risk(assessment)
         );
     }
 }

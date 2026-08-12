@@ -12,7 +12,7 @@ import java.util.Optional;
  */
 @Component
 public class AgentCheckpointCodec {
-    public static final String CURRENT_VERSION = "agent-state-v2-lite";
+    public static final String CURRENT_VERSION = "agent-state-v3-lite";
     private final ObjectMapper objectMapper;
 
     public AgentCheckpointCodec(ObjectMapper objectMapper) {
@@ -29,6 +29,8 @@ public class AgentCheckpointCodec {
                     ? "agent-state-v1" : record.stateVersion();
             AgentState state = switch (version) {
                 case CURRENT_VERSION -> objectMapper.readValue(record.stateJson(), AgentCheckpointState.class)
+                        .toAgentState();
+                case "agent-state-v2-lite" -> objectMapper.readValue(record.stateJson(), AgentCheckpointState.class)
                         .toAgentState();
                 case "agent-state-v1" -> migrateV1(objectMapper.readValue(record.stateJson(), AgentState.class));
                 default -> throw new IllegalStateException("UNSUPPORTED_AGENT_STATE_VERSION：" + version);

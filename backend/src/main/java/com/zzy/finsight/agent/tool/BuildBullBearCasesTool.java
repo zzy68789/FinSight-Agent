@@ -44,20 +44,19 @@ public class BuildBullBearCasesTool implements ResearchTool<NoToolArguments> {
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        if (context.state().getSnapshot() == null || context.state().getMetrics().isEmpty()) {
+        if (context.snapshot() == null || context.metrics().isEmpty()) {
             return ToolResult.failure("多空条件分析需要快照和指标", "METRICS_REQUIRED", false);
         }
         BullBearResearchResult result = delegate.analyze(
-                context.state().getSnapshot(),
-                context.state().getMetrics(),
-                context.state().getRiskAssessment()
+                context.snapshot(),
+                context.metrics(),
+                context.riskAssessment()
         );
-        context.state().setBullBearResearch(result);
         return ToolResult.success(
                 "已形成 %d 条正向条件和 %d 条风险条件".formatted(
                         result.bullCases().size(), result.bearCases().size()
                 ),
-                Map.of("research", result, "policyVersion", BullBearCaseBuilder.POLICY_VERSION)
+                new ToolPayload.BullBear(result, BullBearCaseBuilder.POLICY_VERSION)
         );
     }
 }

@@ -114,7 +114,7 @@ class ToolPolicyGuardTest {
 
             @Override
             public ToolResult execute(ToolContext context, RawToolArguments arguments) {
-                return ToolResult.success("完成", Map.of());
+                return ToolResult.success("完成");
             }
         };
     }
@@ -143,7 +143,7 @@ class ToolPolicyGuardTest {
 
             @Override
             public ToolResult execute(ToolContext context, RawToolArguments arguments) {
-                return ToolResult.success("完成", Map.of());
+                return ToolResult.success("完成");
             }
         };
     }

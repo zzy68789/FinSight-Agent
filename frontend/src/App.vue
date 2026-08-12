@@ -1022,11 +1022,9 @@ import {
 } from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
 import {
-    agentEventTypeLabel,
-    createAgentEventProjection,
-    reduceAgentEvent,
-    replayAgentEvents
+    agentEventTypeLabel
 } from './modules/agentEventProjection';
+import { useAgentRunProjection } from './composables/useAgentRunProjection';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
 
@@ -1052,26 +1050,34 @@ const researchQuestion = ref('分析该证券近期财务表现、估值观察�
 const researchAsOfDate = ref(new Date().toISOString().slice(0, 10));
 const researchDepth = ref('standard');
 const researchTimeHorizon = ref('2Y');
-const agentPlan = ref(null);
-const agentBudget = ref(null);
-const agentEvents = ref([]);
-const agentProjection = ref(createAgentEventProjection());
-const latestStockTaskId = ref(null);
-const financialMetrics = ref([]);
-const financialEvidence = ref([]);
-const financialSnapshotSummary = ref(null);
-const financialRiskAssessment = ref(null);
-const financialCompliance = ref(null);
-const financialEvaluation = ref(null);
-const bullBearResearch = ref(null);
-const financialProviderStages = ref([]);
+const {
+    agentPlan,
+    agentBudget,
+    agentEvents,
+    latestStockTaskId,
+    financialMetrics,
+    financialEvidence,
+    financialSnapshotSummary,
+    financialRiskAssessment,
+    financialCompliance,
+    financialEvaluation,
+    bullBearResearch,
+    financialProviderStages,
+    currentStep,
+    completedSteps,
+    logs,
+    displayedReport,
+    isTyping,
+    resetAgentRun,
+    handleAgentEvent,
+    applyAgentTrace,
+    pushAgentLog,
+    markAgentRunDone
+} = useAgentRunProjection();
 const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
 const stockTrace = ref(null);
 const isLoading = ref(false);
-const currentStep = ref('idle');
-const completedSteps = ref([]);
-const logs = ref([]);
 const logsContainer = ref(null);
 const uploadedFiles = ref([]);
 const isDragging = ref(false);
@@ -1079,8 +1085,6 @@ const searchMode = ref('hybrid');
 const activeWorkspace = ref('run');
 const activeThreadId = ref(currentThreadId);
 
-const displayedReport = ref('');
-const isTyping = ref(false);
 const authUser = ref(null);
 const authMode = ref('login');
 const authForm = ref({ username: '', email: '', password: '' });
@@ -1511,51 +1515,13 @@ const deleteAdminReport = async (report) => {
     }
 };
 
-let typingInterval = null;
-const typeWriterEffect = (text) => {
-    isTyping.value = true;
-
-    if (typingInterval) {
-        clearInterval(typingInterval);
-    }
-
-    let index = 0;
-    typingInterval = setInterval(() => {
-        if (index < text.length) {
-            displayedReport.value += text.slice(index, index + 3);
-            index += 3;
-        } else {
-            clearInterval(typingInterval);
-            typingInterval = null;
-            isTyping.value = false;
-        }
-    }, 10);
-};
-
 const startStockResearch = async () => {
     if (!canStartRun.value) return;
 
     isLoading.value = true;
-    currentStep.value = 'run_created';
-    completedSteps.value = [];
-    logs.value = [];
-    displayedReport.value = '';
-    latestStockTaskId.value = null;
-    financialMetrics.value = [];
-    financialEvidence.value = [];
-    financialSnapshotSummary.value = null;
-    financialRiskAssessment.value = null;
-    financialCompliance.value = null;
-    financialEvaluation.value = null;
-    bullBearResearch.value = null;
-    financialProviderStages.value = [];
     stockReplay.value = null;
     stockTrace.value = null;
-    agentPlan.value = null;
-    agentBudget.value = null;
-    agentEvents.value = [];
-    agentProjection.value = createAgentEventProjection();
-    logs.value.push(`[初始化] Research Agent：${stockTicker.value.trim().toUpperCase()}，问题：${researchQuestion.value.trim()}`);
+    resetAgentRun(`[初始化] Research Agent：${stockTicker.value.trim().toUpperCase()}，问题：${researchQuestion.value.trim()}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
 
@@ -1582,8 +1548,8 @@ const startStockResearch = async () => {
             handleStockEvent,
             () => {
                 isLoading.value = false;
-                currentStep.value = 'done';
-                logs.value.push('[完成] Research Agent 已结束运行。');
+                markAgentRunDone();
+                pushAgentLog('[完成] Research Agent 已结束运行。');
                 loadTasks();
                 loadReports(activeThreadId.value);
                 scrollToBottom();
@@ -1602,33 +1568,8 @@ const startStockResearch = async () => {
     }
 };
 
-const applyAgentProjection = (projection, animateReport = false) => {
-    const nextReport = projection.finalReport || '';
-    agentProjection.value = projection;
-    currentStep.value = projection.currentStep;
-    completedSteps.value = projection.completedSteps;
-    agentEvents.value = projection.events;
-    agentPlan.value = projection.plan;
-    agentBudget.value = projection.budget;
-    latestStockTaskId.value = projection.taskId || latestStockTaskId.value;
-    financialMetrics.value = projection.metrics;
-    financialEvidence.value = projection.evidence;
-    financialSnapshotSummary.value = projection.snapshotSummary;
-    financialRiskAssessment.value = projection.riskAssessment;
-    financialCompliance.value = projection.compliance;
-    financialEvaluation.value = projection.evaluation;
-    bullBearResearch.value = projection.bullBearResearch;
-    financialProviderStages.value = projection.providerStages;
-    logs.value = projection.logs;
-    if (animateReport && nextReport && nextReport !== displayedReport.value) {
-        displayedReport.value = '';
-        typeWriterEffect(nextReport);
-    }
-};
-
 const handleStockEvent = (event) => {
-    const base = { ...agentProjection.value, logs: [...logs.value] };
-    applyAgentProjection(reduceAgentEvent(base, event), true);
+    handleAgentEvent(event);
     scrollToBottom();
 };
 
@@ -1654,9 +1595,10 @@ const loadStockReplay = async () => {
         stockReplay.value = replay;
         stockTrace.value = trace;
         if (trace.events?.length) {
-            const projection = replayAgentEvents(trace.events);
-            projection.logs.push('[回放] 已使用与实时 SSE 相同的状态投影加载历史轨迹。');
-            applyAgentProjection(projection, false);
+            applyAgentTrace(
+                trace.events,
+                '[回放] 已使用与实时 SSE 相同的状态投影加载历史轨迹。'
+            );
         }
         logs.value.push('[回放] 已加载本次快照、证据、指标与可信度轨迹。');
         scrollToBottom();

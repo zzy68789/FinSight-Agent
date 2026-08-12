@@ -12,6 +12,8 @@ import com.zzy.finsight.mapper.CheckpointMapper;
 import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
 import com.zzy.finsight.mapper.AgentRuntimeMapper;
+import com.zzy.finsight.mapper.AgentEventOutboxMapper;
+import com.zzy.finsight.mapper.AgentPlannerCallMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -48,6 +50,12 @@ class ApplicationSmokeTest {
 
     @MockitoBean
     AgentRuntimeMapper agentRuntimeMapper;
+
+    @MockitoBean
+    AgentEventOutboxMapper agentEventOutboxMapper;
+
+    @MockitoBean
+    AgentPlannerCallMapper agentPlannerCallMapper;
 
     @MockitoBean
     AgentStepLogMapper stepLogMapper;

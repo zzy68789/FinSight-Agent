@@ -1,7 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
 import com.zzy.finsight.agent.memory.AgentState;
-import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
@@ -29,7 +28,6 @@ class SearchPublicEvidenceToolTest {
     void usesResearchQuestionToBuildPublicEvidenceQuery() {
         SearchService searchService = mock(SearchService.class);
         TavilyExtractClient extractClient = mock(TavilyExtractClient.class);
-        EvidenceMemory memory = mock(EvidenceMemory.class);
         SearchResult result = new SearchResult(
                 "tavily",
                 "贵州茅台公告",
@@ -38,12 +36,8 @@ class SearchPublicEvidenceToolTest {
         );
         when(searchService.search(anyString(), anyInt())).thenReturn(List.of(result));
         when(extractClient.extract(any(), anyInt())).thenReturn(List.of());
-        when(memory.merge(any(), anyString(), any(), anyLong(), anyString(), anyString()))
-                .thenAnswer(invocation -> invocation
-                        .<com.zzy.finsight.domain.stock.FinancialDataCollection>getArgument(2)
-                        .evidenceItems());
         SearchPublicEvidenceTool tool = new SearchPublicEvidenceTool(
-                searchService, extractClient, memory, 3
+                searchService, extractClient, 3
         );
         ResearchRunRequest request = new ResearchRunRequest();
         request.setTicker("600519");
@@ -53,7 +47,7 @@ class SearchPublicEvidenceToolTest {
         state.setSubject(new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"));
 
         ToolResult toolResult = tool.execute(
-                new ToolContext(7L, 11L, request, state),
+                ToolContext.from(7L, state),
                 new SearchPublicEvidenceArguments("")
         );
 
@@ -62,9 +56,10 @@ class SearchPublicEvidenceToolTest {
         assertThat(query.getValue())
                 .contains("600519.SH", "贵州茅台", "最近两个季度毛利率下降的原因是什么");
         assertThat(toolResult.status()).isEqualTo("SUCCESS");
-        assertThat(toolResult.evidenceItems()).singleElement()
+        assertThat(((ToolPayload.Evidence) toolResult.payload()).evidence()).singleElement()
                 .extracting(FinancialEvidenceItem::metricName)
                 .isEqualTo("RESEARCH_QUESTION_EVIDENCE");
+        assertThat(state.getSnapshot()).isNull();
     }
 
     @Test
@@ -72,7 +67,7 @@ class SearchPublicEvidenceToolTest {
         SearchService searchService = mock(SearchService.class);
         TavilyExtractClient extractClient = mock(TavilyExtractClient.class);
         SearchPublicEvidenceTool tool = new SearchPublicEvidenceTool(
-                searchService, extractClient, mock(EvidenceMemory.class), 3
+                searchService, extractClient, 3
         );
         ResearchRunRequest request = new ResearchRunRequest();
         request.setTicker("600519");
@@ -83,7 +78,7 @@ class SearchPublicEvidenceToolTest {
         when(searchService.search(anyString(), anyInt())).thenReturn(List.of());
 
         ToolResult result = tool.execute(
-                new ToolContext(7L, 11L, request, state),
+                ToolContext.from(7L, state),
                 new SearchPublicEvidenceArguments("")
         );
 

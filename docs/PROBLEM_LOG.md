@@ -6,8 +6,9 @@
 
 | 优先级 | 编号 | 问题 | 状态 |
 | --- | --- | --- | --- |
+| P0 | 039 | Replan 不消费反馈且 Planner 成本、补证据和停滞缺少独立控制 | 已完成机制改造，真实模型基线待补 |
 | P0 | 036 | 新证据使派生结果失效但重复调用锁仍阻止重算 | 已完成 |
-| P0 | 038 | Agent turn 分散写入导致状态不一致，工具和事件契约缺少统一恢复边界 | 已完成首版，MySQL 故障注入待补 |
+| P0 | 038 | Agent turn 分散写入导致状态不一致，工具和事件契约缺少统一恢复边界 | 已深化，MySQL 故障注入待补 |
 | P0 | 035 | Reviewer 结果结构化但 Runtime 仍按自由文本路由 | 已完成 |
 | P0 | 034 | 新增反思重写不等于去除固定工作流 | 已完成首版改造，真实模型验收待补 |
 | P1 | 033 | 报告能力散落且 ETF 只有单点行情 | 已完成首版 |
@@ -691,8 +692,26 @@ Reviewer 已能把证据问题路由回 Planner，但原 Runtime 只执行 Repla
 
 ### 解决方式
 
-新增 `DurableTurnCommitModule`，把工具结果、证据、快照、指标、turn、`agent-state-v2-lite` Checkpoint 和租约续期纳入同一事务；Flyway V5 增加单调 `lease_epoch`，提交和结束任务必须同时匹配 owner 与 epoch。新增 `ToolDefinition`、`ToolArguments`、类型化解码与稳定错误分类；新增 `AgentStateStore`，按版本迁移轻量状态并从业务表及工具 journal 重建大对象和调用索引。前端新增 `agentEventProjection.js`，实时 SSE 与 Trace 持久化事件使用同一 reducer，`StatusFlow` 复用统一标签。
+新增 `DurableTurnCommitModule`，并继续把 `openTurn`、工具开始 journal、turn 提交、最终 PASS 报告、快照冻结、任务完成和事件 outbox 都纳入 `lease_owner + lease_epoch` fencing 与事务边界；Flyway V5/V6 分别增加单调租约 epoch、Planner 遥测和版本化 outbox。工具契约进一步改为不可变 `ToolContext`、类型化 `ToolArguments`/`ToolPayload` 和集中 `ToolStateReducer`，避免并行工具修改共享状态。前端以 `agentEventProjection.js` 和 `useAgentRunProjection` 统一实时/历史状态投影。
 
 ### 结果
 
-2026-08-12 后端全量 `mvn.cmd test` 为 180 个测试零失败、零错误、跳过 3 项；新增测试覆盖事务模块提交顺序、过期 lease 拒绝、v1/v2 状态迁移、工具 schema 类型错误和参数解码。前端 `npm.cmd test` 2 项通过，覆盖重复事件幂等和 SSE/Trace 重放等价；`npm.cmd run build` 成功。Docker 未运行，因此 V5 迁移、真实 MySQL 回滚和外部调用后事务前宕机窗口仍需故障注入验证，不能宣传 exactly-once。
+2026-08-12 后端全量 `mvn.cmd test` 为 188 个测试零失败、零错误、跳过 3 项；新增测试覆盖租约前置写 fencing、最终完成原子提交、v1/v2/v3 状态兼容、不可变工具执行和版本化 outbox。前端 `npm.cmd test` 3 项通过，覆盖重复事件、SSE/Trace 等价与 outbox 重试，`npm.cmd run build` 成功。Docker 未运行，因此 V6 迁移、真实 MySQL 回滚和外部调用后事务前宕机窗口仍需故障注入验证，不能宣传 exactly-once。
+
+## 039. Replan 不消费反馈且 Planner 成本、补证据和停滞缺少独立控制
+
+### 发生了什么
+
+旧 `replan` 会重新调用只包含原始请求的 `createPlan`，再由 Java 把 observations、Reviewer 原因和恢复提示追加到 `unresolvedQuestions`；反馈没有参与新目标、假设和证据需求生成。每轮 Planner 都固定使用 SMART，结构化 JSON 被解析两次，补证据次数只能借用 Replan/工具总预算，停滞检测也只统计证据工具是否新增条目。
+
+### 原因
+
+Planner 同时承担 prompt 拼装、模型选择、结构重试、JSON 解码和降级，但缺少固定大小的决策上下文与执行策略模块；运行态只有局部计数器，没有对“计划问题、证据、指标和门禁路由是否真正变化”建立统一语义指纹，调用元数据也没有独立持久化位置。
+
+### 解决方式
+
+新增 `PlannerContextProjection`，让 Replan 直接消费当前计划、最近调用/观察、门禁问题、补证据尝试和证据增量；`PlannerOutput<T>` 一次完成解析并携带调用元数据。新增 `PlannerModelPolicy` 与 `PlannerTelemetryModule`：建计划/Replan 使用 SMART，普通动作优先 FAST，复杂恢复或 FAST 结构失败升级 SMART，并把实际模型、决策类型、路由原因、合法性、Token 和耗时写入 `agent_planner_call`。同时增加 `maxEvidenceRecoveries` 和 `ProgressFingerprint`，分别限制补证据轮次与连续无语义进展的已提交 turn。
+
+### 结果
+
+`ResearchPlannerTest` 已证明观察、门禁原因、恢复尝试和证据增量真实进入 Replan prompt，普通动作可由 FAST 失败升级 SMART，最终失败仍保留非零遥测；`ProgressFingerprintTest` 与 Runtime 回归覆盖通用停滞和独立补证据停止。2026-08-12 后端全量 188 个测试零失败、零错误、跳过 3 项并成功打包。真实模型流量尚未运行，因此 FAST/SMART 的质量、Token 和 P50/P95 只具备采集能力，尚不能宣称已经取得性能收益。

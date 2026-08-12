@@ -22,3 +22,25 @@ test('历史步骤日志与实时 SSE 使用同一投影结果', () => {
   assert.deepEqual(trace.events, live.events);
   assert.deepEqual(trace.logs, live.logs);
 });
+
+test('版本化 outbox 事件可重放并按任务序号去重', () => {
+  const event = {
+    schemaVersion: 'agent-event-v1',
+    taskId: 7,
+    threadId: 'thread-1',
+    sequence: 3,
+    eventId: 'event-3',
+    turnNo: 2,
+    type: 'tool_completed',
+    status: 'SUCCESS',
+    payload: {
+      toolName: 'calculate_financial_metrics',
+      summary: '指标已计算',
+      result: { payloadType: 'metrics', metrics: [{ metricName: 'ROE' }] }
+    }
+  };
+  const projection = replayAgentEvents([event, { ...event, eventId: 'retry-event' }]);
+  assert.equal(projection.events.length, 1);
+  assert.equal(projection.metrics[0].metricName, 'ROE');
+  assert.equal(projection.currentStep, 'tool_completed');
+});

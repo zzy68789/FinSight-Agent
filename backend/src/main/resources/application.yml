@@ -97,6 +97,8 @@ finsight:
     max-turns: 8
     max-tool-calls: 12
     max-replans: 3
+    max-evidence-recoveries: 2
+    max-stagnant-turns: 3
     max-parallel-tools: 4
     max-report-rewrites: 2
     timeout: PT180S

@@ -61,13 +61,18 @@ class AgentCheckpointCodecTest {
         state.setThreadId("thread-1");
         state.setTurnNo(3);
         state.setContextHash("context-hash");
+        state.setConsecutiveNoProgressTurns(2);
+        state.setLastProgressFingerprint("progress-hash");
         String lightJson = objectMapper.writeValueAsString(AgentCheckpointState.from(state));
         CheckpointRecord current = new CheckpointRecord(
                 2L, "thread-1", 11L, "AGENT_STATE", 3, "context-hash",
                 AgentCheckpointCodec.CURRENT_VERSION, 3, lightJson, LocalDateTime.now()
         );
 
-        assertThat(codec.decode(current).orElseThrow().getTurnNo()).isEqualTo(3);
+        AgentState restored = codec.decode(current).orElseThrow();
+        assertThat(restored.getTurnNo()).isEqualTo(3);
+        assertThat(restored.getConsecutiveNoProgressTurns()).isEqualTo(2);
+        assertThat(restored.getLastProgressFingerprint()).isEqualTo("progress-hash");
         CheckpointRecord unknown = new CheckpointRecord(
                 3L, "thread-1", 11L, "AGENT_STATE", 3, "context-hash",
                 "agent-state-v99", 3, lightJson, LocalDateTime.now()

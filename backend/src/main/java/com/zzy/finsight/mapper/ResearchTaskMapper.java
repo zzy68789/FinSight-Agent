@@ -172,6 +172,30 @@ public interface ResearchTaskMapper {
             @Param("leaseOwner") String leaseOwner
     );
 
+    /** 仅由当前租约执行者递增任务内事件序号。 */
+    default long nextEventSequence(LeaseToken lease) {
+        if (incrementEventSequenceFenced(
+                lease.taskId(), lease.owner(), lease.epoch(), LocalDateTime.now()
+        ) != 1) {
+            throw new IllegalStateException("LEASE_FENCED：过期执行者不得写入 Agent 事件");
+        }
+        return findEventSequenceFenced(lease.taskId(), lease.owner(), lease.epoch())
+                .orElseThrow(() -> new IllegalStateException("LEASE_FENCED：事件序号读取失败"));
+    }
+
+    int incrementEventSequenceFenced(
+            @Param("taskId") long taskId,
+            @Param("leaseOwner") String leaseOwner,
+            @Param("leaseEpoch") long leaseEpoch,
+            @Param("now") LocalDateTime now
+    );
+
+    Optional<Long> findEventSequenceFenced(
+            @Param("taskId") long taskId,
+            @Param("leaseOwner") String leaseOwner,
+            @Param("leaseEpoch") long leaseEpoch
+    );
+
     default boolean markRetrying(long taskId, String expectedStatus) {
         return updateRetrying(taskId, expectedStatus, LocalDateTime.now()) == 1;
     }

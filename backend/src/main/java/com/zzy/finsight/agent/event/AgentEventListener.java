@@ -5,7 +5,7 @@ package com.zzy.finsight.agent.event;
  */
 public interface AgentEventListener {
     /** 接收一条运行事件。 */
-    void onEvent(String eventType, Object data);
+    void onEvent(AgentEvent event);
 
     /** 接收任务正常终止通知。 */
     void onDone();
@@ -17,7 +17,7 @@ public interface AgentEventListener {
     static AgentEventListener noop() {
         return new AgentEventListener() {
             @Override
-            public void onEvent(String eventType, Object data) {
+            public void onEvent(AgentEvent event) {
             }
 
             @Override

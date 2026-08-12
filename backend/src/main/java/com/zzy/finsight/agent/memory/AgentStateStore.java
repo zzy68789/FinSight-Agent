@@ -4,11 +4,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.tool.ToolResult;
+import com.zzy.finsight.agent.tool.ToolPayload;
 import com.zzy.finsight.domain.AgentToolCallRecord;
 import com.zzy.finsight.domain.AgentTurnRecord;
 import com.zzy.finsight.domain.CheckpointRecord;
-import com.zzy.finsight.domain.stock.BullBearResearchResult;
-import com.zzy.finsight.domain.stock.FinancialRiskAssessment;
 import com.zzy.finsight.domain.stock.PersistedFinancialSnapshot;
 import com.zzy.finsight.mapper.AgentRuntimeMapper;
 import com.zzy.finsight.mapper.CheckpointMapper;
@@ -135,13 +134,12 @@ public class AgentStateStore {
     }
 
     private void applyDerivedResult(AgentState state, ToolResult result) {
-        Object risk = result.payload().get("riskAssessment");
-        if (risk != null) {
-            state.setRiskAssessment(objectMapper.convertValue(risk, FinancialRiskAssessment.class));
-        }
-        Object research = result.payload().get("research");
-        if (research != null) {
-            state.setBullBearResearch(objectMapper.convertValue(research, BullBearResearchResult.class));
+        if (result.payload() instanceof ToolPayload.Risk risk) {
+            state.setRiskAssessment(risk.riskAssessment());
+        } else if (result.payload() instanceof ToolPayload.BullBear research) {
+            state.setBullBearResearch(research.research());
+        } else if (result.payload() instanceof ToolPayload.Metrics metrics) {
+            state.setMetrics(metrics.metrics());
         }
     }
 }

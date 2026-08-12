@@ -15,6 +15,8 @@ public class AgentBudgetGuard {
     private final int serverMaxTurns;
     private final int serverMaxToolCalls;
     private final int maxReplans;
+    private final int maxEvidenceRecoveries;
+    private final int maxStagnantTurns;
     private final int maxParallelTools;
     private final int maxReportRewrites;
     private final Duration serverTimeout;
@@ -24,6 +26,8 @@ public class AgentBudgetGuard {
             @Value("${finsight.agent.max-turns:8}") int serverMaxTurns,
             @Value("${finsight.agent.max-tool-calls:12}") int serverMaxToolCalls,
             @Value("${finsight.agent.max-replans:3}") int maxReplans,
+            @Value("${finsight.agent.max-evidence-recoveries:2}") int maxEvidenceRecoveries,
+            @Value("${finsight.agent.max-stagnant-turns:3}") int maxStagnantTurns,
             @Value("${finsight.agent.max-parallel-tools:4}") int maxParallelTools,
             @Value("${finsight.agent.max-report-rewrites:2}") int maxReportRewrites,
             @Value("${finsight.agent.timeout:PT180S}") Duration serverTimeout,
@@ -32,6 +36,8 @@ public class AgentBudgetGuard {
         this.serverMaxTurns = Math.max(1, serverMaxTurns);
         this.serverMaxToolCalls = Math.max(1, serverMaxToolCalls);
         this.maxReplans = Math.max(0, maxReplans);
+        this.maxEvidenceRecoveries = Math.max(0, maxEvidenceRecoveries);
+        this.maxStagnantTurns = Math.max(1, maxStagnantTurns);
         this.maxParallelTools = Math.max(1, maxParallelTools);
         this.maxReportRewrites = Math.max(0, maxReportRewrites);
         this.serverTimeout = positive(serverTimeout, Duration.ofSeconds(180));
@@ -53,6 +59,8 @@ public class AgentBudgetGuard {
                 turns,
                 tools,
                 maxReplans,
+                maxEvidenceRecoveries,
+                maxStagnantTurns,
                 maxParallelTools,
                 maxReportRewrites,
                 Duration.ofSeconds(timeoutSeconds),

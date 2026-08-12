@@ -15,6 +15,9 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
 - **公式审计与上下文隔离**：指标公式由 `MetricDefinitionCatalog` 版本化管理；报告复用摘要包含研究问题、截止日期、观察区间、研究深度、最终快照以及 Planner/toolset/policy 版本，历史 PASS 报告仍需重新通过当前门禁。
 - **可恢复 Agent Runtime**：任务持久化请求、轮次、工具调用、预算消耗、停止原因、心跳、租约和 AgentState Checkpoint；SSE 客户端断开不影响后台执行，过期任务从最近完整轮次恢复，最多尝试 3 次。
+- **反馈感知 Replan 与模型分层**：重规划直接读取最近观察、门禁问题、补证据尝试和证据增量；普通动作优先 FAST，建计划、重规划和复杂恢复使用 SMART，结构失败自动升级并持久化模型、Token、耗时和合法率。
+- **原子完成与事件回放**：工具结果、证据、turn、Checkpoint 和租约续期按轮次原子提交；PASS 报告、快照冻结、任务完成与版本化事件 outbox 在最终事务内一起提交，实时 SSE 与历史 Trace 读取同一事件契约。
+- **类型化只读工具**：Planner 参数先按工具 schema 解码为强类型命令，工具只读取不可变上下文并返回类型化 `ToolPayload`，状态变更统一由 Runtime reducer 串行应用。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
 - **证据约束多空工具**：`BullBearCaseBuilder` 由 `build_bull_bear_cases` 工具调用，基于同一确定性指标/风险快照输出正反条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
@@ -147,6 +150,8 @@ finsight:
     max-turns: 8
     max-tool-calls: 12
     max-replans: 3
+    max-evidence-recoveries: 2
+    max-stagnant-turns: 3
     max-parallel-tools: 4
     timeout: PT180S
     tool-timeout: PT30S
@@ -154,9 +159,9 @@ finsight:
 
 Agent 和工具执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。单次工具和整体运行都有显式超时，不会无限占用线程。
 
-数据库由 Flyway 自动管理：空库依次执行 V1～V4；V4 新增 Agent 轮次、工具调用、预算/停止原因、证据去重与 AgentState Checkpoint 字段。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
+数据库由 Flyway 自动管理：空库依次执行 V1～V6；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
 
-如需临时关闭自动迁移，需按顺序执行历史手动升级脚本，最后执行 `upgrade-research-agent.sql`，保证数据库结构与代码一致。
+如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql` 和 `upgrade-agent-decision-outbox.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -353,6 +358,8 @@ GET /api/admin/system/health
 - `report`：报告内容和版本。
 - `agent_turn`：Planner 每轮结构化动作、观察摘要、Token 和耗时。
 - `agent_tool_call`：工具名称、参数摘要、结果、重试次数和稳定错误分类。
+- `agent_planner_call`：Planner 决策类型、请求/实际模型、结构合法性、Token 和耗时。
+- `agent_event_outbox`：带任务内单调序号的版本化 Agent 事件及发布状态。
 - `checkpoint`：带状态版本、轮次和请求上下文指纹的 AgentState 快照。
 - `stock_analysis_snapshot`：股票报告生成时的数据快照。
 - `stock_evidence_item`：金融证据账本。
@@ -370,7 +377,7 @@ cd backend
 mvn.cmd test
 ```
 
-测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V4，并验证 Agent turn、tool call、Checkpoint、任务租约和报告租户隔离；未启动 Docker 时该用例会明确跳过。
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V6，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测、事件 outbox 和报告租户隔离；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 

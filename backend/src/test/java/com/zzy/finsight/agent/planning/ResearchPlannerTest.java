@@ -15,11 +15,13 @@ import com.zzy.finsight.agent.tool.ToolResult;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.llm.LlmClient;
+import com.zzy.finsight.llm.LlmGenerationResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -119,6 +121,125 @@ class ResearchPlannerTest {
                 .contains("第1轮第2次");
     }
 
+    @Test
+    void replanSendsCommittedFeedbackAndRecoveryAttemptsDirectlyToSmartModel() {
+        AtomicReference<String> prompt = new AtomicReference<>();
+        AtomicReference<LlmClient.ModelType> model = new AtomicReference<>();
+        LlmClient llm = new LlmClient() {
+            @Override
+            public String generate(String ignored, ModelType modelType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public LlmGenerationResult generateWithMetadata(String value, ModelType modelType) {
+                prompt.set(value);
+                model.set(modelType);
+                return new LlmGenerationResult(
+                        "{\"goal\":\"解决证据冲突\",\"hypotheses\":[\"公告口径可交叉验证\"],"
+                                + "\"requiredEvidence\":[\"不同来源公告\"],\"completedItems\":[\"原始检索\"],"
+                                + "\"unresolvedQuestions\":[\"冲突来源尚未核验\"],\"plannerMode\":\"LLM\","
+                                + "\"version\":\"research-planner-v3-feedback-aware-routing\"}",
+                        "smart-model", 120, 40, 160, "STOP", 25L
+                );
+            }
+        };
+        ResearchPlanner planner = new ResearchPlanner(llm, new ObjectMapper().findAndRegisterModules());
+        ResearchToolRegistry registry = new ResearchToolRegistry(List.of(publicEvidenceTool()));
+        AgentState state = new AgentState();
+        state.setRequest(request("核验公告冲突"));
+        state.setPlan(new ResearchPlan(
+                "原计划", List.of("原假设"), List.of("原始公告"), List.of(), List.of("待核验"), "LLM", "v1"
+        ));
+        state.setObservations(List.of("search_public_evidence：发现两份口径冲突公告"));
+        state.setLastReviewReason("EVIDENCE_CONFLICT：同一指标存在证据冲突");
+        state.beginEvidenceRecovery(evidenceRecoveryDecision());
+        state.recordEvidenceRecoveryAttempt(
+                new ToolInvocation("search_public_evidence", Map.of("query", "更换来源核验公告")), 2L
+        );
+
+        PlannerOutput<ResearchPlan> output = planner.replan(state, registry);
+
+        assertThat(output.degraded()).isFalse();
+        assertThat(output.decisionType()).isEqualTo("REPLAN");
+        assertThat(output.requestedModel()).isEqualTo("SMART");
+        assertThat(output.actualModel()).isEqualTo("smart-model");
+        assertThat(model.get()).isEqualTo(LlmClient.ModelType.SMART);
+        assertThat(prompt.get()).contains(
+                "发现两份口径冲突公告",
+                "EVIDENCE_CONFLICT",
+                "更换来源核验公告",
+                "addedEffectiveEvidenceCount",
+                "2"
+        );
+        assertThat(output.value().goal()).isEqualTo("解决证据冲突");
+    }
+
+    @Test
+    void ordinaryNextActionUsesFastAndEscalatesToSmartAfterStructureFailure() {
+        java.util.List<LlmClient.ModelType> models = new java.util.ArrayList<>();
+        LlmClient llm = new LlmClient() {
+            @Override
+            public String generate(String ignored, ModelType modelType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public LlmGenerationResult generateWithMetadata(String prompt, ModelType modelType) {
+                models.add(modelType);
+                if (models.size() == 1) {
+                    return new LlmGenerationResult("not-json", "fast-model", 10, 2, 12, "STOP", 5L);
+                }
+                return new LlmGenerationResult(
+                        "{\"type\":\"STOP_INSUFFICIENT_EVIDENCE\",\"toolCalls\":[],\"reason\":\"来源耗尽\"}",
+                        "smart-model", 12, 4, 16, "STOP", 8L
+                );
+            }
+        };
+        ResearchPlanner planner = new ResearchPlanner(llm, new ObjectMapper().findAndRegisterModules());
+        AgentState state = new AgentState();
+        state.setRequest(request("分析盈利质量"));
+
+        PlannerOutput<AgentAction> output = planner.nextAction(state, new ResearchToolRegistry(List.of()));
+
+        assertThat(models).containsExactly(LlmClient.ModelType.FAST, LlmClient.ModelType.SMART);
+        assertThat(output.requestedModel()).isEqualTo("SMART");
+        assertThat(output.actualModel()).isEqualTo("smart-model");
+        assertThat(output.structureAttempts()).isEqualTo(2);
+        assertThat(output.inputTokens()).isEqualTo(22);
+        assertThat(output.outputTokens()).isEqualTo(6);
+    }
+
+    @Test
+    void failedStructuredCallsStillExposeCostMetadataBeforeFallback() {
+        LlmClient llm = new LlmClient() {
+            @Override
+            public String generate(String ignored, ModelType modelType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public LlmGenerationResult generateWithMetadata(String prompt, ModelType modelType) {
+                String actual = modelType == ModelType.FAST ? "fast-model" : "smart-model";
+                return new LlmGenerationResult("not-json", actual, 10, 3, 13, "STOP", 7L);
+            }
+        };
+        ResearchPlanner planner = new ResearchPlanner(llm, new ObjectMapper().findAndRegisterModules());
+        AgentState state = new AgentState();
+        state.setRequest(request("分析盈利质量"));
+
+        PlannerOutput<AgentAction> output = planner.nextAction(state, new ResearchToolRegistry(List.of()));
+
+        assertThat(output.degraded()).isTrue();
+        assertThat(output.structuredValid()).isFalse();
+        assertThat(output.requestedModel()).isEqualTo("SMART");
+        assertThat(output.actualModel()).isEqualTo("smart-model");
+        assertThat(output.structureAttempts()).isEqualTo(2);
+        assertThat(output.inputTokens()).isEqualTo(20);
+        assertThat(output.outputTokens()).isEqualTo(6);
+        assertThat(output.durationMs()).isEqualTo(14L);
+    }
+
     private ResearchRunRequest request(String question) {
         ResearchRunRequest request = new ResearchRunRequest();
         request.setTicker("600519");
@@ -157,7 +278,7 @@ class ResearchPlannerTest {
 
             @Override
             public ToolResult execute(ToolContext context, RawToolArguments arguments) {
-                return ToolResult.success("完成", Map.of());
+                return ToolResult.success("完成");
             }
         };
     }

@@ -46,20 +46,20 @@ public class CheckEvidenceCoverageTool implements ResearchTool<NoToolArguments> 
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        List<FinancialEvidenceItem> evidence = context.state().getSnapshot() == null
-                ? List.of() : context.state().getSnapshot().evidenceItems();
+        List<FinancialEvidenceItem> evidence = context.snapshot() == null
+                ? List.of() : context.snapshot().evidenceItems();
         long effective = evidence.stream().filter(FinancialEvidenceItem::effective).count();
         List<String> missing = new ArrayList<>();
-        if (context.state().getSubject() == null) {
+        if (context.subject() == null) {
             missing.add("证券主体");
         }
         if (effective < 3) {
             missing.add("至少 3 条有效证据");
         }
-        if (context.state().getMetrics().isEmpty()) {
+        if (context.metrics().isEmpty()) {
             missing.add("确定性金融指标");
         }
-        if (context.state().getRiskAssessment() == null) {
+        if (context.riskAssessment() == null) {
             missing.add("研究风险评估");
         }
         int totalChecks = 4;
@@ -69,11 +69,8 @@ public class CheckEvidenceCoverageTool implements ResearchTool<NoToolArguments> 
         String summary = missing.isEmpty()
                 ? "证据覆盖检查通过"
                 : "证据覆盖不足：" + String.join("、", missing);
-        return ToolResult.success(summary, Map.of(
-                "coverage", coverage,
-                "effectiveEvidenceCount", effective,
-                "missing", missing,
-                "ready", missing.isEmpty()
+        return ToolResult.success(summary, new ToolPayload.Coverage(
+                coverage, effective, missing, missing.isEmpty()
         ));
     }
 }

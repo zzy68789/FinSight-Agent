@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zzy.finsight.mapper.AgentPlannerCallMapper">
+    <resultMap id="plannerCallResult" type="com.zzy.finsight.domain.AgentPlannerCallRecord">
+        <constructor>
+            <idArg column="id" javaType="_long"/>
+            <arg column="task_id" javaType="_long"/>
+            <arg column="decision_type" javaType="string"/>
+            <arg column="requested_model" javaType="string"/>
+            <arg column="actual_model" javaType="string"/>
+            <arg column="input_tokens" javaType="_int"/>
+            <arg column="output_tokens" javaType="_int"/>
+            <arg column="duration_ms" javaType="_long"/>
+            <arg column="structure_attempts" javaType="_int"/>
+            <arg column="structured_valid" javaType="_boolean"/>
+            <arg column="route_correct" javaType="_boolean"/>
+            <arg column="degraded" javaType="_boolean"/>
+            <arg column="degraded_reason" javaType="string"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO agent_planner_call(
+          task_id, decision_type, requested_model, actual_model, input_tokens, output_tokens,
+          duration_ms, structure_attempts, structured_valid, route_correct, degraded,
+          degraded_reason, created_at
+        ) VALUES (
+          #{taskId}, #{decisionType}, #{requestedModel}, #{actualModel}, #{inputTokens}, #{outputTokens},
+          #{durationMs}, #{structureAttempts}, #{structuredValid}, #{routeCorrect}, #{degraded},
+          #{degradedReason}, #{createdAt}
+        )
+    </insert>
+
+    <select id="findByTaskId" resultMap="plannerCallResult">
+        SELECT id, task_id, decision_type, requested_model, actual_model, input_tokens, output_tokens,
+               duration_ms, structure_attempts, structured_valid, route_correct, degraded,
+               degraded_reason, created_at
+        FROM agent_planner_call
+        WHERE task_id = #{taskId}
+        ORDER BY id ASC
+    </select>
+</mapper>

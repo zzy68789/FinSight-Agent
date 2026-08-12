@@ -3,7 +3,6 @@ package com.zzy.finsight.agent.tool;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 表示白名单研究工具的结构化执行结果。
@@ -17,7 +16,7 @@ import java.util.Map;
 public record ToolResult(
         String status,
         String summary,
-        Map<String, Object> payload,
+        ToolPayload payload,
         List<FinancialEvidenceItem> evidenceItems,
         String errorCode,
         boolean retryable
@@ -25,18 +24,23 @@ public record ToolResult(
     public ToolResult {
         status = status == null || status.isBlank() ? "SUCCESS" : status;
         summary = summary == null ? "" : summary;
-        payload = payload == null ? Map.of() : Map.copyOf(payload);
+        payload = payload == null ? new ToolPayload.Empty() : payload;
         evidenceItems = evidenceItems == null ? List.of() : List.copyOf(evidenceItems);
         errorCode = errorCode == null ? "" : errorCode;
     }
 
     /** 创建成功工具结果。 */
-    public static ToolResult success(String summary, Map<String, Object> payload) {
+    public static ToolResult success(String summary, ToolPayload payload) {
         return new ToolResult("SUCCESS", summary, payload, List.of(), "", false);
+    }
+
+    /** 创建无附加负载的成功工具结果。 */
+    public static ToolResult success(String summary) {
+        return success(summary, new ToolPayload.Empty());
     }
 
     /** 创建失败工具结果。 */
     public static ToolResult failure(String summary, String errorCode, boolean retryable) {
-        return new ToolResult("FAILED", summary, Map.of(), List.of(), errorCode, retryable);
+        return new ToolResult("FAILED", summary, new ToolPayload.Empty(), List.of(), errorCode, retryable);
     }
 }

@@ -1,5 +1,7 @@
 package com.zzy.finsight.agent.memory;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.zzy.finsight.agent.runtime.LeaseToken;
 import com.zzy.finsight.agent.planning.ResearchPlan;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.quality.QualityGateDecision;
@@ -32,6 +34,8 @@ public class AgentState {
     private int replanCount;
     private int reportRewriteCount;
     private int consecutiveNoNewEvidenceTurns;
+    private int consecutiveNoProgressTurns;
+    private String lastProgressFingerprint = "";
     private Long snapshotId;
     private StockSubject subject;
     private FinancialSnapshot snapshot;
@@ -54,6 +58,8 @@ public class AgentState {
     private String stopReason = "";
     private String contextHash = "";
     private boolean plannerDegraded;
+    @JsonIgnore
+    private LeaseToken runtimeLease;
 
     public long getTaskId() {
         return taskId;
@@ -133,6 +139,22 @@ public class AgentState {
 
     public void setConsecutiveNoNewEvidenceTurns(int consecutiveNoNewEvidenceTurns) {
         this.consecutiveNoNewEvidenceTurns = Math.max(0, consecutiveNoNewEvidenceTurns);
+    }
+
+    public int getConsecutiveNoProgressTurns() {
+        return consecutiveNoProgressTurns;
+    }
+
+    public void setConsecutiveNoProgressTurns(int consecutiveNoProgressTurns) {
+        this.consecutiveNoProgressTurns = Math.max(0, consecutiveNoProgressTurns);
+    }
+
+    public String getLastProgressFingerprint() {
+        return lastProgressFingerprint;
+    }
+
+    public void setLastProgressFingerprint(String lastProgressFingerprint) {
+        this.lastProgressFingerprint = lastProgressFingerprint == null ? "" : lastProgressFingerprint;
     }
 
     public Long getSnapshotId() {
@@ -313,6 +335,15 @@ public class AgentState {
 
     public void setPlannerDegraded(boolean plannerDegraded) {
         this.plannerDegraded = plannerDegraded;
+    }
+
+    @JsonIgnore
+    public LeaseToken getRuntimeLease() {
+        return runtimeLease;
+    }
+
+    public void setRuntimeLease(LeaseToken runtimeLease) {
+        this.runtimeLease = runtimeLease;
     }
 
     /** 记录一次成功或可解释失败的工具调用与观察。 */

@@ -1,8 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zzy.finsight.agent.memory.EvidenceMemory;
-import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.search.SearchResult;
 import com.zzy.finsight.search.SearchService;
@@ -26,18 +24,15 @@ public class SearchPublicEvidenceTool implements ResearchTool<SearchPublicEviden
     private static final int MAX_EXCERPT_LENGTH = 1200;
     private final SearchService searchService;
     private final TavilyExtractClient extractClient;
-    private final EvidenceMemory evidenceMemory;
     private final int extractMaxUrls;
 
     public SearchPublicEvidenceTool(
             SearchService searchService,
             TavilyExtractClient extractClient,
-            EvidenceMemory evidenceMemory,
             @Value("${finsight.tavily.extract-max-urls:3}") int extractMaxUrls
     ) {
         this.searchService = searchService;
         this.extractClient = extractClient;
-        this.evidenceMemory = evidenceMemory;
         this.extractMaxUrls = Math.max(1, extractMaxUrls);
     }
 
@@ -93,39 +88,39 @@ public class SearchPublicEvidenceTool implements ResearchTool<SearchPublicEviden
 
     @Override
     public ToolResult execute(ToolContext context, SearchPublicEvidenceArguments arguments) {
-        if (context.state().getSubject() == null) {
+        if (context.subject() == null) {
             return ToolResult.failure("尚未解析证券主体", "SUBJECT_REQUIRED", false);
         }
         String focusedQuestion = arguments.query();
         if (focusedQuestion.isBlank()) {
-            focusedQuestion = context.request().getResearchQuestion();
+            focusedQuestion = context.request().researchQuestion();
         }
         String query = String.join(" ",
-                context.state().getSubject().fullCode(),
-                context.state().getSubject().companyName(),
+                context.subject().fullCode(),
+                context.subject().companyName(),
                 focusedQuestion,
                 "公告 新闻 财报",
-                context.request().getAsOfDate().toString()
+                context.request().asOfDate().toString()
         );
         long startedAt = System.nanoTime();
         List<SearchResult> candidates = usable(searchService.search(query, SEARCH_LIMIT));
         List<SearchResult> extracted = extractClient.extract(candidates, extractMaxUrls);
         List<SearchResult> results = preferExtracted(candidates, extracted);
         List<FinancialEvidenceItem> evidence = results.stream()
-                .map(result -> toEvidence(result, context.request().getAsOfDate().toString()))
+                .map(result -> toEvidence(result, context.request().asOfDate().toString()))
                 .toList();
         if (evidence.isEmpty()) {
             return ToolResult.failure("未检索到可用公开证据", "DATA_MISSING", true);
         }
         long durationMs = Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
-        List<FinancialEvidenceItem> added = evidenceMemory.merge(
-                context.state(), name(), FinancialDataCollection.evidenceOnly(evidence), durationMs, "SUCCESS", ""
-        );
         return new ToolResult(
                 "SUCCESS",
-                "围绕研究问题新增 %d 条公开证据".formatted(added.size()),
-                Map.of("query", query, "evidence", added, "evidenceCount", added.size()),
-                added,
+                "围绕研究问题返回 %d 条待归约公开证据".formatted(evidence.size()),
+                new ToolPayload.Evidence(
+                        name(), query, evidence, null, List.of(), null,
+                        evidence.size(), evidence.stream().filter(FinancialEvidenceItem::effective).count()
+                ),
+                List.of(),
                 "",
                 false
         );

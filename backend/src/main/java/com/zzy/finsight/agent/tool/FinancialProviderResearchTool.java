@@ -1,7 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.infrastructure.provider.FinancialDataProvider;
@@ -17,18 +16,15 @@ public class FinancialProviderResearchTool implements ResearchTool<NoToolArgumen
     private final String name;
     private final String description;
     private final FinancialDataProvider provider;
-    private final EvidenceMemory evidenceMemory;
 
     public FinancialProviderResearchTool(
             String name,
             String description,
-            FinancialDataProvider provider,
-            EvidenceMemory evidenceMemory
+            FinancialDataProvider provider
     ) {
         this.name = name;
         this.description = description;
         this.provider = provider;
-        this.evidenceMemory = evidenceMemory;
     }
 
     @Override
@@ -79,35 +75,34 @@ public class FinancialProviderResearchTool implements ResearchTool<NoToolArgumen
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        if (context.state().getSubject() == null) {
+        if (context.subject() == null) {
             return ToolResult.failure("尚未解析证券主体", "SUBJECT_REQUIRED", false);
         }
         long startedAt = System.nanoTime();
-        String reportPeriod = context.request().getAsOfDate().format(DateTimeFormatter.BASIC_ISO_DATE);
+        String reportPeriod = context.request().asOfDate().format(DateTimeFormatter.BASIC_ISO_DATE);
         FinancialDataCollection collection = provider.collectWithTrace(
                 context.ownerId(),
-                context.state().getSubject(),
+                context.subject(),
                 reportPeriod,
-                context.request().getSearchMode()
+                context.request().searchMode()
         );
         long durationMs = Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
-        List<FinancialEvidenceItem> added = evidenceMemory.merge(
-                context.state(), name, collection, durationMs, "SUCCESS", ""
-        );
-        long effective = added.stream().filter(FinancialEvidenceItem::effective).count();
+        List<FinancialEvidenceItem> evidence = collection == null ? List.of() : collection.evidenceItems();
+        long effective = evidence.stream().filter(FinancialEvidenceItem::effective).count();
         return new ToolResult(
                 "SUCCESS",
-                "%s 新增 %d 条证据，其中有效 %d 条".formatted(name, added.size(), effective),
-                Map.of(
-                        "provider", provider.name(),
-                        "evidence", added,
-                        "evidenceCount", added.size(),
-                        "effectiveCount", effective,
-                        "marketSeries", collection == null ? List.of() : collection.marketSeries(),
-                        "etfDeepData", collection == null || collection.etfDeepData() == null
-                                ? Map.of() : collection.etfDeepData()
+                "%s 返回 %d 条待归约证据，其中有效 %d 条".formatted(name, evidence.size(), effective),
+                new ToolPayload.Evidence(
+                        provider.name(),
+                        "",
+                        evidence,
+                        collection == null ? null : collection.retrievalResult(),
+                        collection == null ? List.of() : collection.marketSeries(),
+                        collection == null ? null : collection.etfDeepData(),
+                        evidence.size(),
+                        effective
                 ),
-                added,
+                List.of(),
                 "",
                 false
         );

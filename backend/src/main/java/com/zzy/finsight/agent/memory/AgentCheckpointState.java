@@ -14,6 +14,8 @@ import java.util.Set;
  * @param replanCount 已重新规划次数。
  * @param reportRewriteCount 已重写报告次数。
  * @param consecutiveNoNewEvidenceTurns 连续无新增有效证据轮次。
+ * @param consecutiveNoProgressTurns 连续无实质进展轮次。
+ * @param lastProgressFingerprint 最近一次已提交进展指纹。
  * @param snapshotId 金融快照标识。
  * @param evidenceRecoveryCount 补证据次数。
  * @param evidenceRecoveryDirective 当前补证据指令。
@@ -33,6 +35,8 @@ public record AgentCheckpointState(
         int replanCount,
         int reportRewriteCount,
         int consecutiveNoNewEvidenceTurns,
+        int consecutiveNoProgressTurns,
+        String lastProgressFingerprint,
         Long snapshotId,
         int evidenceRecoveryCount,
         EvidenceRecoveryDirective evidenceRecoveryDirective,
@@ -46,6 +50,7 @@ public record AgentCheckpointState(
     public AgentCheckpointState {
         threadId = safe(threadId);
         phase = safe(phase);
+        lastProgressFingerprint = safe(lastProgressFingerprint);
         reexecutionAllowedTools = reexecutionAllowedTools == null ? Set.of() : Set.copyOf(reexecutionAllowedTools);
         observations = observations == null ? List.of() : observations.stream().skip(Math.max(0, observations.size() - 12L)).toList();
         lastReviewReason = safe(lastReviewReason);
@@ -64,6 +69,8 @@ public record AgentCheckpointState(
                 state.getReplanCount(),
                 state.getReportRewriteCount(),
                 state.getConsecutiveNoNewEvidenceTurns(),
+                state.getConsecutiveNoProgressTurns(),
+                state.getLastProgressFingerprint(),
                 state.getSnapshotId(),
                 state.getEvidenceRecoveryCount(),
                 state.getEvidenceRecoveryDirective(),
@@ -87,6 +94,8 @@ public record AgentCheckpointState(
         state.setReplanCount(replanCount);
         state.setReportRewriteCount(reportRewriteCount);
         state.setConsecutiveNoNewEvidenceTurns(consecutiveNoNewEvidenceTurns);
+        state.setConsecutiveNoProgressTurns(consecutiveNoProgressTurns);
+        state.setLastProgressFingerprint(lastProgressFingerprint);
         state.setSnapshotId(snapshotId);
         state.setEvidenceRecoveryCount(evidenceRecoveryCount);
         state.setEvidenceRecoveryDirective(evidenceRecoveryDirective);

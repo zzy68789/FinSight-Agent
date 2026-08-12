@@ -1,6 +1,7 @@
 package com.zzy.finsight.service.impl;
 
 import com.zzy.finsight.agent.event.AgentEventListener;
+import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.agent.runtime.AgentTraceReader;
 import com.zzy.finsight.agent.runtime.DurableAgentRunner;
 import com.zzy.finsight.domain.TaskExecutionRecord;
@@ -91,12 +92,12 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
         AtomicBoolean connected = new AtomicBoolean(true);
         return new AgentEventListener() {
             @Override
-            public void onEvent(String eventType, Object data) {
+            public void onEvent(AgentEvent event) {
                 if (!connected.get()) {
                     return;
                 }
                 try {
-                    sseService.send(emitter, eventType, data);
+                    sseService.send(emitter, event.type(), event.ssePayload());
                 } catch (Exception exception) {
                     connected.set(false);
                 }

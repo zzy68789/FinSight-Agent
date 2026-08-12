@@ -1,7 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.search.SearchService;
 import com.zzy.finsight.search.TavilyExtractClient;
@@ -45,7 +44,6 @@ class ResearchToolContractTest {
         SearchPublicEvidenceTool tool = new SearchPublicEvidenceTool(
                 mock(SearchService.class),
                 mock(TavilyExtractClient.class),
-                mock(EvidenceMemory.class),
                 3
         );
         return new ResearchToolRegistry(List.of(tool), new ObjectMapper().findAndRegisterModules());

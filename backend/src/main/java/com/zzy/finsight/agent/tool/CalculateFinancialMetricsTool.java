@@ -45,14 +45,13 @@ public class CalculateFinancialMetricsTool implements ResearchTool<NoToolArgumen
 
     @Override
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
-        if (context.state().getSnapshot() == null) {
+        if (context.snapshot() == null) {
             return ToolResult.failure("当前没有可计算的金融快照", "SNAPSHOT_REQUIRED", false);
         }
-        List<FinancialMetricResult> metrics = metricEngine.compute(context.state().getSnapshot());
-        context.state().setMetrics(metrics);
+        List<FinancialMetricResult> metrics = metricEngine.compute(context.snapshot());
         return ToolResult.success(
                 "已确定性计算 %d 个金融指标".formatted(metrics.size()),
-                Map.of("metrics", metrics)
+                new ToolPayload.Metrics(metrics)
         );
     }
 }

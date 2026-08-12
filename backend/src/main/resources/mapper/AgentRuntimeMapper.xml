@@ -49,6 +49,20 @@
         )
     </insert>
 
+    <insert id="insertTurnFenced" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_turn(
+          task_id, turn_no, phase, action_type, action_json, observation_summary,
+          status, input_tokens, output_tokens, duration_ms, created_at
+        )
+        SELECT
+          #{taskId}, #{turnNo}, #{phase}, #{actionType},
+          #{action,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
+          '', 'PLANNED', #{inputTokens}, #{outputTokens}, #{durationMs}, #{createdAt}
+        FROM research_task
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
+    </insert>
+
     <insert id="insertToolCall" parameterType="map" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO agent_tool_call(
           task_id, turn_id, call_id, tool_name, arguments_hash, arguments_json,
@@ -58,6 +72,20 @@
           #{arguments,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
           'RUNNING', #{attemptNo}, 0, #{startedAt}
         )
+    </insert>
+
+    <insert id="insertToolCallFenced" parameterType="map" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_tool_call(
+          task_id, turn_id, call_id, tool_name, arguments_hash, arguments_json,
+          status, attempt_no, duration_ms, started_at
+        )
+        SELECT
+          #{taskId}, #{turnId}, #{callId}, #{toolName}, #{argumentsHash},
+          #{arguments,typeHandler=com.zzy.finsight.infrastructure.persistence.mybatis.typehandler.ObjectJsonTypeHandler},
+          'RUNNING', #{attemptNo}, 0, #{startedAt}
+        FROM research_task
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
     </insert>
 
     <update id="completeTurn">

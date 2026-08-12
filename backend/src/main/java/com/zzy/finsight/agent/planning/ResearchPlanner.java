@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,10 +24,11 @@ import java.util.Set;
  */
 @Component
 public class ResearchPlanner {
-    public static final String PLANNER_VERSION = "research-planner-v2-evidence-recovery";
+    public static final String PLANNER_VERSION = "research-planner-v3-feedback-aware-routing";
     private static final int MAX_STRUCTURE_ATTEMPTS = 2;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
+    private final PlannerModelPolicy modelPolicy = new PlannerModelPolicy();
 
     public ResearchPlanner(LlmClient llmClient, ObjectMapper objectMapper) {
         this.llmClient = llmClient;
@@ -46,12 +46,14 @@ public class ResearchPlanner {
                 可用工具：%s
                 """.formatted(PLANNER_VERSION, json(request), json(registry.catalog()));
         try {
-            LlmGenerationResult result = generateStructured(prompt, ResearchPlan.class);
-            ResearchPlan plan = objectMapper.readValue(cleanJson(result.text()), ResearchPlan.class);
+            StructuredGeneration<ResearchPlan> generation = generateStructured(
+                    prompt, ResearchPlan.class, modelPolicy.select("CREATE_PLAN", null)
+            );
+            ResearchPlan plan = generation.value();
             validatePlan(plan);
-            return new PlannerOutput<>(plan, false, "", result.inputTokens(), result.outputTokens(), result.durationMs());
-        } catch (RuntimeException | JsonProcessingException exception) {
-            return PlannerOutput.degraded(fallbackPlan(request), classify(exception));
+            return output(plan, "CREATE_PLAN", generation);
+        } catch (RuntimeException exception) {
+            return degradedOutput(fallbackPlan(request), classify(exception), "CREATE_PLAN", exception);
         }
     }
 
@@ -65,60 +67,202 @@ public class ResearchPlanner {
                 如果 evidenceRecovery.status=PENDING，下一步必须调用 producesEvidence=true 的工具，并且相对 toolInvocationHistory 更换数据源或 arguments；不得继续综合、计算指标或原样重复检索。
                 当前状态：%s
                 可用工具：%s
-                """.formatted(json(stateSummary(state)), json(registry.catalog()));
+                """.formatted(json(PlannerContextProjection.from(state)), json(registry.catalog()));
         try {
-            LlmGenerationResult result = generateStructured(prompt, AgentAction.class);
-            AgentAction action = objectMapper.readValue(cleanJson(result.text()), AgentAction.class);
+            StructuredGeneration<AgentAction> generation = generateStructured(
+                    prompt, AgentAction.class, modelPolicy.select("NEXT_ACTION", state)
+            );
+            AgentAction action = generation.value();
             validateActionShape(action);
             validateEvidenceRecoveryAction(action, state, registry);
-            return new PlannerOutput<>(action, false, "", result.inputTokens(), result.outputTokens(), result.durationMs());
-        } catch (RuntimeException | JsonProcessingException exception) {
-            return PlannerOutput.degraded(fallbackAction(state, registry), classify(exception));
+            return output(action, "NEXT_ACTION", generation);
+        } catch (RuntimeException exception) {
+            return degradedOutput(
+                    fallbackAction(state, registry), classify(exception), "NEXT_ACTION", exception
+            );
         }
     }
 
-    /** 根据当前观察和审查反馈重建计划。 */
+    /** 让观察、门禁问题、补证据尝试和证据增量直接参与 LLM 重规划。 */
     public PlannerOutput<ResearchPlan> replan(AgentState state, ResearchToolRegistry registry) {
-        PlannerOutput<ResearchPlan> output = createPlan(state.getRequest(), registry);
-        ResearchPlan original = output.value();
-        List<String> unresolved = new ArrayList<>(original.unresolvedQuestions());
-        unresolved.addAll(state.getObservations().stream().skip(Math.max(0, state.getObservations().size() - 5)).toList());
-        if (!state.getLastReviewReason().isBlank()) {
-            unresolved.add("审查反馈：" + state.getLastReviewReason());
-        }
-        if (state.hasPendingEvidenceRecovery()) {
-            unresolved.add("补证据约束：下一步必须更换数据源或检索参数，并产生新增有效证据");
-        }
-        ResearchPlan revised = new ResearchPlan(
-                original.goal(), original.hypotheses(), original.requiredEvidence(),
-                new ArrayList<>(state.getCompletedTools()), unresolved,
-                original.plannerMode(), original.version()
+        String prompt = """
+                你是受约束的 A股/ETF 投研 Planner。请根据已提交观察、门禁问题、补证据尝试和证据增量真正修订计划，不能忽略反馈后重新生成原计划。
+                只返回严格 JSON，不要 Markdown：
+                {"goal":"...","hypotheses":["..."],"requiredEvidence":["..."],"completedItems":["..."],"unresolvedQuestions":["..."],"plannerMode":"LLM","version":"%s"}
+                规则：保留已验证事实；把门禁问题转成可执行的未决问题；补证据待完成时必须要求更换数据源或检索参数；不得规划交易、下单、仓位或收益保证。
+                当前决策上下文：%s
+                可用工具：%s
+                """.formatted(
+                PLANNER_VERSION,
+                json(PlannerContextProjection.from(state)),
+                json(registry.catalog())
         );
-        return new PlannerOutput<>(
-                revised,
-                output.degraded(),
-                output.degradedReason(),
-                output.inputTokens(),
-                output.outputTokens(),
-                output.durationMs()
-        );
+        try {
+            StructuredGeneration<ResearchPlan> generation = generateStructured(
+                    prompt, ResearchPlan.class, modelPolicy.select("REPLAN", state)
+            );
+            ResearchPlan revised = generation.value();
+            validatePlan(revised);
+            return output(revised, "REPLAN", generation);
+        } catch (RuntimeException exception) {
+            return degradedOutput(fallbackReplan(state), classify(exception), "REPLAN", exception);
+        }
     }
 
-    private <T> LlmGenerationResult generateStructured(String prompt, Class<T> targetType) {
+    private <T> StructuredGeneration<T> generateStructured(
+            String prompt,
+            Class<T> targetType,
+            LlmClient.ModelType initialModel
+    ) {
         RuntimeException lastFailure = null;
         String currentPrompt = prompt;
+        int inputTokens = 0;
+        int outputTokens = 0;
+        long durationMs = 0L;
+        String actualModel = "";
+        LlmClient.ModelType requestedModel = initialModel;
+        int attempts = 0;
         for (int attempt = 1; attempt <= MAX_STRUCTURE_ATTEMPTS; attempt++) {
+            requestedModel = attempt == 1
+                    ? initialModel : modelPolicy.retryModel(initialModel);
+            attempts = attempt;
             try {
-                LlmGenerationResult result = llmClient.generateWithMetadata(currentPrompt, LlmClient.ModelType.SMART);
-                objectMapper.readValue(cleanJson(result.text()), targetType);
-                return result;
+                LlmGenerationResult result = llmClient.generateWithMetadata(currentPrompt, requestedModel);
+                inputTokens += result.inputTokens();
+                outputTokens += result.outputTokens();
+                durationMs += result.durationMs();
+                actualModel = result.modelName();
+                T value = objectMapper.readValue(cleanJson(result.text()), targetType);
+                return new StructuredGeneration<>(
+                        value,
+                        requestedModel,
+                        result.modelName(),
+                        inputTokens,
+                        outputTokens,
+                        durationMs,
+                        attempt
+                );
             } catch (RuntimeException | JsonProcessingException exception) {
                 lastFailure = exception instanceof RuntimeException runtimeException
                         ? runtimeException : new IllegalStateException(exception);
                 currentPrompt = prompt + "\n上次输出不是合法结构，请只返回符合格式的 JSON。";
             }
         }
-        throw lastFailure == null ? new IllegalStateException("Planner 未返回合法结构") : lastFailure;
+        RuntimeException cause = lastFailure == null
+                ? new IllegalStateException("Planner 未返回合法结构") : lastFailure;
+        throw new StructuredGenerationException(
+                cause, requestedModel, actualModel, inputTokens, outputTokens, durationMs, attempts
+        );
+    }
+
+    private <T> PlannerOutput<T> output(
+            T value,
+            String decisionType,
+            StructuredGeneration<T> generation
+    ) {
+        return new PlannerOutput<>(
+                value,
+                false,
+                "",
+                generation.inputTokens(),
+                generation.outputTokens(),
+                generation.durationMs(),
+                decisionType,
+                generation.requestedModel().name(),
+                generation.actualModel(),
+                generation.attempts(),
+                true
+        );
+    }
+
+    private <T> PlannerOutput<T> degradedOutput(
+            T value,
+            String reason,
+            String decisionType,
+            RuntimeException exception
+    ) {
+        if (exception instanceof StructuredGenerationException failure) {
+            return new PlannerOutput<>(
+                    value,
+                    true,
+                    reason,
+                    failure.inputTokens,
+                    failure.outputTokens,
+                    failure.durationMs,
+                    decisionType,
+                    failure.requestedModel.name(),
+                    failure.actualModel,
+                    failure.attempts,
+                    false
+            );
+        }
+        return PlannerOutput.degraded(value, reason, decisionType);
+    }
+
+    private ResearchPlan fallbackReplan(AgentState state) {
+        ResearchPlan current = state.getPlan() == null ? fallbackPlan(state.getRequest()) : state.getPlan();
+        List<String> unresolved = new ArrayList<>(current.unresolvedQuestions());
+        unresolved.addAll(state.getObservations().stream()
+                .skip(Math.max(0, state.getObservations().size() - 5L))
+                .toList());
+        if (!state.getLastReviewReason().isBlank()) {
+            unresolved.add("审查反馈：" + state.getLastReviewReason());
+        }
+        if (state.hasPendingEvidenceRecovery()) {
+            unresolved.add("补证据约束：更换数据源或检索参数并产生新增有效证据");
+        }
+        return new ResearchPlan(
+                current.goal(),
+                current.hypotheses(),
+                current.requiredEvidence(),
+                new ArrayList<>(state.getCompletedTools()),
+                unresolved.stream().filter(value -> value != null && !value.isBlank()).distinct().toList(),
+                "DETERMINISTIC_FALLBACK",
+                PLANNER_VERSION
+        );
+    }
+
+    /** 保存一次已解码的 Planner 生成结果及完整成本元数据。 */
+    private record StructuredGeneration<T>(
+            T value,
+            LlmClient.ModelType requestedModel,
+            String actualModel,
+            int inputTokens,
+            int outputTokens,
+            long durationMs,
+            int attempts
+    ) {
+        private StructuredGeneration {
+            actualModel = actualModel == null ? "" : actualModel;
+        }
+    }
+
+    /** 保留结构化输出失败前已经发生的模型调用成本，供基线完整统计。 */
+    private static final class StructuredGenerationException extends RuntimeException {
+        private final LlmClient.ModelType requestedModel;
+        private final String actualModel;
+        private final int inputTokens;
+        private final int outputTokens;
+        private final long durationMs;
+        private final int attempts;
+
+        private StructuredGenerationException(
+                RuntimeException cause,
+                LlmClient.ModelType requestedModel,
+                String actualModel,
+                int inputTokens,
+                int outputTokens,
+                long durationMs,
+                int attempts
+        ) {
+            super(cause.getMessage(), cause);
+            this.requestedModel = requestedModel;
+            this.actualModel = actualModel == null ? "" : actualModel;
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
+            this.durationMs = durationMs;
+            this.attempts = attempts;
+        }
     }
 
     private ResearchPlan fallbackPlan(ResearchRunRequest request) {
@@ -290,25 +434,6 @@ public class ResearchPlanner {
         return tools.stream().distinct().toList();
     }
 
-    private Map<String, Object> stateSummary(AgentState state) {
-        Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("question", state.getRequest().getResearchQuestion());
-        summary.put("plan", state.getPlan());
-        summary.put("turnNo", state.getTurnNo());
-        summary.put("toolCallCount", state.getToolCallCount());
-        summary.put("completedTools", state.getCompletedTools());
-        summary.put("toolInvocationHistory", state.getToolInvocationHistory());
-        summary.put("observations", state.getObservations());
-        summary.put("subjectResolved", state.getSubject() != null);
-        summary.put("effectiveEvidenceCount", state.getSnapshot() == null ? 0L
-                : state.getSnapshot().evidenceItems().stream().filter(FinancialEvidenceItem::effective).count());
-        summary.put("metricsReady", !state.getMetrics().isEmpty());
-        summary.put("riskReady", state.getRiskAssessment() != null);
-        summary.put("lastReviewReason", state.getLastReviewReason());
-        summary.put("evidenceRecovery", state.getEvidenceRecoveryDirective());
-        return summary;
-    }
-
     private void validatePlan(ResearchPlan plan) {
         if (plan == null || plan.goal().isBlank() || plan.requiredEvidence().isEmpty()) {
             throw new IllegalArgumentException("Planner 计划缺少目标或证据需求");
@@ -392,11 +517,15 @@ public class ResearchPlanner {
     }
 
     private String classify(Exception exception) {
-        String message = exception.getMessage() == null ? "" : exception.getMessage();
+        Throwable classified = exception instanceof StructuredGenerationException
+                && exception.getCause() != null ? exception.getCause() : exception;
+        String message = classified.getMessage() == null ? "" : classified.getMessage();
         if (message.contains("not configured")) {
             return "LLM_NOT_CONFIGURED";
         }
-        if (exception instanceof JsonProcessingException || message.contains("JSON")) {
+        if (classified instanceof JsonProcessingException
+                || classified.getCause() instanceof JsonProcessingException
+                || message.contains("JSON")) {
             return "LLM_INVALID_STRUCTURE";
         }
         if (message.startsWith("EVIDENCE_RECOVERY_")) {
