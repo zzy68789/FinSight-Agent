@@ -41,7 +41,43 @@ public interface AgentEventOutboxMapper {
 
     List<AgentEvent> findByTaskId(@Param("taskId") long taskId);
 
-    List<AgentEvent> findUnpublished(@Param("limit") int limit);
+    List<AgentEvent> findAfterSequence(
+            @Param("taskId") long taskId,
+            @Param("afterSequence") long afterSequence
+    );
 
-    int markPublished(@Param("id") long id, @Param("publishedAt") LocalDateTime publishedAt);
+    /** 原子领取一批达到重试时间且未被其他实例占用的事件。 */
+    int claimBatch(
+            @Param("claimOwner") String claimOwner,
+            @Param("claimBefore") LocalDateTime claimBefore,
+            @Param("now") LocalDateTime now,
+            @Param("claimedUntil") LocalDateTime claimedUntil,
+            @Param("limit") int limit
+    );
+
+    List<AgentEvent> findClaimed(@Param("claimOwner") String claimOwner, @Param("limit") int limit);
+
+    int markPublishedDirect(@Param("id") long id, @Param("publishedAt") LocalDateTime publishedAt);
+
+    int markClaimPublished(
+            @Param("id") long id,
+            @Param("claimOwner") String claimOwner,
+            @Param("publishedAt") LocalDateTime publishedAt
+    );
+
+    int releaseClaim(
+            @Param("id") long id,
+            @Param("claimOwner") String claimOwner,
+            @Param("nextAttemptAt") LocalDateTime nextAttemptAt,
+            @Param("lastError") String lastError
+    );
+
+    int markDeadLetter(
+            @Param("id") long id,
+            @Param("claimOwner") String claimOwner,
+            @Param("deadLetteredAt") LocalDateTime deadLetteredAt,
+            @Param("lastError") String lastError
+    );
+
+    int findPublishAttempts(@Param("id") long id);
 }

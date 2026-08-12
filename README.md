@@ -14,9 +14,9 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **ETF 深度快照**：ETF 聚合 TuShare `fund_daily`、`fund_basic`、`fund_nav`，保存 60 日 OHLC/成交量/成交额、基金资料、单位/累计净值、资产净值和同日折溢价；单接口失败按项降级。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
 - **公式审计与上下文隔离**：指标公式由 `MetricDefinitionCatalog` 版本化管理；报告复用摘要包含研究问题、截止日期、观察区间、研究深度、最终快照以及 Planner/toolset/policy 版本，历史 PASS 报告仍需重新通过当前门禁。
-- **可恢复 Agent Runtime**：任务持久化请求、轮次、工具调用、预算消耗、停止原因、心跳、租约和 AgentState Checkpoint；SSE 客户端断开不影响后台执行，过期任务从最近完整轮次恢复，最多尝试 3 次。
+- **可恢复 Agent Runtime**：任务持久化请求、轮次、工具调用、预算消耗、停止原因、心跳、租约和 AgentState Checkpoint；SSE 客户端断开不影响后台执行，过期任务从最近完整轮次恢复，最多尝试 3 次。若崩溃前已打开但尚未提交下一轮，恢复会复用该 turn 的原始完整动作和 Planner 元数据，不重新生成可能改变工具参数的动作。
 - **反馈感知 Replan 与模型分层**：重规划直接读取最近观察、门禁问题、补证据尝试和证据增量；普通动作优先 FAST，建计划、重规划和复杂恢复使用 SMART，结构失败自动升级并持久化模型、Token、耗时和合法率。
-- **原子完成与事件回放**：工具结果、证据、turn、Checkpoint 和租约续期按轮次原子提交；PASS 报告、快照冻结、任务完成与版本化事件 outbox 在最终事务内一起提交，实时 SSE 与历史 Trace 读取同一事件契约。
+- **原子完成与可续传事件**：Planner 动作、工具结果、证据、turn、Checkpoint 和租约续期按轮次原子提交；PASS 报告、快照冻结、任务完成与版本化事件 outbox 在最终事务内一起提交。发布器通过数据库 claim、租约、退避和死信协调多实例，SSE 支持按 `Last-Event-ID` 回放缺口，实时流与历史 Trace 读取同一事件契约。
 - **类型化只读工具**：Planner 参数先按工具 schema 解码为强类型命令，工具只读取不可变上下文并返回类型化 `ToolPayload`，状态变更统一由 Runtime reducer 串行应用。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
@@ -152,6 +152,11 @@ finsight:
     max-replans: 3
     max-evidence-recoveries: 2
     max-stagnant-turns: 3
+    event-outbox-publish-interval-ms: 1000
+    event-stream-poll-interval-ms: 1000
+    event-outbox-claim-duration: PT30S
+    event-outbox-immediate-grace: PT5S
+    event-outbox-max-attempts: 8
     max-parallel-tools: 4
     timeout: PT180S
     tool-timeout: PT30S
@@ -159,9 +164,9 @@ finsight:
 
 Agent 和工具执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。单次工具和整体运行都有显式超时，不会无限占用线程。
 
-数据库由 Flyway 自动管理：空库依次执行 V1～V6；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
+数据库由 Flyway 自动管理：空库依次执行 V1～V7；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox，V7 增加 outbox claim/重试/死信状态以及 Planner 动作与 turn 的唯一关联。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
 
-如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql` 和 `upgrade-agent-decision-outbox.sql`，保证数据库结构与代码一致。
+如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql`、`upgrade-agent-decision-outbox.sql` 和 `upgrade-agent-event-delivery.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -298,7 +303,10 @@ Agent 重试与动态轨迹：
 ```http
 POST /api/research-runs/{taskId}/retry
 GET /api/research-runs/{taskId}/trace
+GET /api/research-runs/{taskId}/events?afterSequence={sequence}
 ```
+
+`events` 返回 `text/event-stream`，支持请求头 `Last-Event-ID: {sequence}`；服务端先回放该序号后的已提交事件，再接续实时流。前端主入口会在非终态连接意外中断时携带最后序号有限重连，重复事件仍由 `taskId + sequence` 幂等过滤。
 
 旧 `POST /api/stock-reports` 继续接受原请求并转入同一 Runtime。历史报告的 Bad Case、回放和旧轨迹接口继续保留：
 
@@ -358,8 +366,8 @@ GET /api/admin/system/health
 - `report`：报告内容和版本。
 - `agent_turn`：Planner 每轮结构化动作、观察摘要、Token 和耗时。
 - `agent_tool_call`：工具名称、参数摘要、结果、重试次数和稳定错误分类。
-- `agent_planner_call`：Planner 决策类型、请求/实际模型、结构合法性、Token 和耗时。
-- `agent_event_outbox`：带任务内单调序号的版本化 Agent 事件及发布状态。
+- `agent_planner_call`：Planner 决策类型、请求/实际模型、结构合法性、Token、耗时及动作对应的 turn。
+- `agent_event_outbox`：带任务内单调序号的版本化 Agent 事件，以及 claim、重试、下次投递和死信状态。
 - `checkpoint`：带状态版本、轮次和请求上下文指纹的 AgentState 快照。
 - `stock_analysis_snapshot`：股票报告生成时的数据快照。
 - `stock_evidence_item`：金融证据账本。
@@ -377,7 +385,7 @@ cd backend
 mvn.cmd test
 ```
 
-测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V6，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测、事件 outbox 和报告租户隔离；未启动 Docker 时该用例会明确跳过。
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V7，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测与 turn 关联、事件 outbox 和报告租户隔离；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 
@@ -415,4 +423,4 @@ npm.cmd run build
 - 第一版是单体受约束 Agent，不引入 Supervisor、多 Agent、SQL/反射工具、交易执行、仓位建议或回测能力。
 - 未配置真实 LLM 时 Planner 会明确标记 `DETERMINISTIC_FALLBACK`；该模式用于本地可运行和机制测试，不代表已经验证真实模型的规划质量。
 - TuShare 真实 token、缓存、限速、接口权限错误提示仍需继续硬化；ETF `total_netasset` 展示单位也需真实数据复核。
-- ETF 持仓、跟踪误差、申赎清单、普通股票行情图、高级技术指标、风险裁判、评测趋势管理页面和真实 MySQL 迁移集成实跑属于后续增强。
+- ETF 持仓、跟踪误差、申赎清单、普通股票行情图、高级技术指标、风险裁判、评测趋势管理页面和真实 MySQL 迁移集成实跑属于后续增强。事件 outbox 死信当前只有数据库状态，仍需运维告警和管理入口；按任务轮询续传也需多实例压力测试后再决定是否引入通知通道。

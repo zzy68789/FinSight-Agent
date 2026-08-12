@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
  * 表示一次持久化 Planner 决策及其模型、结构和成本元数据。
  * @param id 记录标识。
  * @param taskId 任务标识。
+ * @param turnId 关联轮次标识，建计划与独立重规划可为空。
  * @param decisionType 决策类型。
  * @param requestedModel 请求模型档位。
  * @param actualModel 实际模型名称。
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
 public record AgentPlannerCallRecord(
         long id,
         long taskId,
+        Long turnId,
         String decisionType,
         String requestedModel,
         String actualModel,

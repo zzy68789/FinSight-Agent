@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS agent_tool_call (
 CREATE TABLE IF NOT EXISTS agent_planner_call (
   id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
   task_id BIGINT NOT NULL COMMENT '关联的Research Agent任务ID',
+  turn_id BIGINT COMMENT '关联的Agent轮次ID，建计划与独立重规划可为空',
   decision_type VARCHAR(32) NOT NULL COMMENT 'CREATE_PLAN、NEXT_ACTION或REPLAN',
   requested_model VARCHAR(32) NOT NULL COMMENT '请求的模型档位',
   actual_model VARCHAR(128) COMMENT 'Provider实际返回的模型名称',
@@ -154,7 +155,8 @@ CREATE TABLE IF NOT EXISTS agent_planner_call (
   degraded_reason VARCHAR(128) COMMENT '稳定降级原因',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   INDEX idx_agent_planner_call_task (task_id, id),
-  INDEX idx_agent_planner_call_model (requested_model, decision_type)
+  INDEX idx_agent_planner_call_model (requested_model, decision_type),
+  UNIQUE KEY uk_agent_planner_turn (turn_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_event_outbox (
@@ -171,11 +173,18 @@ CREATE TABLE IF NOT EXISTS agent_event_outbox (
   error_message LONGTEXT COMMENT '事件关联的失败说明',
   duration_ms BIGINT NOT NULL DEFAULT 0 COMMENT '事件关联步骤耗时毫秒数',
   published_at DATETIME COMMENT '事件投递到运行态通道的时间',
+  claim_owner VARCHAR(64) COMMENT '当前事件投递领取实例',
+  claimed_until DATETIME COMMENT '事件投递领取到期时间',
+  publish_attempts INT NOT NULL DEFAULT 0 COMMENT '事件投递尝试次数',
+  next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '事件下次允许投递时间',
+  last_error LONGTEXT COMMENT '最近一次事件投递失败说明',
+  dead_lettered_at DATETIME COMMENT '事件进入死信状态时间',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   UNIQUE KEY uk_agent_event_task_sequence (task_id, sequence_no),
   UNIQUE KEY uk_agent_event_id (event_id),
   INDEX idx_agent_event_unpublished (published_at, id),
-  INDEX idx_agent_event_task (task_id, sequence_no)
+  INDEX idx_agent_event_task (task_id, sequence_no),
+  INDEX idx_agent_event_claim (published_at, dead_lettered_at, next_attempt_at, claimed_until, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_audit_log (

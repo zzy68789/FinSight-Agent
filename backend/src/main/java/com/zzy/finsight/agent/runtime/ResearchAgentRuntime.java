@@ -153,20 +153,27 @@ public class ResearchAgentRuntime {
 
         while (!budgetGuard.exhausted(state, budget) && System.nanoTime() < deadlineNanos) {
             state.setPhase("PLANNING");
-            PlannerOutput<AgentAction> actionOutput = planner.nextAction(state, toolRegistry);
+            java.util.Optional<PendingTurnDecision> pendingTurn = turnCommitModule.resumePendingTurn(state, lease);
+            PlannerOutput<AgentAction> actionOutput = pendingTurn
+                    .map(PendingTurnDecision::output)
+                    .orElseGet(() -> planner.nextAction(state, toolRegistry));
             state.setPlannerDegraded(state.isPlannerDegraded() || actionOutput.degraded());
             AgentAction action = actionOutput.value();
-            plannerTelemetry.record(
-                    state.getTaskId(),
-                    actionOutput,
-                    routeCorrect(action, state, budget)
-            );
+            boolean routeCorrect = routeCorrect(action, state, budget);
             state.setTurnNo(state.getTurnNo() + 1);
             long turnStartedAt = System.nanoTime();
-            long turnId = turnCommitModule.openTurn(
-                    state, lease, action,
-                    actionOutput.inputTokens(), actionOutput.outputTokens(), actionOutput.durationMs()
-            );
+            long turnId = pendingTurn
+                    .map(pending -> {
+                        if (pending.turnNo() != state.getTurnNo()) {
+                            throw new IllegalStateException(
+                                    "PENDING_TURN_SEQUENCE_MISMATCH：恢复动作轮次与 AgentState 不一致"
+                            );
+                        }
+                        return pending.turnId();
+                    })
+                    .orElseGet(() -> turnCommitModule.openTurn(
+                            state, lease, actionOutput, routeCorrect
+                    ));
 
             try {
                 List<CommittedToolCall> committedTools = List.of();
@@ -204,15 +211,6 @@ public class ResearchAgentRuntime {
                             events,
                             completedToolEventDrafts(state, tools.completedExecutions())
                     );
-                    if (state.getConsecutiveNoNewEvidenceTurns() >= 2) {
-                        return stop(
-                                state,
-                                events,
-                                "INSUFFICIENT_EVIDENCE",
-                                "连续 2 轮证据采集未产生新增有效证据",
-                                lease
-                        );
-                    }
                 } else if (action.type() == AgentActionType.REPLAN) {
                     observation = executeReplan(state, budget, events);
                     commitTurn(ownerId, turnId, state, observation, turnStatus, turnStartedAt, List.of(), lease);
@@ -292,9 +290,7 @@ public class ResearchAgentRuntime {
             pending.add(startTool(ownerId, state, turnId, invocation, 1, events));
         }
         List<String> summaries = new ArrayList<>();
-        boolean evidenceToolCalled = false;
         boolean recoveryBatch = state.hasPendingEvidenceRecovery();
-        long newEffectiveEvidence = 0L;
         List<CompletedToolExecution> completedExecutions = new ArrayList<>();
         for (PendingToolExecution execution : pending) {
             ToolAttemptOutcome attemptOutcome = awaitTool(
@@ -310,10 +306,6 @@ public class ResearchAgentRuntime {
             long toolNewEffectiveEvidence = completed.result().evidenceItems().stream()
                     .filter(FinancialEvidenceItem::effective)
                     .count();
-            if (producesEvidence) {
-                evidenceToolCalled = true;
-                newEffectiveEvidence += toolNewEffectiveEvidence;
-            }
             if (recoveryAttempt) {
                 state.recordEvidenceRecoveryAttempt(
                         completed.invocation(), toolNewEffectiveEvidence
@@ -323,11 +315,6 @@ public class ResearchAgentRuntime {
                     completed.invocation(),
                     completed.callHash(),
                     completed.result().summary()
-            );
-        }
-        if (evidenceToolCalled) {
-            state.setConsecutiveNoNewEvidenceTurns(
-                    newEffectiveEvidence > 0L ? 0 : state.getConsecutiveNoNewEvidenceTurns() + 1
             );
         }
         List<CommittedToolCall> committedCalls = completedExecutions.stream()

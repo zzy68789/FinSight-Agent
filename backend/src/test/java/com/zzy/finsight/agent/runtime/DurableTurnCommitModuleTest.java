@@ -4,12 +4,16 @@ import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.memory.AgentStateStore;
 import com.zzy.finsight.agent.event.AgentEventDraft;
 import com.zzy.finsight.agent.planning.AgentAction;
+import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.tool.ToolResult;
 import com.zzy.finsight.agent.tool.ToolPayload;
+import com.zzy.finsight.domain.AgentPlannerCallRecord;
+import com.zzy.finsight.domain.AgentTurnRecord;
 import com.zzy.finsight.mapper.AgentEventOutboxMapper;
 import com.zzy.finsight.mapper.AgentStepLogMapper;
 import com.zzy.finsight.mapper.AgentRuntimeMapper;
+import com.zzy.finsight.mapper.AgentPlannerCallMapper;
 import com.zzy.finsight.mapper.FinancialSnapshotMapper;
 import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
@@ -47,7 +51,9 @@ class DurableTurnCommitModuleTest {
                 mock(FinancialReportFingerprinter.class),
                 mock(AgentEventOutboxMapper.class),
                 mock(AgentStepLogMapper.class),
-                mock(ReportMapper.class)
+                mock(ReportMapper.class),
+                mock(AgentPlannerCallMapper.class),
+                objectMapper()
         );
         AgentState state = state();
         LeaseToken lease = new LeaseToken(11L, "runner", 3L);
@@ -92,7 +98,9 @@ class DurableTurnCommitModuleTest {
                 mock(FinancialReportFingerprinter.class),
                 mock(AgentEventOutboxMapper.class),
                 mock(AgentStepLogMapper.class),
-                mock(ReportMapper.class)
+                mock(ReportMapper.class),
+                mock(AgentPlannerCallMapper.class),
+                objectMapper()
         );
         when(taskMapper.findActiveLeaseEpoch(11L, "stale-runner"))
                 .thenReturn(java.util.Optional.of(2L));
@@ -118,7 +126,7 @@ class DurableTurnCommitModuleTest {
         LeaseToken stale = new LeaseToken(11L, "stale-runner", 3L);
 
         assertThatThrownBy(() -> module.openTurn(
-                state(), stale, AgentAction.synthesize("生成报告"), 1, 1, 1L
+                state(), stale, output(AgentAction.synthesize("生成报告")), true
         )).hasMessageContaining("LEASE_FENCED");
         assertThatThrownBy(() -> module.journalToolStart(
                 state(), stale, 31L, "call-1", "resolve_security", "hash", Map.of(), 1
@@ -131,9 +139,23 @@ class DurableTurnCommitModuleTest {
     void usesLeaseFencedInsertForTurnAndToolJournal() {
         AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
         ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
-        DurableTurnCommitModule module = module(runtimeMapper, taskMapper, mock(AgentStateStore.class));
+        AgentPlannerCallMapper plannerMapper = mock(AgentPlannerCallMapper.class);
+        DurableTurnCommitModule module = new DurableTurnCommitModule(
+                runtimeMapper,
+                mock(FinancialSnapshotMapper.class),
+                taskMapper,
+                mock(AgentStateStore.class),
+                mock(FinancialReportFingerprinter.class),
+                mock(AgentEventOutboxMapper.class),
+                mock(AgentStepLogMapper.class),
+                mock(ReportMapper.class),
+                plannerMapper,
+                objectMapper()
+        );
         LeaseToken lease = new LeaseToken(11L, "runner", 3L);
         when(taskMapper.findActiveLeaseEpoch(11L, "runner")).thenReturn(java.util.Optional.of(3L));
+        when(taskMapper.lockActiveLeaseEpoch(11L, "runner", 3L))
+                .thenReturn(java.util.Optional.of(3L));
         when(runtimeMapper.findTurn(11L, 2)).thenReturn(java.util.Optional.empty());
         when(runtimeMapper.saveTurnFenced(
                 eq(lease), eq(2), anyString(), anyString(), any(), anyInt(), anyInt(), anyLong()
@@ -142,7 +164,7 @@ class DurableTurnCommitModuleTest {
                 eq(lease), eq(31L), anyString(), anyString(), anyString(), any(), eq(1)
         )).thenReturn(41L);
 
-        long turnId = module.openTurn(state(), lease, AgentAction.synthesize("生成报告"), 1, 1, 1L);
+        long turnId = module.openTurn(state(), lease, output(AgentAction.synthesize("生成报告")), true);
         long callId = module.journalToolStart(
                 state(), lease, turnId, "call-1", "resolve_security", "hash", Map.of(), 1
         );
@@ -152,6 +174,7 @@ class DurableTurnCommitModuleTest {
         verify(runtimeMapper).saveTurnFenced(
                 eq(lease), eq(2), anyString(), eq("SYNTHESIZE"), any(), eq(1), eq(1), eq(1L)
         );
+        verify(plannerMapper).saveForTurn(eq(11L), eq(31L), any(), eq(true));
         verify(runtimeMapper).startToolCallFenced(
                 eq(lease), eq(31L), eq("call-1"), eq("resolve_security"), eq("hash"), eq(Map.of()), eq(1)
         );
@@ -168,7 +191,8 @@ class DurableTurnCommitModuleTest {
         ReportMapper reportMapper = mock(ReportMapper.class);
         DurableTurnCommitModule module = new DurableTurnCommitModule(
                 runtimeMapper, snapshotMapper, taskMapper, stateStore,
-                mock(FinancialReportFingerprinter.class), eventMapper, stepLogMapper, reportMapper
+                mock(FinancialReportFingerprinter.class), eventMapper, stepLogMapper, reportMapper,
+                mock(AgentPlannerCallMapper.class), objectMapper()
         );
         AgentState state = state();
         state.setSnapshotId(21L);
@@ -228,8 +252,67 @@ class DurableTurnCommitModuleTest {
                 mock(FinancialReportFingerprinter.class),
                 mock(AgentEventOutboxMapper.class),
                 mock(AgentStepLogMapper.class),
-                mock(ReportMapper.class)
+                mock(ReportMapper.class),
+                mock(AgentPlannerCallMapper.class),
+                objectMapper()
         );
+    }
+
+    @Test
+    void resumesPersistedPendingTurnWithoutChangingPlannerAction() throws Exception {
+        AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
+        ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
+        AgentPlannerCallMapper plannerMapper = mock(AgentPlannerCallMapper.class);
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper = objectMapper();
+        DurableTurnCommitModule module = new DurableTurnCommitModule(
+                runtimeMapper,
+                mock(FinancialSnapshotMapper.class),
+                taskMapper,
+                mock(AgentStateStore.class),
+                mock(FinancialReportFingerprinter.class),
+                mock(AgentEventOutboxMapper.class),
+                mock(AgentStepLogMapper.class),
+                mock(ReportMapper.class),
+                plannerMapper,
+                objectMapper
+        );
+        AgentState state = state();
+        LeaseToken lease = new LeaseToken(11L, "runner", 3L);
+        AgentAction persisted = new AgentAction(
+                com.zzy.finsight.agent.planning.AgentActionType.CALL_TOOL,
+                List.of(new ToolInvocation("search_public_evidence", Map.of("query", "毛利率变化"))),
+                "补充原因证据"
+        );
+        AgentTurnRecord turn = new AgentTurnRecord(
+                31L, 11L, 3, "PLANNING", "CALL_TOOL", objectMapper.writeValueAsString(persisted),
+                "", "PLANNED", 10, 5, 20L, java.time.LocalDateTime.now()
+        );
+        AgentPlannerCallRecord decision = new AgentPlannerCallRecord(
+                51L, 11L, 31L, "NEXT_ACTION", "FAST", "fast-model",
+                10, 5, 20L, 1, true, true, false, "", java.time.LocalDateTime.now()
+        );
+        when(taskMapper.findActiveLeaseEpoch(11L, "runner")).thenReturn(java.util.Optional.of(3L));
+        when(runtimeMapper.findTurn(11L, 3)).thenReturn(java.util.Optional.of(turn));
+        when(plannerMapper.findByTurnId(31L)).thenReturn(java.util.Optional.of(decision));
+
+        PendingTurnDecision pending = module.resumePendingTurn(state, lease).orElseThrow();
+
+        assertThat(pending.turnId()).isEqualTo(31L);
+        assertThat(pending.turnNo()).isEqualTo(3);
+        assertThat(pending.output().value()).isEqualTo(persisted);
+        assertThat(pending.output().actualModel()).isEqualTo("fast-model");
+        assertThat(pending.routeCorrect()).isTrue();
+    }
+
+    private PlannerOutput<AgentAction> output(AgentAction action) {
+        return new PlannerOutput<>(
+                action, false, "", 1, 1, 1L,
+                "NEXT_ACTION", "FAST", "fast-model", 1, true
+        );
+    }
+
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+        return new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
     }
 
     private AgentState state() {

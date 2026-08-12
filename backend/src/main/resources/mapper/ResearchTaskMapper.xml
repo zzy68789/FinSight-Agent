@@ -62,6 +62,14 @@
         WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
     </select>
 
+    <select id="lockActiveLeaseEpoch" resultType="long">
+        SELECT lease_epoch
+        FROM research_task
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
+        FOR UPDATE
+    </select>
+
     <update id="incrementEventSequenceFenced">
         UPDATE research_task
         SET event_sequence = event_sequence + 1, updated_at = #{now}

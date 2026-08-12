@@ -40,17 +40,63 @@
         ORDER BY sequence_no ASC
     </select>
 
-    <select id="findUnpublished" resultMap="eventResult">
+    <select id="findAfterSequence" resultMap="eventResult">
         SELECT id, schema_version, task_id, thread_id, sequence_no, event_id, turn_no,
                event_type, status, payload_json, error_message, duration_ms, published_at, created_at
         FROM agent_event_outbox
+        WHERE task_id = #{taskId} AND sequence_no &gt; #{afterSequence}
+        ORDER BY sequence_no ASC
+    </select>
+
+    <update id="claimBatch">
+        UPDATE agent_event_outbox
+        SET claim_owner = #{claimOwner}, claimed_until = #{claimedUntil},
+            publish_attempts = publish_attempts + 1
         WHERE published_at IS NULL
+          AND dead_lettered_at IS NULL
+          AND created_at &lt;= #{claimBefore}
+          AND next_attempt_at &lt;= #{now}
+          AND (claim_owner IS NULL OR claimed_until &lt; #{now})
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </update>
+
+    <select id="findClaimed" resultMap="eventResult">
+        SELECT id, schema_version, task_id, thread_id, sequence_no, event_id, turn_no,
+               event_type, status, payload_json, error_message, duration_ms, published_at, created_at
+        FROM agent_event_outbox
+        WHERE published_at IS NULL AND dead_lettered_at IS NULL AND claim_owner = #{claimOwner}
         ORDER BY id ASC
         LIMIT #{limit}
     </select>
 
-    <update id="markPublished">
-        UPDATE agent_event_outbox SET published_at = #{publishedAt}
+    <update id="markPublishedDirect">
+        UPDATE agent_event_outbox
+        SET published_at = #{publishedAt}, claim_owner = NULL, claimed_until = NULL, last_error = NULL
         WHERE id = #{id} AND published_at IS NULL
     </update>
+
+    <update id="markClaimPublished">
+        UPDATE agent_event_outbox
+        SET published_at = #{publishedAt}, claim_owner = NULL, claimed_until = NULL, last_error = NULL
+        WHERE id = #{id} AND published_at IS NULL AND claim_owner = #{claimOwner}
+    </update>
+
+    <update id="releaseClaim">
+        UPDATE agent_event_outbox
+        SET claim_owner = NULL, claimed_until = NULL, next_attempt_at = #{nextAttemptAt},
+            last_error = #{lastError}
+        WHERE id = #{id} AND published_at IS NULL AND claim_owner = #{claimOwner}
+    </update>
+
+    <update id="markDeadLetter">
+        UPDATE agent_event_outbox
+        SET claim_owner = NULL, claimed_until = NULL, dead_lettered_at = #{deadLetteredAt},
+            last_error = #{lastError}
+        WHERE id = #{id} AND published_at IS NULL AND claim_owner = #{claimOwner}
+    </update>
+
+    <select id="findPublishAttempts" resultType="int">
+        SELECT publish_attempts FROM agent_event_outbox WHERE id = #{id}
+    </select>
 </mapper>

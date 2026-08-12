@@ -2,6 +2,7 @@ package com.zzy.finsight.service.impl;
 
 import com.zzy.finsight.agent.event.AgentEventListener;
 import com.zzy.finsight.agent.event.AgentEvent;
+import com.zzy.finsight.agent.event.AgentEventStreamModule;
 import com.zzy.finsight.agent.runtime.AgentTraceReader;
 import com.zzy.finsight.agent.runtime.DurableAgentRunner;
 import com.zzy.finsight.domain.TaskExecutionRecord;
@@ -31,6 +32,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
     private final ResearchRunRequestCodec requestCodec;
     private final AgentTraceReader traceReader;
     private final SseService sseService;
+    private final AgentEventStreamModule eventStreamModule;
     private final ExecutorService executorService;
 
     public ResearchAgentServiceImpl(
@@ -39,6 +41,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
             ResearchRunRequestCodec requestCodec,
             AgentTraceReader traceReader,
             SseService sseService,
+            AgentEventStreamModule eventStreamModule,
             @Qualifier("agentExecutor") ExecutorService executorService
     ) {
         this.runner = runner;
@@ -46,6 +49,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
         this.requestCodec = requestCodec;
         this.traceReader = traceReader;
         this.sseService = sseService;
+        this.eventStreamModule = eventStreamModule;
         this.executorService = executorService;
     }
 
@@ -84,6 +88,15 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
     }
 
     @Override
+    public SseEmitter subscribe(long ownerId, long taskId, long afterSequence) {
+        TaskExecutionRecord task = taskMapper.findExecution(ownerId, taskId)
+                .orElseThrow(() -> new IllegalArgumentException("未找到 Research Agent 任务"));
+        boolean terminal = Set.of("COMPLETED", "FAILED", "INSUFFICIENT_EVIDENCE")
+                .contains(task.status());
+        return eventStreamModule.subscribe(taskId, afterSequence, terminal);
+    }
+
+    @Override
     public ResearchRunTraceResponse trace(long ownerId, long taskId) {
         return traceReader.get(ownerId, taskId);
     }
@@ -97,7 +110,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
                     return;
                 }
                 try {
-                    sseService.send(emitter, event.type(), event.ssePayload());
+                    sseService.sendAgentEvent(emitter, event);
                 } catch (Exception exception) {
                     connected.set(false);
                 }

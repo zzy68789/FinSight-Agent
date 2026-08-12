@@ -70,6 +70,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
@@ -80,6 +81,72 @@ class ResearchAgentRuntimeTest {
     @AfterEach
     void tearDown() {
         toolExecutor.shutdownNow();
+    }
+
+    @Test
+    void resumesPersistedPendingActionWithoutCallingPlannerAgain() {
+        ResearchPlanner planner = mock(ResearchPlanner.class);
+        ResearchToolRegistry registry = new ResearchToolRegistry(List.of());
+        DurableTurnCommitModule commitModule = mock(DurableTurnCommitModule.class);
+        TaskRuntimeStateService runtimeStateService = mock(TaskRuntimeStateService.class);
+        AgentAction persistedAction = new AgentAction(
+                AgentActionType.STOP_INSUFFICIENT_EVIDENCE,
+                List.of(),
+                "沿用崩溃前已经持久化的停止决策"
+        );
+        PlannerOutput<AgentAction> persistedOutput = new PlannerOutput<>(
+                persistedAction, false, "", 8, 3, 12L,
+                "NEXT_ACTION", "FAST", "fast-model", 1, true
+        );
+        when(commitModule.resumePendingTurn(any(), any())).thenReturn(Optional.of(
+                new PendingTurnDecision(31L, 1, persistedOutput, true)
+        ));
+        ResearchAgentRuntime runtime = new ResearchAgentRuntime(
+                planner,
+                registry,
+                mock(ToolPolicyGuard.class),
+                new AgentBudgetGuard(
+                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                ),
+                commitModule,
+                mock(AgentEventOutboxPublisher.class),
+                mock(PlannerTelemetryModule.class),
+                new ToolStateReducer(new EvidenceMemory(new FinancialEvidenceValidator())),
+                new ProgressFingerprint(
+                        new ObjectMapper().findAndRegisterModules(),
+                        mock(FinancialReportFingerprinter.class)
+                ),
+                runtimeStateService,
+                mock(InvestmentReportWriter.class),
+                mock(CitationReviewer.class),
+                mock(FinancialComplianceReviewer.class),
+                mock(FinancialEvaluator.class),
+                new QualityGateDecisionEngine(),
+                mock(FinancialReportFingerprinter.class),
+                mock(ReportService.class),
+                toolExecutor
+        );
+        AgentState state = state();
+        state.setPlan(new ResearchPlan(
+                "恢复已有计划", List.of(), List.of(), List.of(), List.of(),
+                "LLM", ResearchPlanner.PLANNER_VERSION
+        ));
+
+        ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
+                7L,
+                state,
+                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new LeaseToken(11L, "runner-1", 1L),
+                AgentEventListener.noop()
+        );
+
+        assertThat(outcome.status()).isEqualTo("INSUFFICIENT_EVIDENCE");
+        assertThat(outcome.reason()).contains("沿用崩溃前");
+        verify(planner, never()).nextAction(any(), any());
+        verify(commitModule, never()).openTurn(
+                any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()
+        );
+        verify(commitModule).commitTurn(any(AgentTurnCommit.class), any(LeaseToken.class));
     }
 
     @Test
@@ -122,7 +189,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
-        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
+        when(commitModule.openTurn(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(31L);
 
         ResearchAgentRuntime runtime = new ResearchAgentRuntime(
                 planner,
@@ -173,7 +240,7 @@ class ResearchAgentRuntimeTest {
     }
 
     @Test
-    void stopsAfterTwoEvidenceTurnsProduceNoNewEffectiveEvidence() {
+    void stopsAtConfiguredThresholdWhenCommittedTurnsMakeNoSemanticProgress() {
         ResearchPlanner planner = mock(ResearchPlanner.class);
         ResearchTool<RawToolArguments> noEvidenceTool = new ResearchTool<>() {
             @Override
@@ -214,16 +281,17 @@ class ResearchAgentRuntimeTest {
         ));
         when(planner.nextAction(any(), any())).thenReturn(
                 toolAction("第一次检索"),
-                toolAction("第二次检索")
+                toolAction("第二次检索"),
+                toolAction("第三次检索")
         );
         when(runtimeMapper.saveTurn(
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
-        )).thenReturn(31L, 32L);
-        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
+        )).thenReturn(31L, 32L, 33L);
+        when(commitModule.openTurn(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(31L, 32L, 33L);
         when(runtimeMapper.startToolCall(
                 anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()
-        )).thenReturn(41L, 42L);
+        )).thenReturn(41L, 42L, 43L);
         when(taskMapper.updateAgentProgress(
                 anyLong(), anyString(), anyInt(), anyInt(), anyString(), any()
         )).thenReturn(true);
@@ -232,7 +300,7 @@ class ResearchAgentRuntimeTest {
                 registry,
                 new ToolPolicyGuard(registry, new ObjectMapper()),
                 new AgentBudgetGuard(
-                        8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
+                        8, 12, 3, 2, 2, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
                 commitModule,
                 mock(AgentEventOutboxPublisher.class),
@@ -256,16 +324,17 @@ class ResearchAgentRuntimeTest {
         ResearchAgentRuntime.RuntimeOutcome outcome = runtime.execute(
                 7L,
                 state(),
-                new AgentBudget(8, 12, 3, 2, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                new AgentBudget(8, 12, 3, 2, 2, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
                 new LeaseToken(11L, "runner-1", 1L),
                 AgentEventListener.noop()
         );
 
         assertThat(outcome.status()).isEqualTo("INSUFFICIENT_EVIDENCE");
-        assertThat(outcome.reason()).contains("连续 2 轮");
+        assertThat(outcome.reason()).contains("NO_PROGRESS");
         verify(commitModule).finishTaskWithEvent(
                 any(), any(), eq("INSUFFICIENT_EVIDENCE"),
-                eq("连续 2 轮证据采集未产生新增有效证据"), eq(null), any(AgentEventDraft.class)
+                eq("NO_PROGRESS：连续已提交 turn 的计划、证据、指标和门禁路由均未变化"),
+                eq(null), any(AgentEventDraft.class)
         );
     }
 
@@ -314,7 +383,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L, 32L);
-        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
+        when(commitModule.openTurn(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(31L, 32L);
         when(taskMapper.updateAgentProgress(
                 anyLong(), anyString(), anyInt(), anyInt(), anyString(), any()
         )).thenReturn(true);
@@ -426,7 +495,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
-        when(commitModule.openTurn(any(), any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
+        when(commitModule.openTurn(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(31L);
         when(commitModule.journalToolStart(any(), any(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()))
                 .thenReturn(41L);
         when(runtimeMapper.startToolCall(

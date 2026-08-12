@@ -14,6 +14,9 @@ public interface ResearchAgentService {
     /** 重试当前用户拥有的失败或证据不足任务。 */
     void retry(long ownerId, long taskId);
 
+    /** 从指定任务内序号后重放并继续订阅 Agent 事件。 */
+    SseEmitter subscribe(long ownerId, long taskId, long afterSequence);
+
     /** 查询 Planner 决策与工具调用轨迹。 */
     ResearchRunTraceResponse trace(long ownerId, long taskId);
 }

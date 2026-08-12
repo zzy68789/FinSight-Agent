@@ -10,8 +10,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -43,9 +46,32 @@ public class ResearchAgentController {
         return ApiResponse.success(null);
     }
 
+    /** 按 Last-Event-ID 或查询序号重放缺失事件，并继续订阅实时 Agent 事件。 */
+    @GetMapping(value = "/{taskId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter events(
+            @PathVariable long taskId,
+            @RequestHeader(name = "Last-Event-ID", required = false) String lastEventId,
+            @RequestParam(name = "afterSequence", defaultValue = "0") long afterSequence
+    ) {
+        return researchAgentService.subscribe(
+                userContext.currentUserId(), taskId, Math.max(afterSequence, parseSequence(lastEventId))
+        );
+    }
+
     /** 查询指定 Agent 任务的 Planner 和工具调用轨迹。 */
     @GetMapping("/{taskId}/trace")
     public ApiResponse<ResearchRunTraceResponse> trace(@PathVariable long taskId) {
         return ApiResponse.success(researchAgentService.trace(userContext.currentUserId(), taskId));
+    }
+
+    private long parseSequence(String value) {
+        if (value == null || value.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, Long.parseLong(value.trim()));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
     }
 }

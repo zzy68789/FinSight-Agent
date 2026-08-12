@@ -37,7 +37,7 @@ class PlannerPerformanceSummaryTest {
             boolean routeCorrect
     ) {
         return new AgentPlannerCallRecord(
-                id, 11L, "NEXT_ACTION", "FAST", model, 10, 5, duration, 1,
+                id, 11L, id, "NEXT_ACTION", "FAST", model, 10, 5, duration, 1,
                 structuredValid, routeCorrect, false, "", LocalDateTime.of(2026, 8, 12, 12, 0)
         );
     }

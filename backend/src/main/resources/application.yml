@@ -99,6 +99,11 @@ finsight:
     max-replans: 3
     max-evidence-recoveries: 2
     max-stagnant-turns: 3
+    event-outbox-publish-interval-ms: 1000
+    event-stream-poll-interval-ms: 1000
+    event-outbox-claim-duration: PT30S
+    event-outbox-immediate-grace: PT5S
+    event-outbox-max-attempts: 8
     max-parallel-tools: 4
     max-report-rewrites: 2
     timeout: PT180S

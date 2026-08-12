@@ -1,5 +1,6 @@
 package com.zzy.finsight.service.impl;
 
+import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.dto.SseEvent;
 import com.zzy.finsight.service.SseService;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,14 @@ import java.util.Map;
 public class SseServiceImpl implements SseService {
     public void send(SseEmitter emitter, String step, Object data) throws IOException {
         emitter.send(SseEmitter.event().data(new SseEvent(step, data)));
+    }
+
+    @Override
+    public void sendAgentEvent(SseEmitter emitter, AgentEvent event) throws IOException {
+        emitter.send(SseEmitter.event()
+                .id(Long.toString(event.sequence()))
+                .name(event.type())
+                .data(new SseEvent(event.type(), event.ssePayload())));
     }
 
     public void done(SseEmitter emitter) throws IOException {

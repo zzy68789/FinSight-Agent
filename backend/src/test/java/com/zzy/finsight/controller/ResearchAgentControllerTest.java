@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -60,5 +61,19 @@ class ResearchAgentControllerTest {
         );
         assertThat(captor.getValue().getResearchQuestion()).contains("毛利率");
         assertThat(captor.getValue().getAsOfDate()).hasToString("2026-08-12");
+    }
+
+    @Test
+    void resumesAgentEventsFromLastEventId() throws Exception {
+        when(userContext.currentUserId()).thenReturn(7L);
+        when(researchAgentService.subscribe(7L, 19L, 8L)).thenReturn(new SseEmitter(0L));
+
+        mockMvc.perform(get("/api/research-runs/19/events")
+                        .header("Last-Event-ID", "8")
+                        .param("afterSequence", "5"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        verify(researchAgentService).subscribe(7L, 19L, 8L);
     }
 }

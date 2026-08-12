@@ -1,16 +1,19 @@
 package com.zzy.finsight.agent.runtime;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.agent.event.AgentEventDraft;
 import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.memory.AgentStateStore;
 import com.zzy.finsight.agent.planning.AgentAction;
+import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.tool.ToolResult;
 import com.zzy.finsight.agent.tool.ToolPayload;
 import com.zzy.finsight.mapper.AgentRuntimeMapper;
 import com.zzy.finsight.mapper.AgentEventOutboxMapper;
 import com.zzy.finsight.mapper.AgentStepLogMapper;
+import com.zzy.finsight.mapper.AgentPlannerCallMapper;
 import com.zzy.finsight.mapper.FinancialSnapshotMapper;
 import com.zzy.finsight.mapper.ReportMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
@@ -34,6 +37,8 @@ public class DurableTurnCommitModule {
     private final AgentEventOutboxMapper eventOutboxMapper;
     private final AgentStepLogMapper stepLogMapper;
     private final ReportMapper reportMapper;
+    private final AgentPlannerCallMapper plannerCallMapper;
+    private final ObjectMapper objectMapper;
 
     public DurableTurnCommitModule(
             AgentRuntimeMapper runtimeMapper,
@@ -43,7 +48,9 @@ public class DurableTurnCommitModule {
             FinancialReportFingerprinter fingerprinter,
             AgentEventOutboxMapper eventOutboxMapper,
             AgentStepLogMapper stepLogMapper,
-            ReportMapper reportMapper
+            ReportMapper reportMapper,
+            AgentPlannerCallMapper plannerCallMapper,
+            ObjectMapper objectMapper
     ) {
         this.runtimeMapper = runtimeMapper;
         this.snapshotMapper = snapshotMapper;
@@ -53,6 +60,8 @@ public class DurableTurnCommitModule {
         this.eventOutboxMapper = eventOutboxMapper;
         this.stepLogMapper = stepLogMapper;
         this.reportMapper = reportMapper;
+        this.plannerCallMapper = plannerCallMapper;
+        this.objectMapper = objectMapper;
     }
 
     /** 原子领取任务并返回带单调 epoch 的租约令牌。 */
@@ -75,15 +84,15 @@ public class DurableTurnCommitModule {
     public long openTurn(
             AgentState state,
             LeaseToken lease,
-            AgentAction action,
-            int inputTokens,
-            int outputTokens,
-            long plannerDurationMs
+            PlannerOutput<AgentAction> actionOutput,
+            boolean routeCorrect
     ) {
-        assertActiveLease(state, lease);
-        return runtimeMapper.findTurn(state.getTaskId(), state.getTurnNo())
+        lockActiveLease(state, lease);
+        AgentAction action = actionOutput.value();
+        long turnId = runtimeMapper.findTurn(state.getTaskId(), state.getTurnNo())
                 .map(turn -> {
-                    if (!turn.actionType().equals(action.type().name())) {
+                    AgentAction persistedAction = readPersistedAction(turn.actionJson());
+                    if (!persistedAction.equals(action)) {
                         throw new IllegalStateException(
                                 "TURN_ACTION_MISMATCH：恢复轮次动作与已持久化动作不一致"
                         );
@@ -92,8 +101,57 @@ public class DurableTurnCommitModule {
                 })
                 .orElseGet(() -> runtimeMapper.saveTurnFenced(
                         lease, state.getTurnNo(), state.getPhase(), action.type().name(), action,
-                        inputTokens, outputTokens, plannerDurationMs
+                        actionOutput.inputTokens(), actionOutput.outputTokens(), actionOutput.durationMs()
                 ));
+        plannerCallMapper.saveForTurn(state.getTaskId(), turnId, actionOutput, routeCorrect);
+        return turnId;
+    }
+
+    /**
+     * 恢复已原子打开但尚未提交的下一轮动作，避免再次调用 Planner 后改变工具或参数。
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<PendingTurnDecision> resumePendingTurn(
+            AgentState state,
+            LeaseToken lease
+    ) {
+        assertActiveLease(state, lease);
+        int expectedTurnNo = state.getTurnNo() + 1;
+        return runtimeMapper.findTurn(state.getTaskId(), expectedTurnNo)
+                .map(turn -> {
+                    if (!"PLANNED".equals(turn.status())) {
+                        throw new IllegalStateException(
+                                "CHECKPOINT_TURN_MISMATCH：检查点落后于已经结束的 Agent turn"
+                        );
+                    }
+                    com.zzy.finsight.domain.AgentPlannerCallRecord decision = plannerCallMapper
+                            .findByTurnId(turn.id())
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "PENDING_TURN_DECISION_MISSING：未完成 turn 缺少原子 Planner 决策"
+                            ));
+                    if (decision.taskId() != state.getTaskId()
+                            || !"NEXT_ACTION".equals(decision.decisionType())) {
+                        throw new IllegalStateException(
+                                "PENDING_TURN_DECISION_MISMATCH：未完成 turn 的 Planner 决策关联非法"
+                        );
+                    }
+                    PlannerOutput<AgentAction> output = new PlannerOutput<>(
+                            readPersistedAction(turn.actionJson()),
+                            decision.degraded(),
+                            decision.degradedReason(),
+                            decision.inputTokens(),
+                            decision.outputTokens(),
+                            decision.durationMs(),
+                            decision.decisionType(),
+                            decision.requestedModel(),
+                            decision.actualModel(),
+                            decision.structureAttempts(),
+                            decision.structuredValid()
+                    );
+                    return new PendingTurnDecision(
+                            turn.id(), turn.turnNo(), output, decision.routeCorrect()
+                    );
+                });
     }
 
     /** 在调用外部工具前先写入可恢复的开始 journal。 */
@@ -277,6 +335,27 @@ public class DurableTurnCommitModule {
                 .orElseThrow(() -> new IllegalStateException("LEASE_FENCED：任务租约已失效"));
         if (activeEpoch != lease.epoch()) {
             throw new IllegalStateException("LEASE_FENCED：过期执行者不得写入 Agent journal");
+        }
+    }
+
+    private void lockActiveLease(AgentState state, LeaseToken lease) {
+        if (lease == null || lease.taskId() != state.getTaskId()) {
+            throw new IllegalArgumentException("租约令牌与 Agent 任务不匹配");
+        }
+        taskMapper.lockActiveLeaseEpoch(lease.taskId(), lease.owner(), lease.epoch())
+                .orElseThrow(() -> new IllegalStateException(
+                        "LEASE_FENCED：过期执行者不得打开 Agent turn"
+                ));
+    }
+
+    private AgentAction readPersistedAction(String json) {
+        if (json == null || json.isBlank()) {
+            throw new IllegalStateException("CORRUPTED_TURN_ACTION：已持久化动作为空");
+        }
+        try {
+            return objectMapper.readValue(json, AgentAction.class);
+        } catch (Exception exception) {
+            throw new IllegalStateException("CORRUPTED_TURN_ACTION：已持久化动作无法解析", exception);
         }
     }
 

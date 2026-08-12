@@ -1,5 +1,7 @@
 // frontend/src/services/api.js
 
+import { consumeSseChunk } from '../modules/sseEventStream.js';
+
 const API_BASE = "http://localhost:8000/api";
 let authToken = localStorage.getItem('finsight_token') || '';
 
@@ -217,60 +219,81 @@ export async function adminSystemHealth() {
   return requestJson('/admin/system/health');
 }
 
-async function streamSse(path, payload, onData, onDone, onError) {
+async function streamSse(path, payload, onData, onDone, onError, reconnectPath) {
+  let taskId = null;
+  let lastSequence = 0;
+  let reconnectAttempts = 0;
+  let request = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  };
   try {
-      const response = await fetch(`${API_BASE}${path}`, withAuth({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-      }));
-
-      if (!response.ok) throw new Error('网络异常，请稍后重试');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-          for (const line of lines) {
-              if (line.startsWith('data:')) {
-                  const dataStr = line.slice(5).trim();
-                  if (dataStr === '[DONE]') {
-                      onDone(); return;
-                  }
-                  try {
-                      const event = JSON.parse(dataStr);
-                      if (event.step === 'error') {
-                          throw new Error(event.data?.message || '任务执行失败，请稍后重试');
-                      }
-                      onData(event);
-                  } catch(e){
-                      if (!(e instanceof SyntaxError)) throw e;
-                  }
-              }
-          }
+    while (true) {
+      try {
+        const response = await fetch(`${API_BASE}${path}`, withAuth(request));
+        if (!response.ok) {
+          const error = new Error(`事件流请求失败：${response.status}`);
+          error.nonRetryable = response.status >= 400 && response.status < 500;
+          throw error;
+        }
+        const outcome = await consumeSseResponse(response, event => {
+          const sequence = Number(event?.data?.sequence || 0);
+          if (Number.isFinite(sequence)) lastSequence = Math.max(lastSequence, sequence);
+          taskId = event?.data?.taskId || taskId;
+          onData(event);
+        }, messageId => {
+          const parsed = Number(messageId || 0);
+          if (Number.isFinite(parsed)) lastSequence = Math.max(lastSequence, parsed);
+        });
+        if (outcome.completed) {
+          onDone();
+          return;
+        }
+      } catch (error) {
+        if (error.nonRetryable || !taskId || !reconnectPath || reconnectAttempts >= 5) throw error;
       }
-      if (buffer.startsWith('data:')) {
-          const dataStr = buffer.slice(5).trim();
-          if (dataStr === '[DONE]') {
-              onDone(); return;
-          }
-          try {
-              const event = JSON.parse(dataStr);
-              if (event.step === 'error') {
-                  throw new Error(event.data?.message || '任务执行失败，请稍后重试');
-              }
-              onData(event);
-          } catch(e){
-              if (!(e instanceof SyntaxError)) throw e;
-          }
+      if (!taskId || !reconnectPath || reconnectAttempts >= 5) {
+        throw new Error('事件流意外中断，且无法恢复任务序号');
       }
-  } catch (error) { onError(error); }
+      reconnectAttempts += 1;
+      await new Promise(resolve => setTimeout(resolve, Math.min(5000, reconnectAttempts * 500)));
+      path = reconnectPath(taskId);
+      request = {
+        method: 'GET',
+        headers: { 'Last-Event-ID': String(lastSequence) }
+      };
+    }
+  } catch (error) {
+    onError(error);
+  }
+}
+
+async function consumeSseResponse(response, onData, onMessageId) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    const parsed = consumeSseChunk(buffer, done ? decoder.decode() : decoder.decode(value, { stream: true }), done);
+    buffer = parsed.buffer;
+    for (const message of parsed.messages) {
+      onMessageId(message.id);
+      if (message.data === '[DONE]') return { completed: true };
+      try {
+        const event = JSON.parse(message.data);
+        if (event.step === 'error') {
+          const error = new Error(event.data?.message || '任务执行失败，请稍后重试');
+          error.nonRetryable = true;
+          throw error;
+        }
+        onData(event);
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+      }
+    }
+    if (done) return { completed: false };
+  }
 }
 
 export async function streamStockReport(ticker, search_mode, report_period, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
@@ -286,7 +309,7 @@ export async function streamResearchRun(request, onData, onDone, onError, thread
   return streamSse('/research-runs', {
       ...request,
       thread_id: request.thread_id || threadId
-  }, onData, onDone, onError);
+  }, onData, onDone, onError, taskId => `/research-runs/${taskId}/events`);
 }
 
 export async function getResearchRunTrace(taskId) {

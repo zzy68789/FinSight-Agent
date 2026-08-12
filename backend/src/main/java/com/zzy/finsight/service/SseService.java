@@ -1,5 +1,6 @@
 package com.zzy.finsight.service;
 
+import com.zzy.finsight.agent.event.AgentEvent;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -10,6 +11,9 @@ import java.io.IOException;
 public interface SseService {
     /** 发送一个工作流步骤事件。 */
     void send(SseEmitter emitter, String step, Object data) throws IOException;
+
+    /** 发送带任务内序号的 Agent 事件，供 Last-Event-ID 断线续传。 */
+    void sendAgentEvent(SseEmitter emitter, AgentEvent event) throws IOException;
 
     /** 发送结束事件并关闭连接。 */
     void done(SseEmitter emitter) throws IOException;

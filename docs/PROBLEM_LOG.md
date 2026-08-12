@@ -6,6 +6,7 @@
 
 | 优先级 | 编号 | 问题 | 状态 |
 | --- | --- | --- | --- |
+| P0 | 040 | outbox 有事件但实时 SSE 缺少可靠续传和多实例投递协调 | 已完成机制改造，运维与容量基线待补 |
 | P0 | 039 | Replan 不消费反馈且 Planner 成本、补证据和停滞缺少独立控制 | 已完成机制改造，真实模型基线待补 |
 | P0 | 036 | 新证据使派生结果失效但重复调用锁仍阻止重算 | 已完成 |
 | P0 | 038 | Agent turn 分散写入导致状态不一致，工具和事件契约缺少统一恢复边界 | 已深化，MySQL 故障注入待补 |
@@ -692,11 +693,11 @@ Reviewer 已能把证据问题路由回 Planner，但原 Runtime 只执行 Repla
 
 ### 解决方式
 
-新增 `DurableTurnCommitModule`，并继续把 `openTurn`、工具开始 journal、turn 提交、最终 PASS 报告、快照冻结、任务完成和事件 outbox 都纳入 `lease_owner + lease_epoch` fencing 与事务边界；Flyway V5/V6 分别增加单调租约 epoch、Planner 遥测和版本化 outbox。工具契约进一步改为不可变 `ToolContext`、类型化 `ToolArguments`/`ToolPayload` 和集中 `ToolStateReducer`，避免并行工具修改共享状态。前端以 `agentEventProjection.js` 和 `useAgentRunProjection` 统一实时/历史状态投影。
+新增 `DurableTurnCommitModule`，并继续把 `openTurn`、工具开始 journal、turn 提交、最终 PASS 报告、快照冻结、任务完成和事件 outbox 都纳入 `lease_owner + lease_epoch` fencing 与事务边界；Flyway V5～V7 依次增加单调租约 epoch、Planner 遥测、版本化 outbox、投递状态和 Planner-turn 关联。工具契约进一步改为不可变 `ToolContext`、类型化 `ToolArguments`/`ToolPayload` 和集中 `ToolStateReducer`，避免并行工具修改共享状态。前端以 `agentEventProjection.js` 和 `useAgentRunProjection` 统一实时/历史状态投影。
 
 ### 结果
 
-2026-08-12 后端全量 `mvn.cmd test` 为 188 个测试零失败、零错误、跳过 3 项；新增测试覆盖租约前置写 fencing、最终完成原子提交、v1/v2/v3 状态兼容、不可变工具执行和版本化 outbox。前端 `npm.cmd test` 3 项通过，覆盖重复事件、SSE/Trace 等价与 outbox 重试，`npm.cmd run build` 成功。Docker 未运行，因此 V6 迁移、真实 MySQL 回滚和外部调用后事务前宕机窗口仍需故障注入验证，不能宣传 exactly-once。
+2026-08-12 后端全量 `mvn.cmd test` 为 195 个测试零失败、零错误、跳过 3 项；新增测试覆盖租约前置写 fencing、最终完成原子提交、v1/v2/v3 状态兼容、不可变工具执行、Planner-turn 关联、未提交 turn 原动作恢复和版本化 outbox 投递。前端 `npm.cmd test` 5 项通过，`npm.cmd run build` 成功。Docker 未运行，因此 V7 迁移、真实 MySQL 回滚和外部调用后事务前宕机窗口仍需故障注入验证，不能宣传 exactly-once。
 
 ## 039. Replan 不消费反馈且 Planner 成本、补证据和停滞缺少独立控制
 
@@ -710,8 +711,26 @@ Planner 同时承担 prompt 拼装、模型选择、结构重试、JSON 解码�
 
 ### 解决方式
 
-新增 `PlannerContextProjection`，让 Replan 直接消费当前计划、最近调用/观察、门禁问题、补证据尝试和证据增量；`PlannerOutput<T>` 一次完成解析并携带调用元数据。新增 `PlannerModelPolicy` 与 `PlannerTelemetryModule`：建计划/Replan 使用 SMART，普通动作优先 FAST，复杂恢复或 FAST 结构失败升级 SMART，并把实际模型、决策类型、路由原因、合法性、Token 和耗时写入 `agent_planner_call`。同时增加 `maxEvidenceRecoveries` 和 `ProgressFingerprint`，分别限制补证据轮次与连续无语义进展的已提交 turn。
+新增 `PlannerContextProjection`，让 Replan 直接消费当前计划、最近调用/观察、门禁问题、补证据尝试和证据增量；`PlannerOutput<T>` 一次完成解析并携带调用元数据。新增 `PlannerModelPolicy` 与 `PlannerTelemetryModule`：建计划/Replan 使用 SMART，普通动作优先 FAST，复杂恢复或 FAST 结构失败升级 SMART，并把实际模型、决策类型、路由原因、合法性、Token 和耗时写入 `agent_planner_call`；`NEXT_ACTION` 遥测再与对应 turn 原子关联。同时增加 `maxEvidenceRecoveries` 和 `ProgressFingerprint`，分别限制补证据轮次与连续无语义进展的已提交 turn，并删除旧的固定“连续两轮无新增证据”停止分支，避免两套阈值互相覆盖。
 
 ### 结果
 
-`ResearchPlannerTest` 已证明观察、门禁原因、恢复尝试和证据增量真实进入 Replan prompt，普通动作可由 FAST 失败升级 SMART，最终失败仍保留非零遥测；`ProgressFingerprintTest` 与 Runtime 回归覆盖通用停滞和独立补证据停止。2026-08-12 后端全量 188 个测试零失败、零错误、跳过 3 项并成功打包。真实模型流量尚未运行，因此 FAST/SMART 的质量、Token 和 P50/P95 只具备采集能力，尚不能宣称已经取得性能收益。
+`ResearchPlannerTest` 已证明观察、门禁原因、恢复尝试和证据增量真实进入 Replan prompt，普通动作可由 FAST 失败升级 SMART，最终失败仍保留非零遥测；`ProgressFingerprintTest` 与 Runtime 回归覆盖通用停滞、配置阈值和独立补证据停止。2026-08-12 后端全量 195 个测试零失败、零错误、跳过 3 项。真实模型流量尚未运行，因此 FAST/SMART 的质量、Token 和 P50/P95 只具备采集能力，尚不能宣称已经取得性能收益。
+
+## 040. outbox 有事件但实时 SSE 缺少可靠续传和多实例投递协调
+
+### 发生了什么
+
+V6 已把 canonical Agent 事件与业务事务一起写入 outbox，但发布器仍先查询未发布记录再逐条标记，多个实例可能同时发送同一批事件；SSE 没有输出 sequence 作为 `id`，断线重连也没有按最后序号补发。更隐蔽的是，若任务在实例 B 执行而客户端连接实例 A，仅靠进程内 listener 无法及时得到 B 已提交的事件。
+
+### 原因
+
+事件 schema、前端 reducer 和事务 outbox 已经存在，但“提交后如何可靠交付”仍分散在 publisher、Redis 和 SSE listener 中，没有形成隐藏 claim、重试、回放竞态和跨实例补发语义的 Agent Event Delivery 深模块。发布成功状态也只有布尔值，无法表达处理中、退避、永久失败和过期执行者接管。
+
+### 解决方式
+
+新增 `AgentEventStreamModule`，订阅时先注册、再读取历史，并把回放窗口中的实时事件缓冲后按 sequence 排序去重；活跃订阅按任务从共享数据库补发其他实例提交的事件。SSE 增加 sequence `id`，新增 `/api/research-runs/{taskId}/events` 接受 `Last-Event-ID`/`afterSequence`，前端增量 parser 跨 chunk 解析并在非终态断开后携带最后序号有限重连。Flyway V7 为 outbox 增加原子 claim、过期接管、尝试次数、指数退避和死信字段；发布成功和释放/死信均校验 claim owner。
+
+### 结果
+
+新增回归覆盖回放/实时竞态排序、多发布器原子 claim、毒消息进入死信、跨实例数据库补发、Controller 续传契约和前端跨 chunk SSE 解析。2026-08-12 后端全量 `mvn.cmd test` 为 195 个测试零失败、零错误、跳过 3 项；前端 `npm.cmd test` 5 项通过并完成生产构建。当前传输语义是 outbox 原子持久化 + 至少一次投递 + sequence 幂等，不是 exactly-once；死信告警/重放、按任务轮询的多实例容量基线和 V7 MySQL 容器实跑仍保留为后续硬化项。

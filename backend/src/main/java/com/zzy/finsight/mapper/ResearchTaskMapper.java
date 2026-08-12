@@ -172,6 +172,13 @@ public interface ResearchTaskMapper {
             @Param("leaseOwner") String leaseOwner
     );
 
+    /** 在当前事务中锁定仍归指定执行者持有的租约行。 */
+    Optional<Long> lockActiveLeaseEpoch(
+            @Param("taskId") long taskId,
+            @Param("leaseOwner") String leaseOwner,
+            @Param("leaseEpoch") long leaseEpoch
+    );
+
     /** 仅由当前租约执行者递增任务内事件序号。 */
     default long nextEventSequence(LeaseToken lease) {
         if (incrementEventSequenceFenced(

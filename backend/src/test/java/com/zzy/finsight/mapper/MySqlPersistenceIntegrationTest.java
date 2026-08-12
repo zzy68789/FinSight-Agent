@@ -60,7 +60,7 @@ class MySqlPersistenceIntegrationTest {
     @Test
     void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '6'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '7'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
@@ -79,16 +79,6 @@ class MySqlPersistenceIntegrationTest {
         LeaseToken lease = taskMapper.startAttemptToken(taskId, "runner-a", leaseUntil).orElseThrow();
         assertThat(lease.epoch()).isEqualTo(1L);
         assertThat(taskMapper.startAttempt(taskId, "runner-b", leaseUntil)).isFalse();
-
-        plannerCallMapper.save(taskId, new PlannerOutput<>(
-                Map.of("type", "CALL_TOOL"), false, "", 12, 3, 40L,
-                "NEXT_ACTION", "FAST", "qwen-fast", 1, true
-        ), true);
-        assertThat(plannerCallMapper.findByTaskId(taskId)).singleElement()
-                .satisfies(call -> {
-                    assertThat(call.actualModel()).isEqualTo("qwen-fast");
-                    assertThat(call.routeCorrect()).isTrue();
-                });
 
         long eventSequence = taskMapper.nextEventSequence(lease);
         AgentEvent event = new AgentEvent(
@@ -114,6 +104,16 @@ class MySqlPersistenceIntegrationTest {
                 5,
                 0L
         );
+        plannerCallMapper.saveForTurn(taskId, turnId, new PlannerOutput<>(
+                Map.of("type", "CALL_TOOL"), false, "", 12, 3, 40L,
+                "NEXT_ACTION", "FAST", "qwen-fast", 1, true
+        ), true);
+        assertThat(plannerCallMapper.findByTaskId(taskId)).singleElement()
+                .satisfies(call -> {
+                    assertThat(call.turnId()).isEqualTo(turnId);
+                    assertThat(call.actualModel()).isEqualTo("qwen-fast");
+                    assertThat(call.routeCorrect()).isTrue();
+                });
         long toolCallId = agentRuntimeMapper.startToolCallFenced(
                 lease,
                 turnId,
