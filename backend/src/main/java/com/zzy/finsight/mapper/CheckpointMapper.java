@@ -1,6 +1,9 @@
 package com.zzy.finsight.mapper;
 
 import com.zzy.finsight.domain.CheckpointRecord;
+import com.zzy.finsight.agent.memory.AgentCheckpointCodec;
+import com.zzy.finsight.agent.memory.AgentCheckpointState;
+import com.zzy.finsight.agent.memory.AgentState;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -18,10 +21,23 @@ public interface CheckpointMapper {
             long taskId,
             int turnNo,
             String contextHash,
-            Object state
+            AgentState state
     ) {
         insert(threadId, taskId, "AGENT_STATE", Math.max(1, turnNo), contextHash,
-                "agent-state-v1", Math.max(0, turnNo), state, LocalDateTime.now());
+                AgentCheckpointCodec.CURRENT_VERSION, Math.max(0, turnNo),
+                AgentCheckpointState.from(state), LocalDateTime.now());
+    }
+
+    /** 兼容非 AgentState 的旧集成测试和迁移工具。 */
+    default void saveAgent(
+            String threadId,
+            long taskId,
+            int turnNo,
+            String contextHash,
+            Object legacyState
+    ) {
+        insert(threadId, taskId, "AGENT_STATE", Math.max(1, turnNo), contextHash,
+                "agent-state-v1", Math.max(0, turnNo), legacyState, LocalDateTime.now());
     }
 
     int insert(

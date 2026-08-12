@@ -2,6 +2,7 @@ package com.zzy.finsight.dto.agent;
 
 import com.zzy.finsight.domain.AgentToolCallRecord;
 import com.zzy.finsight.domain.AgentTurnRecord;
+import com.zzy.finsight.domain.AgentStepLogRecord;
 
 import java.util.List;
 
@@ -12,16 +13,19 @@ import java.util.List;
  * @param stage 当前运行阶段。
  * @param turns Planner决策轮次。
  * @param toolCalls 白名单工具调用记录。
+ * @param events 供实时 SSE 与历史回放共用的持久化 Agent 事件。
  */
 public record ResearchRunTraceResponse(
         long taskId,
         String status,
         String stage,
         List<AgentTurnRecord> turns,
-        List<AgentToolCallRecord> toolCalls
+        List<AgentToolCallRecord> toolCalls,
+        List<AgentStepLogRecord> events
 ) {
     public ResearchRunTraceResponse {
         turns = turns == null ? List.of() : List.copyOf(turns);
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+        events = events == null ? List.of() : List.copyOf(events);
     }
 }

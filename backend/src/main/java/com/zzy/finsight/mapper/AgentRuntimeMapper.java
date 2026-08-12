@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 持久化 Agent 决策轮次和白名单工具调用。
@@ -89,6 +90,11 @@ public interface AgentRuntimeMapper {
     );
 
     List<AgentTurnRecord> findTurns(@Param("taskId") long taskId);
+
+    Optional<AgentTurnRecord> findTurn(
+            @Param("taskId") long taskId,
+            @Param("turnNo") int turnNo
+    );
 
     List<AgentToolCallRecord> findToolCalls(@Param("taskId") long taskId);
 }

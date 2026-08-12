@@ -9,6 +9,8 @@
             <arg column="stage" javaType="string"/>
             <arg column="attempt_no" javaType="_int"/>
             <arg column="generation_context_hash" javaType="string"/>
+            <arg column="state_version" javaType="string"/>
+            <arg column="turn_no" javaType="_int"/>
             <arg column="state_json" javaType="string"/>
             <arg column="created_at" javaType="java.time.LocalDateTime"/>
         </constructor>
@@ -33,7 +35,8 @@
     </insert>
 
     <select id="findLatest" resultMap="checkpointResult">
-        SELECT id, thread_id, task_id, stage, attempt_no, generation_context_hash, state_json, created_at
+        SELECT id, thread_id, task_id, stage, attempt_no, generation_context_hash,
+               state_version, turn_no, state_json, created_at
         FROM checkpoint
         WHERE task_id = #{taskId}
           AND stage = #{stage}

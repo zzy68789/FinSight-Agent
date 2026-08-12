@@ -52,7 +52,10 @@ class SearchPublicEvidenceToolTest {
         state.setRequest(request);
         state.setSubject(new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"));
 
-        ToolResult toolResult = tool.execute(new ToolContext(7L, 11L, request, state), Map.of());
+        ToolResult toolResult = tool.execute(
+                new ToolContext(7L, 11L, request, state),
+                new SearchPublicEvidenceArguments("")
+        );
 
         ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
         verify(searchService).search(query.capture(), anyInt());
@@ -79,7 +82,10 @@ class SearchPublicEvidenceToolTest {
         state.setSubject(new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"));
         when(searchService.search(anyString(), anyInt())).thenReturn(List.of());
 
-        ToolResult result = tool.execute(new ToolContext(7L, 11L, request, state), Map.of());
+        ToolResult result = tool.execute(
+                new ToolContext(7L, 11L, request, state),
+                new SearchPublicEvidenceArguments("")
+        );
 
         assertThat(result.status()).isEqualTo("FAILED");
         assertThat(result.errorCode()).isEqualTo("DATA_MISSING");

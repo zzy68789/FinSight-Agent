@@ -1,5 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
@@ -15,13 +16,12 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 根据自然语言研究问题检索公开网页证据，并将有效结果增量写入证据账本。
  */
 @Component
-public class SearchPublicEvidenceTool implements ResearchTool {
+public class SearchPublicEvidenceTool implements ResearchTool<SearchPublicEvidenceArguments> {
     private static final int SEARCH_LIMIT = 5;
     private static final int MAX_EXCERPT_LENGTH = 1200;
     private final SearchService searchService;
@@ -52,13 +52,22 @@ public class SearchPublicEvidenceTool implements ResearchTool {
     }
 
     @Override
-    public boolean allowParallel() {
-        return true;
+    public ToolDefinition definition() {
+        return new ToolDefinition(
+                "search_public_evidence",
+                "围绕当前自然语言研究问题检索公告、新闻和公开网页证据；参数可包含 query 以收窄问题。",
+                true,
+                true,
+                true,
+                true,
+                List.of(ToolParameterSchema.optionalString("query", "用于收窄公开资料检索范围的研究问题", 500)),
+                Map.of("query", "string", "evidence", "FinancialEvidenceItem[]", "evidenceCount", "integer")
+        );
     }
 
     @Override
-    public Set<String> allowedArguments() {
-        return Set.of("query");
+    public boolean allowParallel() {
+        return true;
     }
 
     @Override
@@ -67,11 +76,27 @@ public class SearchPublicEvidenceTool implements ResearchTool {
     }
 
     @Override
-    public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+    public SearchPublicEvidenceArguments decode(Map<String, Object> arguments, ObjectMapper objectMapper) {
+        Object raw = arguments == null ? null : arguments.get("query");
+        if (raw != null && !(raw instanceof String)) {
+            throw new IllegalArgumentException("query 必须是字符串");
+        }
+        return new SearchPublicEvidenceArguments(raw == null ? "" : (String) raw);
+    }
+
+    @Override
+    public void validate(SearchPublicEvidenceArguments arguments) {
+        if (arguments.query().length() > 500) {
+            throw new IllegalArgumentException("query 长度不得超过 500 个字符");
+        }
+    }
+
+    @Override
+    public ToolResult execute(ToolContext context, SearchPublicEvidenceArguments arguments) {
         if (context.state().getSubject() == null) {
             return ToolResult.failure("尚未解析证券主体", "SUBJECT_REQUIRED", false);
         }
-        String focusedQuestion = stringArgument(arguments, "query");
+        String focusedQuestion = arguments.query();
         if (focusedQuestion.isBlank()) {
             focusedQuestion = context.request().getResearchQuestion();
         }
@@ -144,13 +169,6 @@ public class SearchPublicEvidenceTool implements ResearchTool {
                 LocalDateTime.now(),
                 ""
         );
-    }
-
-    private String stringArgument(Map<String, Object> arguments, String name) {
-        if (arguments == null || arguments.get(name) == null) {
-            return "";
-        }
-        return String.valueOf(arguments.get(name)).trim();
     }
 
     private boolean httpUrl(String url) {

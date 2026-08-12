@@ -1021,6 +1021,12 @@ import {
     setAuthToken
 } from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
+import {
+    agentEventTypeLabel,
+    createAgentEventProjection,
+    reduceAgentEvent,
+    replayAgentEvents
+} from './modules/agentEventProjection';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
 
@@ -1049,6 +1055,7 @@ const researchTimeHorizon = ref('2Y');
 const agentPlan = ref(null);
 const agentBudget = ref(null);
 const agentEvents = ref([]);
+const agentProjection = ref(createAgentEventProjection());
 const latestStockTaskId = ref(null);
 const financialMetrics = ref([]);
 const financialEvidence = ref([]);
@@ -1270,30 +1277,7 @@ const searchModeLabel = (mode) => {
 };
 
 const currentStepLabel = (step) => {
-    const labels = {
-        idle: '就绪',
-        run_created: '任务创建',
-        plan_created: '研究规划',
-        tool_started: '工具执行',
-        tool_completed: '观察更新',
-        replanned: '重新规划',
-        synthesis_started: '综合撰写',
-        synthesis_completed: '报告生成',
-        review_completed: '确定性门禁',
-        run_completed: '已完成',
-        run_stopped: '已停止',
-        stock_resolve: '证券解析',
-        data_snapshot: '数据快照',
-        metric_engine: '指标计算',
-        risk_assessment: '风险评分',
-        evidence_collect: '证据账本',
-        bull_bear_research: '多空研究',
-        writer: '撰写中',
-        reviewer: '质检中',
-        evaluation: '评测中',
-        done: '已完成'
-    };
-    return labels[step] || step || '-';
+    return agentEventTypeLabel(step);
 };
 
 const stepNameLabel = (step) => {
@@ -1570,6 +1554,7 @@ const startStockResearch = async () => {
     agentPlan.value = null;
     agentBudget.value = null;
     agentEvents.value = [];
+    agentProjection.value = createAgentEventProjection();
     logs.value.push(`[初始化] Research Agent：${stockTicker.value.trim().toUpperCase()}，问题：${researchQuestion.value.trim()}`);
 
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
@@ -1617,129 +1602,33 @@ const startStockResearch = async () => {
     }
 };
 
+const applyAgentProjection = (projection, animateReport = false) => {
+    const nextReport = projection.finalReport || '';
+    agentProjection.value = projection;
+    currentStep.value = projection.currentStep;
+    completedSteps.value = projection.completedSteps;
+    agentEvents.value = projection.events;
+    agentPlan.value = projection.plan;
+    agentBudget.value = projection.budget;
+    latestStockTaskId.value = projection.taskId || latestStockTaskId.value;
+    financialMetrics.value = projection.metrics;
+    financialEvidence.value = projection.evidence;
+    financialSnapshotSummary.value = projection.snapshotSummary;
+    financialRiskAssessment.value = projection.riskAssessment;
+    financialCompliance.value = projection.compliance;
+    financialEvaluation.value = projection.evaluation;
+    bullBearResearch.value = projection.bullBearResearch;
+    financialProviderStages.value = projection.providerStages;
+    logs.value = projection.logs;
+    if (animateReport && nextReport && nextReport !== displayedReport.value) {
+        displayedReport.value = '';
+        typeWriterEffect(nextReport);
+    }
+};
+
 const handleStockEvent = (event) => {
-    if (event.step) {
-        currentStep.value = event.step;
-        if (!completedSteps.value.includes(event.step)) {
-            completedSteps.value = [...completedSteps.value, event.step];
-        }
-    }
-    const payload = event.data || {};
-    agentEvents.value = [...agentEvents.value, {
-        id: payload.eventId || `${event.step}-${Date.now()}-${agentEvents.value.length}`,
-        type: event.step,
-        status: payload.status || 'SUCCESS',
-        turnNo: payload.turnNo || 0,
-        toolName: payload.toolName || '',
-        summary: payload.summary || payload.reason || ''
-    }].slice(-30);
-    if (event.step === 'run_created') {
-        agentBudget.value = payload.budget || null;
-        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
-        logs.value.push(`[运行时] 任务 #${payload.taskId || '-'} 已创建，最大 ${payload.budget?.maxTurns || '-'} 轮。`);
-    } else if (event.step === 'plan_created' || event.step === 'replanned') {
-        agentPlan.value = payload.plan || null;
-        logs.value.push(`[规划] ${agentPlan.value?.goal || researchQuestion.value}`);
-        if (payload.degraded) logs.value.push(`[规划降级] ${payload.degradedReason || 'LLM 不可用，使用确定性策略'}`);
-    } else if (event.step === 'tool_started') {
-        logs.value.push(`[工具] 第 ${payload.turnNo || '-'} 轮调用 ${payload.toolName || '-'}。`);
-    } else if (event.step === 'tool_completed') {
-        const result = payload.result || {};
-        logs.value.push(`[观察] ${payload.summary || `${payload.toolName || '工具'} 执行完成`}`);
-        if (result.subject) {
-            const subject = result.subject;
-            logs.value.push(`[证券解析] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别证券'}`);
-        }
-        if (result.evidence) {
-            const existing = new Map(financialEvidence.value.map((item) => [JSON.stringify(item), item]));
-            result.evidence.forEach((item) => existing.set(JSON.stringify(item), item));
-            financialEvidence.value = [...existing.values()];
-            financialSnapshotSummary.value = {
-                evidenceCount: financialEvidence.value.length,
-                missingCount: financialEvidence.value.filter((item) => item.issueCode).length
-            };
-        }
-        if (result.metrics) financialMetrics.value = result.metrics;
-        if (result.riskAssessment) financialRiskAssessment.value = result.riskAssessment;
-        if (result.research) bullBearResearch.value = result.research;
-    } else if (event.step === 'synthesis_completed') {
-        const finalReport = payload.finalReport;
-        if (finalReport) {
-            displayedReport.value = '';
-            typeWriterEffect(finalReport);
-        }
-        logs.value.push(`[综合] 第 ${payload.attempt || 1} 版研究报告已生成。`);
-    } else if (event.step === 'review_completed') {
-        financialCompliance.value = payload.compliance || null;
-        financialEvaluation.value = payload.evaluation || null;
-        logs.value.push(payload.reviewStatus === 'PASS' ? '[门禁] 引用、合规和评测已通过。' : `[门禁] 未通过：${payload.critique || '请查看轨迹'}`);
-    } else if (event.step === 'run_completed') {
-        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
-        logs.value.push(`[完成] 任务 #${latestStockTaskId.value || '-'} 已写入报告库。`);
-    } else if (event.step === 'run_stopped') {
-        latestStockTaskId.value = payload.taskId || latestStockTaskId.value;
-        logs.value.push(`[停止] ${payload.reason || 'Agent 未能在预算内形成可发布报告'}`);
-    } else if (event.step === 'stock_resolve') {
-        const subject = payload.subject || {};
-        const assetLabel = subject.assetType === 'ETF' ? 'ETF解析' : '股票解析';
-        logs.value.push(`[${assetLabel}] ${subject.fullCode || stockTicker.value}，${subject.companyName || '待识别上市公司'}`);
-    } else if (event.step === 'data_snapshot') {
-        financialSnapshotSummary.value = {
-            evidenceCount: payload.evidenceCount || 0,
-            missingCount: payload.missingCount || 0
-        };
-        logs.value.push(`[数据快照] 证据 ${financialSnapshotSummary.value.evidenceCount} 条，缺失标记 ${financialSnapshotSummary.value.missingCount} 条。`);
-    } else if (event.step === 'metric_engine') {
-        financialMetrics.value = payload.metrics || [];
-        logs.value.push(`[指标计算] 已计算 ${financialMetrics.value.length} 个财务指标。`);
-    } else if (event.step === 'risk_assessment') {
-        financialRiskAssessment.value = payload.riskAssessment || payload.risk_assessment || null;
-        const score = financialRiskAssessment.value?.finalScore ?? '-';
-        const level = financialRiskAssessment.value?.riskLevel || '-';
-        logs.value.push(`[风险评分] 综合风险 ${score}/10，等级：${level}。`);
-    } else if (event.step === 'evidence_collect') {
-        financialEvidence.value = payload.evidence || [];
-        financialProviderStages.value = payload.stageResults || payload.stage_results || [];
-        logs.value.push(`[证据账本] 有效证据 ${payload.effectiveCount || 0} 条。`);
-    } else if (event.step === 'bull_bear_research') {
-        bullBearResearch.value = payload.research || null;
-        const bullCount = bullBearResearch.value?.bullCases?.length || 0;
-        const bearCount = bullBearResearch.value?.bearCases?.length || 0;
-        logs.value.push(`[多空研究] 多头 ${bullCount} 条、空头 ${bearCount} 条论据已绑定证据编号。`);
-    } else if (event.step === 'writer') {
-        const generationMode = payload.generation_mode || payload.generationMode || '';
-        const fallbackReason = payload.fallback_reason || payload.fallbackReason || '';
-        if (generationMode === 'template-fallback') {
-            const reasonLabels = {
-                LLM_TIMEOUT: 'LLM 请求超时',
-                LLM_INVALID_STRUCTURE: 'LLM 输出结构不完整',
-                LLM_NOT_CONFIGURED: 'LLM 未配置',
-                LLM_EMPTY_RESPONSE: 'LLM 返回空内容',
-                LLM_CALL_FAILED: 'LLM 调用失败'
-            };
-            logs.value.push(`[撰写] ${reasonLabels[fallbackReason] || 'LLM 不可用'}，已使用确定性模板。`);
-        } else {
-            logs.value.push(`[撰写] 第 ${payload.attempt || 1} 版证券研究报告已由 LLM 生成。`);
-        }
-        const finalReport = payload.final_report || payload.finalReport;
-        if (finalReport) {
-            displayedReport.value = '';
-            typeWriterEffect(finalReport);
-        }
-    } else if (event.step === 'reviewer') {
-        const reviewStatus = payload.review_status || payload.reviewStatus;
-        const critique = payload.critique || '';
-        financialCompliance.value = payload.compliance || null;
-        logs.value.push(reviewStatus === 'PASS' ? '[引用审查] 已通过。' : `[引用审查] 未通过：${critique}`);
-    } else if (event.step === 'evaluation') {
-        financialEvaluation.value = payload.evaluation || null;
-        const status = financialEvaluation.value?.status || '-';
-        const score = financialEvaluation.value?.overallScore ?? '-';
-        logs.value.push(`[自动评测] ${status}，综合分：${score}。`);
-    } else if (event.step === 'done') {
-        latestStockTaskId.value = payload.taskId || null;
-        logs.value.push(`[完成] 任务 #${latestStockTaskId.value || '-'} 已写入报告库。`);
-    }
+    const base = { ...agentProjection.value, logs: [...logs.value] };
+    applyAgentProjection(reduceAgentEvent(base, event), true);
     scrollToBottom();
 };
 
@@ -1764,6 +1653,11 @@ const loadStockReplay = async () => {
         ]);
         stockReplay.value = replay;
         stockTrace.value = trace;
+        if (trace.events?.length) {
+            const projection = replayAgentEvents(trace.events);
+            projection.logs.push('[回放] 已使用与实时 SSE 相同的状态投影加载历史轨迹。');
+            applyAgentProjection(projection, false);
+        }
         logs.value.push('[回放] 已加载本次快照、证据、指标与可信度轨迹。');
         scrollToBottom();
     } catch (error) {

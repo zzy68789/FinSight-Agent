@@ -58,17 +58,11 @@ public class ToolPolicyGuard {
         }
         Set<String> currentHashes = new HashSet<>();
         for (ToolInvocation invocation : action.toolCalls()) {
-            ResearchTool tool = registry.require(invocation.toolName());
+            PreparedToolCall prepared = registry.prepare(invocation);
+            ResearchTool<?> tool = prepared.tool();
             if (state.hasPendingEvidenceRecovery() && !tool.producesEvidence()) {
                 throw new IllegalArgumentException(
                         "EVIDENCE_RECOVERY_TOOL_REQUIRED：补证据期间不得调用非证据工具 " + tool.name()
-                );
-            }
-            Set<String> unknownArguments = new HashSet<>(invocation.arguments().keySet());
-            unknownArguments.removeAll(tool.allowedArguments());
-            if (!unknownArguments.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "INVALID_TOOL_ARGUMENTS：%s 不支持参数 %s".formatted(tool.name(), unknownArguments)
                 );
             }
             if (action.type() == AgentActionType.CALL_TOOLS_PARALLEL && !tool.allowParallel()) {

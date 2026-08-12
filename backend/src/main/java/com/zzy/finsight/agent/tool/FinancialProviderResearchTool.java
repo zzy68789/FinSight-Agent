@@ -1,5 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.agent.memory.EvidenceMemory;
 import com.zzy.finsight.domain.stock.FinancialDataCollection;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
@@ -12,7 +13,7 @@ import java.util.Map;
 /**
  * 将单个金融数据 Provider 暴露为稳定、只读的 Agent 工具。
  */
-public class FinancialProviderResearchTool implements ResearchTool {
+public class FinancialProviderResearchTool implements ResearchTool<NoToolArguments> {
     private final String name;
     private final String description;
     private final FinancialDataProvider provider;
@@ -41,6 +42,27 @@ public class FinancialProviderResearchTool implements ResearchTool {
     }
 
     @Override
+    public ToolDefinition definition() {
+        return new ToolDefinition(
+                name,
+                description,
+                true,
+                true,
+                true,
+                true,
+                List.of(),
+                Map.of(
+                        "provider", "string",
+                        "evidence", "FinancialEvidenceItem[]",
+                        "evidenceCount", "integer",
+                        "effectiveCount", "integer",
+                        "marketSeries", "MarketDataPoint[]",
+                        "etfDeepData", "object"
+                )
+        );
+    }
+
+    @Override
     public boolean allowParallel() {
         return true;
     }
@@ -51,7 +73,12 @@ public class FinancialProviderResearchTool implements ResearchTool {
     }
 
     @Override
-    public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+    public NoToolArguments decode(Map<String, Object> arguments, ObjectMapper objectMapper) {
+        return ToolDecoders.noArguments(arguments);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext context, NoToolArguments arguments) {
         if (context.state().getSubject() == null) {
             return ToolResult.failure("尚未解析证券主体", "SUBJECT_REQUIRED", false);
         }

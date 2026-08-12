@@ -242,7 +242,7 @@ public class ResearchPlanner {
     }
 
     private Set<String> evidenceToolNames(ResearchToolRegistry registry) {
-        Collection<com.zzy.finsight.agent.tool.ResearchTool> tools = registry == null ? null : registry.all();
+        Collection<com.zzy.finsight.agent.tool.ResearchTool<?>> tools = registry == null ? null : registry.all();
         if (tools == null) {
             return Set.of();
         }

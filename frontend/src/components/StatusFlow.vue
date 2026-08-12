@@ -58,7 +58,7 @@
         >
           <div class="min-w-0">
             <p class="truncate text-xs font-semibold text-slate-200">
-              Turn {{ event.turnNo || 0 }} · {{ event.toolName || eventTypeLabel(event.type) }}
+              Turn {{ event.turnNo || 0 }} · {{ event.toolName || agentEventTypeLabel(event.type) }}
             </p>
             <p v-if="event.summary" class="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{{ event.summary }}</p>
           </div>
@@ -83,6 +83,7 @@ import {
   SearchIcon,
   ShieldCheckIcon
 } from 'lucide-vue-next';
+import { agentEventTypeLabel } from '../modules/agentEventProjection';
 
 const props = defineProps({
   currentStep: { type: String, default: 'idle' },
@@ -122,22 +123,6 @@ const statusLabel = computed(() => {
   if (props.currentStep === 'run_stopped') return '已停止';
   return '进行中';
 });
-
-const eventTypeLabel = (type) => {
-  const labels = {
-    run_created: '任务创建',
-    plan_created: '研究规划',
-    tool_started: '工具开始',
-    tool_completed: '工具观察',
-    replanned: '重新规划',
-    synthesis_started: '开始综合',
-    synthesis_completed: '报告生成',
-    review_completed: '确定性门禁',
-    run_completed: '任务完成',
-    run_stopped: '受控停止'
-  };
-  return labels[type] || type;
-};
 
 const isActive = (step) => props.currentStep === step.id;
 

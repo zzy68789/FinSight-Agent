@@ -36,12 +36,14 @@ CREATE TABLE IF NOT EXISTS research_task (
   heartbeat_at DATETIME COMMENT '工作流最近心跳时间',
   lease_owner VARCHAR(128) COMMENT '当前任务租约持有者',
   lease_until DATETIME COMMENT '当前任务租约到期时间',
+  lease_epoch BIGINT NOT NULL DEFAULT 0 COMMENT 'Agent租约单调代次，用于拒绝过期执行者提交',
   created_at DATETIME NOT NULL COMMENT '记录创建时间',
   updated_at DATETIME NOT NULL COMMENT '记录最后更新时间',
   INDEX idx_research_task_owner_id (owner_id),
   INDEX idx_research_task_thread_id (thread_id),
   INDEX idx_research_task_recovery (status, heartbeat_at),
-  INDEX idx_research_task_runtime_recovery (runtime_type, status, heartbeat_at)
+  INDEX idx_research_task_runtime_recovery (runtime_type, status, heartbeat_at),
+  INDEX idx_research_task_lease_fence (id, lease_owner, lease_epoch)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_step_log (

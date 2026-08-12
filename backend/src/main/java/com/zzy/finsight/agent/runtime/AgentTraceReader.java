@@ -4,6 +4,7 @@ import com.zzy.finsight.domain.TaskExecutionRecord;
 import com.zzy.finsight.dto.agent.ResearchRunTraceResponse;
 import com.zzy.finsight.mapper.AgentRuntimeMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
+import com.zzy.finsight.mapper.AgentStepLogMapper;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,10 +14,16 @@ import org.springframework.stereotype.Component;
 public class AgentTraceReader {
     private final ResearchTaskMapper taskMapper;
     private final AgentRuntimeMapper runtimeMapper;
+    private final AgentStepLogMapper stepLogMapper;
 
-    public AgentTraceReader(ResearchTaskMapper taskMapper, AgentRuntimeMapper runtimeMapper) {
+    public AgentTraceReader(
+            ResearchTaskMapper taskMapper,
+            AgentRuntimeMapper runtimeMapper,
+            AgentStepLogMapper stepLogMapper
+    ) {
         this.taskMapper = taskMapper;
         this.runtimeMapper = runtimeMapper;
+        this.stepLogMapper = stepLogMapper;
     }
 
     /** 查询指定用户任务的 Planner 与工具调用轨迹。 */
@@ -28,7 +35,8 @@ public class AgentTraceReader {
                 task.status(),
                 task.stage(),
                 runtimeMapper.findTurns(taskId),
-                runtimeMapper.findToolCalls(taskId)
+                runtimeMapper.findToolCalls(taskId),
+                stepLogMapper.findByTaskId(taskId)
         );
     }
 }

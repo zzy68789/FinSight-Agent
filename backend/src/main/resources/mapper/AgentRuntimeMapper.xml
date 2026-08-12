@@ -80,6 +80,14 @@
         FROM agent_turn WHERE task_id = #{taskId} ORDER BY turn_no ASC
     </select>
 
+    <select id="findTurn" resultMap="turnResult">
+        SELECT id, task_id, turn_no, phase, action_type, action_json, observation_summary,
+               status, input_tokens, output_tokens, duration_ms, created_at
+        FROM agent_turn
+        WHERE task_id = #{taskId} AND turn_no = #{turnNo}
+        LIMIT 1
+    </select>
+
     <select id="findToolCalls" resultMap="toolCallResult">
         SELECT id, task_id, turn_id, call_id, tool_name, arguments_hash, arguments_json,
                result_json, status, attempt_no, duration_ms, error_code, error_message,

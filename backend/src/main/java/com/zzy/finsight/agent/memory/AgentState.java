@@ -333,6 +333,19 @@ public class AgentState {
         }
     }
 
+    /** 从持久化工具 journal 重建去重索引，不重复追加检查点已经保留的短观察。 */
+    public void restoreToolJournalEntry(ToolInvocation invocation, String callHash) {
+        String toolName = invocation == null ? "" : invocation.toolName();
+        completedTools.add(toolName);
+        executedCallHashes.add(callHash);
+        if (invocation != null) {
+            toolInvocationHistory.add(invocation);
+            if (toolInvocationHistory.size() > 30) {
+                toolInvocationHistory.remove(0);
+            }
+        }
+    }
+
     /** 根据质量门禁创建一轮需要差异化调用证据工具的恢复任务。 */
     public void beginEvidenceRecovery(QualityGateDecision decision) {
         evidenceRecoveryCount++;

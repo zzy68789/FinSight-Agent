@@ -12,6 +12,7 @@ import com.zzy.finsight.agent.quality.QualityGateDecisionEngine;
 import com.zzy.finsight.agent.quality.QualityGateRoute;
 import com.zzy.finsight.agent.tool.ResearchTool;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
+import com.zzy.finsight.agent.tool.PreparedToolCall;
 import com.zzy.finsight.agent.tool.ToolContext;
 import com.zzy.finsight.agent.tool.ToolPolicyGuard;
 import com.zzy.finsight.agent.tool.ToolResult;
@@ -25,17 +26,12 @@ import com.zzy.finsight.domain.stock.CitationReviewResult;
 import com.zzy.finsight.domain.stock.FinancialComplianceReviewResult;
 import com.zzy.finsight.domain.stock.FinancialEvaluationResult;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
-import com.zzy.finsight.mapper.AgentRuntimeMapper;
 import com.zzy.finsight.mapper.AgentStepLogMapper;
-import com.zzy.finsight.mapper.CheckpointMapper;
-import com.zzy.finsight.mapper.FinancialSnapshotMapper;
-import com.zzy.finsight.mapper.ResearchTaskMapper;
 import com.zzy.finsight.service.ReportService;
 import com.zzy.finsight.service.TaskRuntimeStateService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,11 +56,8 @@ public class ResearchAgentRuntime {
     private final ResearchToolRegistry toolRegistry;
     private final ToolPolicyGuard toolPolicyGuard;
     private final AgentBudgetGuard budgetGuard;
-    private final AgentRuntimeMapper agentRuntimeMapper;
     private final AgentStepLogMapper stepLogMapper;
-    private final CheckpointMapper checkpointMapper;
-    private final ResearchTaskMapper taskMapper;
-    private final FinancialSnapshotMapper snapshotMapper;
+    private final DurableTurnCommitModule turnCommitModule;
     private final TaskRuntimeStateService runtimeStateService;
     private final InvestmentReportWriter reportWriter;
     private final CitationReviewer citationReviewer;
@@ -80,11 +73,8 @@ public class ResearchAgentRuntime {
             ResearchToolRegistry toolRegistry,
             ToolPolicyGuard toolPolicyGuard,
             AgentBudgetGuard budgetGuard,
-            AgentRuntimeMapper agentRuntimeMapper,
             AgentStepLogMapper stepLogMapper,
-            CheckpointMapper checkpointMapper,
-            ResearchTaskMapper taskMapper,
-            FinancialSnapshotMapper snapshotMapper,
+            DurableTurnCommitModule turnCommitModule,
             TaskRuntimeStateService runtimeStateService,
             InvestmentReportWriter reportWriter,
             CitationReviewer citationReviewer,
@@ -99,11 +89,8 @@ public class ResearchAgentRuntime {
         this.toolRegistry = toolRegistry;
         this.toolPolicyGuard = toolPolicyGuard;
         this.budgetGuard = budgetGuard;
-        this.agentRuntimeMapper = agentRuntimeMapper;
         this.stepLogMapper = stepLogMapper;
-        this.checkpointMapper = checkpointMapper;
-        this.taskMapper = taskMapper;
-        this.snapshotMapper = snapshotMapper;
+        this.turnCommitModule = turnCommitModule;
         this.runtimeStateService = runtimeStateService;
         this.reportWriter = reportWriter;
         this.citationReviewer = citationReviewer;
@@ -120,7 +107,7 @@ public class ResearchAgentRuntime {
             long ownerId,
             AgentState state,
             AgentBudget budget,
-            String leaseOwner,
+            LeaseToken lease,
             AgentEventListener listener
     ) {
         AgentEventListener events = listener == null ? AgentEventListener.noop() : listener;
@@ -146,7 +133,7 @@ public class ResearchAgentRuntime {
                     "degraded", planOutput.degraded(),
                     "degradedReason", planOutput.degradedReason()
             ), planOutput.durationMs(), planOutput.degraded() ? "DEGRADED" : "SUCCESS", planOutput.degradedReason());
-            checkpoint(state);
+            turnCommitModule.checkpointAndRenew(state, lease);
         }
 
         while (!budgetGuard.exhausted(state, budget) && System.nanoTime() < deadlineNanos) {
@@ -156,12 +143,15 @@ public class ResearchAgentRuntime {
             AgentAction action = actionOutput.value();
             state.setTurnNo(state.getTurnNo() + 1);
             long turnStartedAt = System.nanoTime();
-            long turnId = agentRuntimeMapper.saveTurn(
-                    state.getTaskId(), state.getTurnNo(), state.getPhase(), action.type().name(), action,
-                    "", "PLANNED", actionOutput.inputTokens(), actionOutput.outputTokens(), actionOutput.durationMs()
+            long turnId = turnCommitModule.openTurn(
+                    state, action, actionOutput.inputTokens(), actionOutput.outputTokens(), actionOutput.durationMs()
             );
 
             try {
+                List<CommittedToolCall> committedTools = List.of();
+                String observation;
+                String turnStatus = "SUCCESS";
+                SynthesisOutcome synthesis = null;
                 try {
                     toolPolicyGuard.validate(
                             action,
@@ -170,73 +160,74 @@ public class ResearchAgentRuntime {
                             budget.maxParallelTools()
                     );
                 } catch (IllegalArgumentException exception) {
-                    finishTurn(turnId, exception.getMessage(), "FAILED", turnStartedAt);
-                    return stop(state, events, "FAILED_INVALID_ACTION", exception.getMessage());
+                    commitTurn(ownerId, turnId, state, exception.getMessage(), "FAILED", turnStartedAt, List.of(), lease);
+                    return stop(state, events, "FAILED_INVALID_ACTION", exception.getMessage(), lease);
                 }
                 if (action.type() == AgentActionType.CALL_TOOL
                         || action.type() == AgentActionType.CALL_TOOLS_PARALLEL) {
                     state.setPhase("RUNNING_TOOLS");
-                    String observation = executeTools(
+                    ToolBatchOutcome tools = executeTools(
                             ownerId, state, action, turnId, budget, events
                     );
-                    finishTurn(turnId, observation, "SUCCESS", turnStartedAt);
+                    observation = tools.observation();
+                    committedTools = tools.committedCalls();
+                    commitTurn(ownerId, turnId, state, observation, turnStatus, turnStartedAt, committedTools, lease);
+                    publishCompletedTools(state, events, tools.completedExecutions());
                     if (state.getConsecutiveNoNewEvidenceTurns() >= 2) {
                         return stop(
                                 state,
                                 events,
                                 "INSUFFICIENT_EVIDENCE",
-                                "连续 2 轮证据采集未产生新增有效证据"
+                                "连续 2 轮证据采集未产生新增有效证据",
+                                lease
                         );
                     }
                 } else if (action.type() == AgentActionType.REPLAN) {
-                    String observation = executeReplan(state, budget, events);
-                    finishTurn(turnId, observation, "SUCCESS", turnStartedAt);
+                    observation = executeReplan(state, budget, events);
+                    commitTurn(ownerId, turnId, state, observation, turnStatus, turnStartedAt, List.of(), lease);
                 } else if (action.type() == AgentActionType.SYNTHESIZE) {
                     if (!readyForSynthesis(state)) {
                         state.setLastReviewReason("EVIDENCE_INSUFFICIENT：主体、有效证据、指标或风险结果尚未齐备");
-                        String observation = executeReplan(state, budget, events);
-                        finishTurn(turnId, observation, "DEGRADED", turnStartedAt);
+                        observation = executeReplan(state, budget, events);
+                        turnStatus = "DEGRADED";
+                        commitTurn(ownerId, turnId, state, observation, turnStatus, turnStartedAt, List.of(), lease);
                     } else {
                         state.setPhase("SYNTHESIZING");
                         publish(state, events, "synthesis_started", mapOf(
                                 "reason", action.reason(),
                                 "evidenceCount", state.getSnapshot().evidenceItems().size()
                         ), 0L, "SUCCESS", "");
-                        SynthesisOutcome synthesis = synthesize(ownerId, state, budget, events);
-                        finishTurn(turnId, synthesis.reason(), synthesis.completed() ? "SUCCESS" : "DEGRADED", turnStartedAt);
-                        checkpoint(state);
+                        synthesis = synthesize(ownerId, state, budget, events);
+                        turnStatus = synthesis.completed() ? "SUCCESS" : "DEGRADED";
+                        commitTurn(ownerId, turnId, state, synthesis.reason(), turnStatus, turnStartedAt, List.of(), lease);
                         if (synthesis.completed()) {
-                            return complete(state, events, synthesis.reportId());
+                            return complete(state, events, synthesis.reportId(), lease);
                         }
                         if (!synthesis.continueResearch()) {
-                            return stop(state, events, synthesis.stopStatus(), synthesis.reason());
+                            return stop(state, events, synthesis.stopStatus(), synthesis.reason(), lease);
                         }
                     }
                 } else {
-                    finishTurn(turnId, action.reason(), "DEGRADED", turnStartedAt);
-                    return stop(state, events, "INSUFFICIENT_EVIDENCE", action.reason());
+                    commitTurn(ownerId, turnId, state, action.reason(), "DEGRADED", turnStartedAt, List.of(), lease);
+                    return stop(state, events, "INSUFFICIENT_EVIDENCE", action.reason(), lease);
                 }
-                renew(state, leaseOwner);
-                checkpoint(state);
             } catch (IllegalStateException exception) {
                 if (exception.getMessage() != null && exception.getMessage().startsWith("BUDGET_EXHAUSTED")) {
-                    finishTurn(turnId, exception.getMessage(), "DEGRADED", turnStartedAt);
-                    return stop(state, events, "INSUFFICIENT_EVIDENCE", exception.getMessage());
+                    commitTurn(ownerId, turnId, state, exception.getMessage(), "DEGRADED", turnStartedAt, List.of(), lease);
+                    return stop(state, events, "INSUFFICIENT_EVIDENCE", exception.getMessage(), lease);
                 }
-                finishTurn(turnId, exception.getMessage(), "FAILED", turnStartedAt);
                 throw exception;
             } catch (RuntimeException exception) {
-                finishTurn(turnId, exception.getMessage(), "FAILED", turnStartedAt);
                 throw exception;
             }
         }
         String reason = System.nanoTime() >= deadlineNanos
                 ? "BUDGET_EXHAUSTED：整体运行超时"
                 : "BUDGET_EXHAUSTED：轮次或工具调用预算已耗尽";
-        return stop(state, events, "INSUFFICIENT_EVIDENCE", reason);
+        return stop(state, events, "INSUFFICIENT_EVIDENCE", reason, lease);
     }
 
-    private String executeTools(
+    private ToolBatchOutcome executeTools(
             long ownerId,
             AgentState state,
             AgentAction action,
@@ -252,10 +243,13 @@ public class ResearchAgentRuntime {
         boolean evidenceToolCalled = false;
         boolean recoveryBatch = state.hasPendingEvidenceRecovery();
         long newEffectiveEvidence = 0L;
+        List<CompletedToolExecution> completedExecutions = new ArrayList<>();
         for (PendingToolExecution execution : pending) {
-            CompletedToolExecution completed = awaitTool(
+            ToolAttemptOutcome attemptOutcome = awaitTool(
                     ownerId, state, turnId, execution, budget, events
             );
+            CompletedToolExecution completed = attemptOutcome.finalAttempt();
+            completedExecutions.addAll(attemptOutcome.attempts());
             summaries.add(completed.result().summary());
             boolean producesEvidence = toolRegistry.require(
                     completed.invocation().toolName()
@@ -273,37 +267,23 @@ public class ResearchAgentRuntime {
                         completed.invocation(), toolNewEffectiveEvidence
                 );
             }
-            persistToolEffects(ownerId, state, completed.databaseId(), completed.invocation(), completed.result());
             state.recordObservation(
                     completed.invocation(),
                     completed.callHash(),
                     completed.result().summary()
             );
-            publish(state, events, "tool_completed", mapOf(
-                    "callId", completed.callId(),
-                    "toolName", completed.invocation().toolName(),
-                    "result", completed.result().payload(),
-                    "summary", completed.result().summary(),
-                    "errorCode", completed.result().errorCode(),
-                    "retryable", completed.result().retryable()
-            ), completed.durationMs(), completed.result().status(), completed.result().errorCode());
-            if (recoveryAttempt) {
-                publish(state, events, "evidence_recovery_progress", mapOf(
-                        "directive", state.getEvidenceRecoveryDirective(),
-                        "toolName", completed.invocation().toolName(),
-                        "arguments", completed.invocation().arguments(),
-                        "newEffectiveEvidenceCount", toolNewEffectiveEvidence
-                ), completed.durationMs(),
-                        state.hasPendingEvidenceRecovery() ? "DEGRADED" : "SUCCESS",
-                        state.hasPendingEvidenceRecovery() ? "本次调用未产生新增有效证据" : "");
-            }
         }
         if (evidenceToolCalled) {
             state.setConsecutiveNoNewEvidenceTurns(
                     newEffectiveEvidence > 0L ? 0 : state.getConsecutiveNoNewEvidenceTurns() + 1
             );
         }
-        return String.join("；", summaries);
+        List<CommittedToolCall> committedCalls = completedExecutions.stream()
+                .map(completed -> new CommittedToolCall(
+                        completed.databaseId(), completed.invocation(), completed.result(), completed.durationMs()
+                ))
+                .toList();
+        return new ToolBatchOutcome(String.join("；", summaries), committedCalls, completedExecutions);
     }
 
     private PendingToolExecution startTool(
@@ -314,11 +294,12 @@ public class ResearchAgentRuntime {
             int attemptNo,
             AgentEventListener events
     ) {
-        ResearchTool tool = toolRegistry.require(invocation.toolName());
+        PreparedToolCall prepared = toolRegistry.prepare(invocation);
+        ResearchTool<?> tool = prepared.tool();
         String callHash = toolPolicyGuard.callHash(invocation);
         String callId = UUID.randomUUID().toString();
-        long databaseId = agentRuntimeMapper.startToolCall(
-                state.getTaskId(), turnId, callId, tool.name(), callHash, invocation.arguments(), attemptNo
+        long databaseId = turnCommitModule.journalToolStart(
+                state, turnId, callId, tool.name(), callHash, invocation.arguments(), attemptNo
         );
         state.setToolCallCount(state.getToolCallCount() + 1);
         publish(state, events, "tool_started", mapOf(
@@ -329,14 +310,17 @@ public class ResearchAgentRuntime {
         ), 0L, "RUNNING", "");
         long startedAt = System.nanoTime();
         Future<ToolResult> future = toolExecutor.submit(
-                () -> tool.execute(new ToolContext(ownerId, state.getTaskId(), state.getRequest(), state), invocation.arguments())
+                () -> toolRegistry.execute(
+                        prepared,
+                        new ToolContext(ownerId, state.getTaskId(), state.getRequest(), state)
+                )
         );
         return new PendingToolExecution(
                 invocation, tool, callHash, callId, databaseId, attemptNo, startedAt, future
         );
     }
 
-    private CompletedToolExecution awaitTool(
+    private ToolAttemptOutcome awaitTool(
             long ownerId,
             AgentState state,
             long turnId,
@@ -363,10 +347,6 @@ public class ResearchAgentRuntime {
             );
         }
         long durationMs = elapsedMs(execution.startedAt());
-        agentRuntimeMapper.completeToolCall(
-                execution.databaseId(), result, result.status(), durationMs,
-                result.errorCode(), "FAILED".equals(result.status()) ? result.summary() : null, LocalDateTime.now()
-        );
         if ("FAILED".equals(result.status())
                 && result.retryable()
                 && execution.attemptNo() < 2
@@ -375,16 +355,28 @@ public class ResearchAgentRuntime {
                 TimeUnit.SECONDS.sleep(1);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                return new CompletedToolExecution(
-                        execution.invocation(), execution.callHash(), execution.callId(), execution.databaseId(),
-                        result, durationMs
-                );
+                CompletedToolExecution interrupted = completed(execution, result, durationMs);
+                return new ToolAttemptOutcome(List.of(interrupted), interrupted);
             }
             PendingToolExecution retry = startTool(
                     ownerId, state, turnId, execution.invocation(), execution.attemptNo() + 1, events
             );
-            return awaitTool(ownerId, state, turnId, retry, budget, events);
+            CompletedToolExecution failedAttempt = completed(execution, result, durationMs);
+            ToolAttemptOutcome retried = awaitTool(ownerId, state, turnId, retry, budget, events);
+            List<CompletedToolExecution> attempts = new ArrayList<>();
+            attempts.add(failedAttempt);
+            attempts.addAll(retried.attempts());
+            return new ToolAttemptOutcome(attempts, retried.finalAttempt());
         }
+        CompletedToolExecution completed = completed(execution, result, durationMs);
+        return new ToolAttemptOutcome(List.of(completed), completed);
+    }
+
+    private CompletedToolExecution completed(
+            PendingToolExecution execution,
+            ToolResult result,
+            long durationMs
+    ) {
         return new CompletedToolExecution(
                 execution.invocation(), execution.callHash(), execution.callId(), execution.databaseId(),
                 result, durationMs
@@ -471,9 +463,7 @@ public class ResearchAgentRuntime {
                         ownerId, state.getThreadId(), state.getTaskId(), report, "PASS", "",
                         state.getSnapshotId(), dataHash, contextHash, null
                 );
-                snapshotMapper.updateSnapshot(
-                        state.getSnapshotId(), state.getSnapshot(), dataHash, "FROZEN", LocalDateTime.now()
-                );
+                turnCommitModule.freezeSnapshot(state, dataHash);
                 return new SynthesisOutcome(true, false, "COMPLETED", "全部确定性门禁通过", reportId);
             }
             previousReview = CitationReviewResult.fail(review.reason());
@@ -539,7 +529,11 @@ public class ResearchAgentRuntime {
         if (decision != null && !decision.passed()) {
             return CitationReviewResult.fail(decision.summary());
         }
-        return state.getCitationReview();
+        if (state.getCitationReview() != null) {
+            return state.getCitationReview();
+        }
+        return state.getLastReviewReason().isBlank()
+                ? null : CitationReviewResult.fail(state.getLastReviewReason());
     }
 
     private void publishReview(
@@ -587,10 +581,15 @@ public class ResearchAgentRuntime {
         }
     }
 
-    private RuntimeOutcome complete(AgentState state, AgentEventListener events, long reportId) {
+    private RuntimeOutcome complete(
+            AgentState state,
+            AgentEventListener events,
+            long reportId,
+            LeaseToken lease
+    ) {
         state.setPhase("COMPLETED");
         state.setStopReason("COMPLETED");
-        taskMapper.finishAgent(state.getTaskId(), "COMPLETED", "COMPLETED", null);
+        turnCommitModule.finishTask(state, lease, "COMPLETED", "COMPLETED", null);
         runtimeStateService.markStatus(state.getTaskId(), "COMPLETED");
         publish(state, events, "run_completed", mapOf(
                 "taskId", state.getTaskId(),
@@ -608,13 +607,13 @@ public class ResearchAgentRuntime {
             AgentState state,
             AgentEventListener events,
             String status,
-            String reason
+            String reason,
+            LeaseToken lease
     ) {
         state.setPhase(status);
         state.setStopReason(reason);
-        taskMapper.finishAgent(state.getTaskId(), status, reason, null);
+        turnCommitModule.finishTask(state, lease, status, reason, null);
         runtimeStateService.markStatus(state.getTaskId(), status);
-        checkpoint(state);
         publish(state, events, "run_stopped", mapOf(
                 "taskId", state.getTaskId(),
                 "status", status,
@@ -626,65 +625,50 @@ public class ResearchAgentRuntime {
         return new RuntimeOutcome(status, reason, 0L);
     }
 
-    private void renew(AgentState state, String leaseOwner) {
-        boolean updated = taskMapper.updateAgentProgress(
-                state.getTaskId(), state.getPhase(), state.getTurnNo(), state.getToolCallCount(),
-                leaseOwner, LocalDateTime.now().plusMinutes(5)
-        );
-        if (!updated) {
-            throw new IllegalStateException("任务租约已失效，拒绝继续执行 Agent");
-        }
-    }
-
-    private void checkpoint(AgentState state) {
-        checkpointMapper.saveAgent(
-                state.getThreadId(), state.getTaskId(), state.getTurnNo(), state.getContextHash(), state
-        );
-    }
-
-    private void persistToolEffects(
+    private void commitTurn(
             long ownerId,
+            long turnId,
             AgentState state,
-            long toolCallId,
-            ToolInvocation invocation,
-            ToolResult result
+            String observation,
+            String status,
+            long startedAt,
+            List<CommittedToolCall> toolCalls,
+            LeaseToken lease
     ) {
-        boolean snapshotCreated = false;
-        if (state.getSubject() != null && state.getSnapshot() != null && state.getSnapshotId() == null) {
-            String hash = fingerprinter.dataSnapshotHash(state.getSnapshot());
-            long snapshotId = snapshotMapper.saveAgentSnapshot(
-                    ownerId,
-                    state.getTaskId(),
-                    state.getThreadId(),
-                    state.getSnapshot(),
-                    "COLLECTING",
-                    hash,
-                    toolCallId
-            );
-            state.setSnapshotId(snapshotId);
-            snapshotCreated = true;
-        }
-        if (!snapshotCreated && state.getSnapshotId() != null && !result.evidenceItems().isEmpty()) {
-            snapshotMapper.appendEvidence(
-                    state.getSnapshotId(), state.getTaskId(), toolCallId, result.evidenceItems()
-            );
-        }
-        if (state.getSnapshotId() != null && state.getSnapshot() != null) {
-            String hash = fingerprinter.dataSnapshotHash(state.getSnapshot());
-            snapshotMapper.synchronizeEvidenceIssues(
-                    state.getSnapshotId(), state.getTaskId(), state.getSnapshot().evidenceItems()
-            );
-            snapshotMapper.updateSnapshot(
-                    state.getSnapshotId(), state.getSnapshot(), hash, "COLLECTING", LocalDateTime.now()
-            );
-        }
-        if ("calculate_financial_metrics".equals(invocation.toolName()) && state.getSnapshotId() != null) {
-            snapshotMapper.replaceMetrics(state.getSnapshotId(), state.getTaskId(), state.getMetrics());
-        }
+        turnCommitModule.commitTurn(new AgentTurnCommit(
+                ownerId, turnId, state, observation, status, elapsedMs(startedAt), toolCalls
+        ), lease);
     }
 
-    private void finishTurn(long turnId, String observation, String status, long startedAt) {
-        agentRuntimeMapper.completeTurn(turnId, observation, status, elapsedMs(startedAt));
+    private void publishCompletedTools(
+            AgentState state,
+            AgentEventListener events,
+            List<CompletedToolExecution> completedTools
+    ) {
+        for (CompletedToolExecution completed : completedTools) {
+            publish(state, events, "tool_completed", mapOf(
+                    "callId", completed.callId(),
+                    "toolName", completed.invocation().toolName(),
+                    "result", completed.result().payload(),
+                    "summary", completed.result().summary(),
+                    "errorCode", completed.result().errorCode(),
+                    "retryable", completed.result().retryable()
+            ), completed.durationMs(), completed.result().status(), completed.result().errorCode());
+            if (toolRegistry.require(completed.invocation().toolName()).producesEvidence()
+                    && state.getEvidenceRecoveryDirective() != null) {
+                long added = completed.result().evidenceItems().stream()
+                        .filter(FinancialEvidenceItem::effective)
+                        .count();
+                publish(state, events, "evidence_recovery_progress", mapOf(
+                        "directive", state.getEvidenceRecoveryDirective(),
+                        "toolName", completed.invocation().toolName(),
+                        "arguments", completed.invocation().arguments(),
+                        "newEffectiveEvidenceCount", added
+                ), completed.durationMs(),
+                        state.hasPendingEvidenceRecovery() ? "DEGRADED" : "SUCCESS",
+                        state.hasPendingEvidenceRecovery() ? "本次调用未产生新增有效证据" : "");
+            }
+        }
     }
 
     private boolean readyForSynthesis(AgentState state) {
@@ -757,7 +741,7 @@ public class ResearchAgentRuntime {
 
     private record PendingToolExecution(
             ToolInvocation invocation,
-            ResearchTool tool,
+            ResearchTool<?> tool,
             String callHash,
             String callId,
             long databaseId,
@@ -774,6 +758,19 @@ public class ResearchAgentRuntime {
             long databaseId,
             ToolResult result,
             long durationMs
+    ) {
+    }
+
+    private record ToolBatchOutcome(
+            String observation,
+            List<CommittedToolCall> committedCalls,
+            List<CompletedToolExecution> completedExecutions
+    ) {
+    }
+
+    private record ToolAttemptOutcome(
+            List<CompletedToolExecution> attempts,
+            CompletedToolExecution finalAttempt
     ) {
     }
 

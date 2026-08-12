@@ -15,11 +15,12 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentCheckpointCodecTest {
 
     @Test
-    void restoresPendingEvidenceRecoveryAndInvocationHistory() throws Exception {
+    void migratesV1ToLightweightStateAndKeepsRecoveryDirective() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         AgentCheckpointCodec codec = new AgentCheckpointCodec(objectMapper);
         AgentState state = new AgentState();
@@ -45,10 +46,35 @@ class AgentCheckpointCodecTest {
         assertThat(restored.hasPendingEvidenceRecovery()).isTrue();
         assertThat(restored.getEvidenceRecoveryDirective().issueCodes())
                 .containsExactly("EVIDENCE_INSUFFICIENT");
-        assertThat(restored.getToolInvocationHistory()).containsExactly(previous);
+        assertThat(restored.getToolInvocationHistory()).isEmpty();
         assertThat(restored.getReexecutionAllowedTools()).contains(
                 "calculate_financial_metrics", "assess_financial_risk", "check_evidence_coverage"
         );
+    }
+
+    @Test
+    void decodesCurrentLightweightVersionAndRejectsUnknownVersion() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        AgentCheckpointCodec codec = new AgentCheckpointCodec(objectMapper);
+        AgentState state = new AgentState();
+        state.setTaskId(11L);
+        state.setThreadId("thread-1");
+        state.setTurnNo(3);
+        state.setContextHash("context-hash");
+        String lightJson = objectMapper.writeValueAsString(AgentCheckpointState.from(state));
+        CheckpointRecord current = new CheckpointRecord(
+                2L, "thread-1", 11L, "AGENT_STATE", 3, "context-hash",
+                AgentCheckpointCodec.CURRENT_VERSION, 3, lightJson, LocalDateTime.now()
+        );
+
+        assertThat(codec.decode(current).orElseThrow().getTurnNo()).isEqualTo(3);
+        CheckpointRecord unknown = new CheckpointRecord(
+                3L, "thread-1", 11L, "AGENT_STATE", 3, "context-hash",
+                "agent-state-v99", 3, lightJson, LocalDateTime.now()
+        );
+        assertThatThrownBy(() -> codec.decode(unknown))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("UNSUPPORTED_AGENT_STATE_VERSION");
     }
 
     private QualityGateDecision evidenceRecoveryDecision() {

@@ -2,6 +2,7 @@ package com.zzy.finsight.mapper;
 
 import com.zzy.finsight.domain.ResearchTaskRecord;
 import com.zzy.finsight.domain.TaskExecutionRecord;
+import com.zzy.finsight.agent.runtime.LeaseToken;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -69,6 +70,15 @@ public interface ResearchTaskMapper {
         return acquireAttempt(taskId, leaseOwner, leaseUntil, LocalDateTime.now()) == 1;
     }
 
+    /** 获取新租约并返回用于后续事务 fencing 的单调令牌。 */
+    default Optional<LeaseToken> startAttemptToken(long taskId, String leaseOwner, LocalDateTime leaseUntil) {
+        if (acquireAttempt(taskId, leaseOwner, leaseUntil, LocalDateTime.now()) != 1) {
+            return Optional.empty();
+        }
+        return findActiveLeaseEpoch(taskId, leaseOwner)
+                .map(epoch -> new LeaseToken(taskId, leaseOwner, epoch));
+    }
+
     int acquireAttempt(
             @Param("taskId") long taskId,
             @Param("leaseOwner") String leaseOwner,
@@ -100,6 +110,31 @@ public interface ResearchTaskMapper {
             @Param("now") LocalDateTime now
     );
 
+    /** 使用 owner + epoch 双重 fencing 更新 Agent 心跳和计数。 */
+    default boolean updateAgentProgressFenced(
+            LeaseToken lease,
+            String stage,
+            int turnCount,
+            int toolCallCount,
+            LocalDateTime leaseUntil
+    ) {
+        return updateRunningAgentProgressFenced(
+                lease.taskId(), stage, turnCount, toolCallCount, lease.owner(), lease.epoch(),
+                leaseUntil, LocalDateTime.now()
+        ) == 1;
+    }
+
+    int updateRunningAgentProgressFenced(
+            @Param("taskId") long taskId,
+            @Param("stage") String stage,
+            @Param("turnCount") int turnCount,
+            @Param("toolCallCount") int toolCallCount,
+            @Param("leaseOwner") String leaseOwner,
+            @Param("leaseEpoch") long leaseEpoch,
+            @Param("leaseUntil") LocalDateTime leaseUntil,
+            @Param("now") LocalDateTime now
+    );
+
     /** 以完成、证据不足或失败状态结束 Agent 任务。 */
     default void finishAgent(long taskId, String status, String stopReason, String error) {
         finishAgentTask(taskId, status, status, stopReason, error, LocalDateTime.now());
@@ -112,6 +147,29 @@ public interface ResearchTaskMapper {
             @Param("stopReason") String stopReason,
             @Param("error") String error,
             @Param("now") LocalDateTime now
+    );
+
+    /** 仅允许当前租约代次结束 Agent 任务。 */
+    default boolean finishAgentFenced(LeaseToken lease, String status, String stopReason, String error) {
+        return finishAgentTaskFenced(
+                lease.taskId(), status, status, stopReason, error, lease.owner(), lease.epoch(), LocalDateTime.now()
+        ) == 1;
+    }
+
+    int finishAgentTaskFenced(
+            @Param("taskId") long taskId,
+            @Param("status") String status,
+            @Param("stage") String stage,
+            @Param("stopReason") String stopReason,
+            @Param("error") String error,
+            @Param("leaseOwner") String leaseOwner,
+            @Param("leaseEpoch") long leaseEpoch,
+            @Param("now") LocalDateTime now
+    );
+
+    Optional<Long> findActiveLeaseEpoch(
+            @Param("taskId") long taskId,
+            @Param("leaseOwner") String leaseOwner
     );
 
     default boolean markRetrying(long taskId, String expectedStatus) {

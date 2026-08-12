@@ -1,5 +1,6 @@
 package com.zzy.finsight.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +14,7 @@ import java.util.Map;
  * 检查当前研究计划的证据覆盖率和关键缺口。
  */
 @Component
-public class CheckEvidenceCoverageTool implements ResearchTool {
+public class CheckEvidenceCoverageTool implements ResearchTool<NoToolArguments> {
     @Override
     public String name() {
         return "check_evidence_coverage";
@@ -25,7 +26,26 @@ public class CheckEvidenceCoverageTool implements ResearchTool {
     }
 
     @Override
-    public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+    public ToolDefinition definition() {
+        return ToolDefinition.readOnly(
+                "check_evidence_coverage",
+                "检查当前计划是否已有可引用证据、确定性指标和风险结论，并返回缺失项。",
+                Map.of(
+                        "coverage", "decimal",
+                        "effectiveEvidenceCount", "integer",
+                        "missing", "string[]",
+                        "ready", "boolean"
+                )
+        );
+    }
+
+    @Override
+    public NoToolArguments decode(Map<String, Object> arguments, ObjectMapper objectMapper) {
+        return ToolDecoders.noArguments(arguments);
+    }
+
+    @Override
+    public ToolResult execute(ToolContext context, NoToolArguments arguments) {
         List<FinancialEvidenceItem> evidence = context.state().getSnapshot() == null
                 ? List.of() : context.state().getSnapshot().evidenceItems();
         long effective = evidence.stream().filter(FinancialEvidenceItem::effective).count();

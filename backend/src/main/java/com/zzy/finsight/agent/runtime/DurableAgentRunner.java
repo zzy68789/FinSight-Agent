@@ -1,14 +1,12 @@
 package com.zzy.finsight.agent.runtime;
 
 import com.zzy.finsight.agent.event.AgentEventListener;
-import com.zzy.finsight.agent.memory.AgentCheckpointCodec;
 import com.zzy.finsight.agent.memory.AgentState;
+import com.zzy.finsight.agent.memory.AgentStateStore;
 import com.zzy.finsight.agent.planning.ResearchPlanner;
-import com.zzy.finsight.domain.CheckpointRecord;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.infrastructure.serialization.ResearchRunRequestCodec;
 import com.zzy.finsight.mapper.AgentStepLogMapper;
-import com.zzy.finsight.mapper.CheckpointMapper;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
 import com.zzy.finsight.service.TaskRuntimeStateService;
 import org.springframework.stereotype.Component;
@@ -17,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -28,31 +25,31 @@ public class DurableAgentRunner {
     private final ResearchAgentRuntime runtime;
     private final AgentBudgetGuard budgetGuard;
     private final ResearchTaskMapper taskMapper;
-    private final CheckpointMapper checkpointMapper;
+    private final AgentStateStore stateStore;
+    private final DurableTurnCommitModule turnCommitModule;
     private final AgentStepLogMapper stepLogMapper;
     private final TaskRuntimeStateService runtimeStateService;
     private final ResearchRunRequestCodec requestCodec;
-    private final AgentCheckpointCodec checkpointCodec;
     private final String leaseOwner = "research-agent-" + UUID.randomUUID();
 
     public DurableAgentRunner(
             ResearchAgentRuntime runtime,
             AgentBudgetGuard budgetGuard,
             ResearchTaskMapper taskMapper,
-            CheckpointMapper checkpointMapper,
+            AgentStateStore stateStore,
+            DurableTurnCommitModule turnCommitModule,
             AgentStepLogMapper stepLogMapper,
             TaskRuntimeStateService runtimeStateService,
-            ResearchRunRequestCodec requestCodec,
-            AgentCheckpointCodec checkpointCodec
+            ResearchRunRequestCodec requestCodec
     ) {
         this.runtime = runtime;
         this.budgetGuard = budgetGuard;
         this.taskMapper = taskMapper;
-        this.checkpointMapper = checkpointMapper;
+        this.stateStore = stateStore;
+        this.turnCommitModule = turnCommitModule;
         this.stepLogMapper = stepLogMapper;
         this.runtimeStateService = runtimeStateService;
         this.requestCodec = requestCodec;
-        this.checkpointCodec = checkpointCodec;
     }
 
     /** 创建并执行新的 Research Agent 任务。 */
@@ -82,11 +79,29 @@ public class DurableAgentRunner {
             AgentEventListener listener
     ) {
         AgentEventListener events = listener == null ? AgentEventListener.noop() : listener;
-        if (!taskMapper.startAttempt(taskId, leaseOwner, LocalDateTime.now().plusMinutes(5))) {
+        java.util.Optional<LeaseToken> lease = turnCommitModule.claimLease(
+                taskId, leaseOwner, LocalDateTime.now().plusMinutes(5)
+        );
+        if (lease.isEmpty()) {
             return;
         }
         String contextHash = requestContextHash(request);
-        AgentState state = restore(taskId, contextHash).orElseGet(AgentState::new);
+        AgentState state;
+        try {
+            state = stateStore.load(ownerId, taskId, contextHash).orElseGet(AgentState::new);
+        } catch (RuntimeException exception) {
+            turnCommitModule.failTask(
+                    lease.orElseThrow(), "CHECKPOINT_RECOVERY_FAILED", exception.getMessage()
+            );
+            runtimeStateService.markStatus(taskId, "FAILED");
+            stepLogMapper.saveError(taskId, "agent_state_recovery", exception);
+            try {
+                events.onError(exception);
+            } catch (RuntimeException ignored) {
+                // SSE 连接断开不改变 fail-closed 的恢复失败状态。
+            }
+            return;
+        }
         state.setTaskId(taskId);
         state.setThreadId(threadId);
         state.setRequest(request);
@@ -94,9 +109,11 @@ public class DurableAgentRunner {
         runtimeStateService.taskCreated(taskId, threadId);
         runtimeStateService.markStatus(taskId, "RUNNING");
         try {
-            runtime.execute(ownerId, state, budgetGuard.resolve(request), leaseOwner, events);
+            runtime.execute(ownerId, state, budgetGuard.resolve(request), lease.orElseThrow(), events);
         } catch (RuntimeException exception) {
-            taskMapper.finishAgent(taskId, "FAILED", "RUNTIME_ERROR", exception.getMessage());
+            turnCommitModule.finishTask(
+                    state, lease.orElseThrow(), "FAILED", "RUNTIME_ERROR", exception.getMessage()
+            );
             runtimeStateService.markStatus(taskId, "FAILED");
             stepLogMapper.saveError(taskId, "research_agent_runtime", exception);
             try {
@@ -127,13 +144,6 @@ public class DurableAgentRunner {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前 JDK 不支持 SHA-256", exception);
         }
-    }
-
-    private Optional<AgentState> restore(long taskId, String contextHash) {
-        Optional<CheckpointRecord> checkpoint = checkpointMapper.findLatest(
-                taskId, "AGENT_STATE", contextHash
-        );
-        return checkpoint.flatMap(checkpointCodec::decode);
     }
 
     private String threadId(ResearchRunRequest request) {

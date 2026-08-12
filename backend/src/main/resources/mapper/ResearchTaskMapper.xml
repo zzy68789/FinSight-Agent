@@ -47,6 +47,7 @@
     <update id="acquireAttempt">
         UPDATE research_task
         SET status = 'RUNNING', attempt_count = attempt_count + 1,
+            lease_epoch = lease_epoch + 1,
             heartbeat_at = #{now}, lease_owner = #{leaseOwner}, lease_until = #{leaseUntil},
             last_error = NULL, updated_at = #{now}
         WHERE id = #{taskId}
@@ -55,11 +56,25 @@
           AND (lease_until IS NULL OR lease_until &lt; #{now} OR lease_owner = #{leaseOwner})
     </update>
 
+    <select id="findActiveLeaseEpoch" resultType="long">
+        SELECT lease_epoch
+        FROM research_task
+        WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
+    </select>
+
     <update id="updateRunningAgentProgress">
         UPDATE research_task
         SET stage = #{stage}, turn_count = #{turnCount}, tool_call_count = #{toolCallCount},
             heartbeat_at = #{now}, lease_until = #{leaseUntil}, updated_at = #{now}
         WHERE id = #{taskId} AND status = 'RUNNING' AND lease_owner = #{leaseOwner}
+    </update>
+
+    <update id="updateRunningAgentProgressFenced">
+        UPDATE research_task
+        SET stage = #{stage}, turn_count = #{turnCount}, tool_call_count = #{toolCallCount},
+            heartbeat_at = #{now}, lease_until = #{leaseUntil}, updated_at = #{now}
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
     </update>
 
     <update id="finishAgentTask">
@@ -68,6 +83,15 @@
             heartbeat_at = #{now}, completed_at = #{now}, lease_owner = NULL, lease_until = NULL,
             updated_at = #{now}
         WHERE id = #{taskId}
+    </update>
+
+    <update id="finishAgentTaskFenced">
+        UPDATE research_task
+        SET status = #{status}, stage = #{stage}, stop_reason = #{stopReason}, last_error = #{error},
+            heartbeat_at = #{now}, completed_at = #{now}, lease_owner = NULL, lease_until = NULL,
+            updated_at = #{now}
+        WHERE id = #{taskId} AND status = 'RUNNING'
+          AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
     </update>
 
     <update id="updateRetrying">

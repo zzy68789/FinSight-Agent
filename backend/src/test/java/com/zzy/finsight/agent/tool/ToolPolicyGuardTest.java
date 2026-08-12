@@ -100,8 +100,8 @@ class ToolPolicyGuardTest {
         )).doesNotThrowAnyException();
     }
 
-    private ResearchTool tool(String name) {
-        return new ResearchTool() {
+    private ResearchTool<?> tool(String name) {
+        return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
                 return name;
@@ -113,14 +113,14 @@ class ToolPolicyGuardTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
                 return ToolResult.success("完成", Map.of());
             }
         };
     }
 
-    private ResearchTool evidenceTool(String name) {
-        return new ResearchTool() {
+    private ResearchTool<?> evidenceTool(String name) {
+        return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
                 return name;
@@ -142,7 +142,7 @@ class ToolPolicyGuardTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
                 return ToolResult.success("完成", Map.of());
             }
         };

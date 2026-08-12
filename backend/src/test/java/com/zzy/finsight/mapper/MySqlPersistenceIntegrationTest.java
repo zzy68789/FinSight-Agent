@@ -1,5 +1,7 @@
 package com.zzy.finsight.mapper;
 
+import com.zzy.finsight.agent.memory.AgentState;
+import com.zzy.finsight.agent.runtime.LeaseToken;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,7 +54,7 @@ class MySqlPersistenceIntegrationTest {
     @Test
     void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '4'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '5'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
@@ -68,7 +70,8 @@ class MySqlPersistenceIntegrationTest {
                 "policy-v1"
         );
         LocalDateTime leaseUntil = LocalDateTime.now().plusMinutes(5);
-        assertThat(taskMapper.startAttempt(taskId, "runner-a", leaseUntil)).isTrue();
+        LeaseToken lease = taskMapper.startAttemptToken(taskId, "runner-a", leaseUntil).orElseThrow();
+        assertThat(lease.epoch()).isEqualTo(1L);
         assertThat(taskMapper.startAttempt(taskId, "runner-b", leaseUntil)).isFalse();
 
         long turnId = agentRuntimeMapper.saveTurn(
@@ -108,12 +111,18 @@ class MySqlPersistenceIntegrationTest {
         assertThat(agentRuntimeMapper.findToolCalls(taskId)).singleElement()
                 .satisfies(call -> assertThat(call.status()).isEqualTo("SUCCESS"));
 
+        AgentState checkpointState = new AgentState();
+        checkpointState.setTaskId(taskId);
+        checkpointState.setThreadId("mysql-integration-thread");
+        checkpointState.setTurnNo(1);
+        checkpointState.setPhase("RESEARCH");
+        checkpointState.setContextHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
         checkpointMapper.saveAgent(
                 "mysql-integration-thread",
                 taskId,
                 1,
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                Map.of("turnNo", 1, "phase", "RESEARCH")
+                checkpointState
         );
         assertThat(checkpointMapper.findLatest(
                 taskId,
@@ -121,6 +130,7 @@ class MySqlPersistenceIntegrationTest {
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         )).hasValueSatisfying(checkpoint -> {
             assertThat(checkpoint.attemptNo()).isEqualTo(1);
+            assertThat(checkpoint.stateVersion()).isEqualTo("agent-state-v2-lite");
             assertThat(checkpoint.stateJson()).contains("RESEARCH");
         });
 
@@ -148,8 +158,8 @@ class MySqlPersistenceIntegrationTest {
                 7L, "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         )).isEmpty();
 
-        assertThat(taskMapper.updateAgentProgress(
-                taskId, "SYNTHESIS", 1, 1, "runner-a", LocalDateTime.now().plusMinutes(5)
+        assertThat(taskMapper.updateAgentProgressFenced(
+                lease, "SYNTHESIS", 1, 1, LocalDateTime.now().plusMinutes(5)
         )).isTrue();
     }
 }

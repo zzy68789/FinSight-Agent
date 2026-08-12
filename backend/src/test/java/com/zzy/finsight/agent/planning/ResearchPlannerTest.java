@@ -9,6 +9,7 @@ import com.zzy.finsight.agent.quality.QualityGateRoute;
 import com.zzy.finsight.agent.quality.QualityGateSource;
 import com.zzy.finsight.agent.tool.ResearchTool;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
+import com.zzy.finsight.agent.tool.RawToolArguments;
 import com.zzy.finsight.agent.tool.ToolContext;
 import com.zzy.finsight.agent.tool.ToolResult;
 import com.zzy.finsight.domain.stock.StockSubject;
@@ -132,8 +133,8 @@ class ResearchPlannerTest {
         };
     }
 
-    private ResearchTool publicEvidenceTool() {
-        return new ResearchTool() {
+    private ResearchTool<?> publicEvidenceTool() {
+        return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
                 return "search_public_evidence";
@@ -155,7 +156,7 @@ class ResearchPlannerTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
                 return ToolResult.success("完成", Map.of());
             }
         };

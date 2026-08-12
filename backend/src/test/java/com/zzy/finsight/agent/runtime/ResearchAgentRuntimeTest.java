@@ -10,6 +10,7 @@ import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.planning.ResearchPlan;
 import com.zzy.finsight.agent.planning.ResearchPlanner;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
+import com.zzy.finsight.agent.tool.RawToolArguments;
 import com.zzy.finsight.agent.tool.ResearchTool;
 import com.zzy.finsight.agent.tool.CheckEvidenceCoverageTool;
 import com.zzy.finsight.agent.tool.ToolContext;
@@ -81,6 +82,7 @@ class ResearchAgentRuntimeTest {
         ResearchToolRegistry registry = new ResearchToolRegistry(List.of());
         AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
         AgentStepLogMapper stepLogMapper = mock(AgentStepLogMapper.class);
+        DurableTurnCommitModule commitModule = mock(DurableTurnCommitModule.class);
         CheckpointMapper checkpointMapper = mock(CheckpointMapper.class);
         ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
         TaskRuntimeStateService runtimeStateService = mock(TaskRuntimeStateService.class);
@@ -114,6 +116,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
+        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
 
         ResearchAgentRuntime runtime = new ResearchAgentRuntime(
                 planner,
@@ -122,11 +125,8 @@ class ResearchAgentRuntimeTest {
                 new AgentBudgetGuard(
                         8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                runtimeMapper,
                 stepLogMapper,
-                checkpointMapper,
-                taskMapper,
-                mock(FinancialSnapshotMapper.class),
+                commitModule,
                 runtimeStateService,
                 mock(InvestmentReportWriter.class),
                 mock(CitationReviewer.class),
@@ -144,7 +144,7 @@ class ResearchAgentRuntimeTest {
                 7L,
                 state,
                 new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                "runner-1",
+                new LeaseToken(11L, "runner-1", 1L),
                 listener(done)
         );
 
@@ -152,14 +152,10 @@ class ResearchAgentRuntimeTest {
         assertThat(outcome.reason()).contains("公开证据不足");
         assertThat(state.getTurnNo()).isEqualTo(1);
         assertThat(done).isTrue();
-        verify(runtimeMapper).completeTurn(
-                eq(31L), eq("公开证据不足，停止生成结论"), eq("DEGRADED"), anyLong()
-        );
-        verify(taskMapper).finishAgent(
-                11L,
-                "INSUFFICIENT_EVIDENCE",
-                "公开证据不足，停止生成结论",
-                null
+        verify(commitModule).commitTurn(any(AgentTurnCommit.class), any(LeaseToken.class));
+        verify(commitModule).finishTask(
+                eq(state), any(LeaseToken.class), eq("INSUFFICIENT_EVIDENCE"),
+                eq("公开证据不足，停止生成结论"), eq(null)
         );
         verify(runtimeStateService).markStatus(11L, "INSUFFICIENT_EVIDENCE");
     }
@@ -167,7 +163,7 @@ class ResearchAgentRuntimeTest {
     @Test
     void stopsAfterTwoEvidenceTurnsProduceNoNewEffectiveEvidence() {
         ResearchPlanner planner = mock(ResearchPlanner.class);
-        ResearchTool noEvidenceTool = new ResearchTool() {
+        ResearchTool<RawToolArguments> noEvidenceTool = new ResearchTool<>() {
             @Override
             public String name() {
                 return "search_public_evidence";
@@ -189,13 +185,14 @@ class ResearchAgentRuntimeTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
                 return ToolResult.success("未发现新增有效证据", Map.of());
             }
         };
         ResearchToolRegistry registry = new ResearchToolRegistry(List.of(noEvidenceTool));
         AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
         AgentStepLogMapper stepLogMapper = mock(AgentStepLogMapper.class);
+        DurableTurnCommitModule commitModule = mock(DurableTurnCommitModule.class);
         CheckpointMapper checkpointMapper = mock(CheckpointMapper.class);
         ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
         TaskRuntimeStateService runtimeStateService = mock(TaskRuntimeStateService.class);
@@ -211,6 +208,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L, 32L);
+        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
         when(runtimeMapper.startToolCall(
                 anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()
         )).thenReturn(41L, 42L);
@@ -224,11 +222,8 @@ class ResearchAgentRuntimeTest {
                 new AgentBudgetGuard(
                         8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                runtimeMapper,
                 stepLogMapper,
-                checkpointMapper,
-                taskMapper,
-                mock(FinancialSnapshotMapper.class),
+                commitModule,
                 runtimeStateService,
                 mock(InvestmentReportWriter.class),
                 mock(CitationReviewer.class),
@@ -244,17 +239,15 @@ class ResearchAgentRuntimeTest {
                 7L,
                 state(),
                 new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                "runner-1",
+                new LeaseToken(11L, "runner-1", 1L),
                 AgentEventListener.noop()
         );
 
         assertThat(outcome.status()).isEqualTo("INSUFFICIENT_EVIDENCE");
         assertThat(outcome.reason()).contains("连续 2 轮");
-        verify(taskMapper).finishAgent(
-                11L,
-                "INSUFFICIENT_EVIDENCE",
-                "连续 2 轮证据采集未产生新增有效证据",
-                null
+        verify(commitModule).finishTask(
+                any(), any(), eq("INSUFFICIENT_EVIDENCE"),
+                eq("连续 2 轮证据采集未产生新增有效证据"), eq(null)
         );
     }
 
@@ -265,6 +258,7 @@ class ResearchAgentRuntimeTest {
         ToolPolicyGuard policyGuard = new ToolPolicyGuard(registry, new ObjectMapper());
         AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
         AgentStepLogMapper stepLogMapper = mock(AgentStepLogMapper.class);
+        DurableTurnCommitModule commitModule = mock(DurableTurnCommitModule.class);
         CheckpointMapper checkpointMapper = mock(CheckpointMapper.class);
         ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
         TaskRuntimeStateService runtimeStateService = mock(TaskRuntimeStateService.class);
@@ -302,6 +296,7 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L, 32L);
+        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L, 32L);
         when(taskMapper.updateAgentProgress(
                 anyLong(), anyString(), anyInt(), anyInt(), anyString(), any()
         )).thenReturn(true);
@@ -326,11 +321,8 @@ class ResearchAgentRuntimeTest {
                 new AgentBudgetGuard(
                         8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                runtimeMapper,
                 stepLogMapper,
-                checkpointMapper,
-                taskMapper,
-                mock(FinancialSnapshotMapper.class),
+                commitModule,
                 runtimeStateService,
                 reportWriter,
                 citationReviewer,
@@ -347,7 +339,7 @@ class ResearchAgentRuntimeTest {
                 7L,
                 state,
                 new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                "runner-1",
+                new LeaseToken(11L, "runner-1", 1L),
                 AgentEventListener.noop()
         );
 
@@ -398,6 +390,7 @@ class ResearchAgentRuntimeTest {
         );
         AgentRuntimeMapper runtimeMapper = mock(AgentRuntimeMapper.class);
         AgentStepLogMapper stepLogMapper = mock(AgentStepLogMapper.class);
+        DurableTurnCommitModule commitModule = mock(DurableTurnCommitModule.class);
         CheckpointMapper checkpointMapper = mock(CheckpointMapper.class);
         ResearchTaskMapper taskMapper = mock(ResearchTaskMapper.class);
         FinancialSnapshotMapper snapshotMapper = mock(FinancialSnapshotMapper.class);
@@ -412,6 +405,9 @@ class ResearchAgentRuntimeTest {
                 anyLong(), anyInt(), anyString(), anyString(), any(), anyString(), anyString(),
                 anyInt(), anyInt(), anyLong()
         )).thenReturn(31L);
+        when(commitModule.openTurn(any(), any(), anyInt(), anyInt(), anyLong())).thenReturn(31L);
+        when(commitModule.journalToolStart(any(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()))
+                .thenReturn(41L);
         when(runtimeMapper.startToolCall(
                 anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyInt()
         )).thenReturn(41L);
@@ -446,11 +442,8 @@ class ResearchAgentRuntimeTest {
                 new AgentBudgetGuard(
                         8, 12, 3, 4, 2, Duration.ofSeconds(180), Duration.ofSeconds(30)
                 ),
-                runtimeMapper,
                 stepLogMapper,
-                checkpointMapper,
-                taskMapper,
-                snapshotMapper,
+                commitModule,
                 runtimeStateService,
                 reportWriter,
                 citationReviewer,
@@ -506,7 +499,7 @@ class ResearchAgentRuntimeTest {
                 7L,
                 state,
                 new AgentBudget(8, 12, 3, 4, 2, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                "runner-1",
+                new LeaseToken(11L, "runner-1", 1L),
                 listener
         );
 
@@ -615,11 +608,11 @@ class ResearchAgentRuntimeTest {
         );
     }
 
-    private ResearchTool recoveryEvidenceTool(
+    private ResearchTool<?> recoveryEvidenceTool(
             EvidenceMemory evidenceMemory,
             AtomicReference<ToolInvocation> invocationReference
     ) {
-        return new ResearchTool() {
+        return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
                 return "search_public_evidence";
@@ -641,8 +634,8 @@ class ResearchAgentRuntimeTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
-                invocationReference.set(new ToolInvocation(name(), arguments));
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
+                invocationReference.set(new ToolInvocation(name(), arguments.values()));
                 FinancialEvidenceItem evidence = new FinancialEvidenceItem(
                         "PUBLIC_RESEARCH",
                         "补充公告",
@@ -677,11 +670,11 @@ class ResearchAgentRuntimeTest {
         };
     }
 
-    private ResearchTool stateMutationTool(
+    private ResearchTool<?> stateMutationTool(
             String name,
             java.util.function.Consumer<ToolContext> mutation
     ) {
-        return new ResearchTool() {
+        return new ResearchTool<RawToolArguments>() {
             @Override
             public String name() {
                 return name;
@@ -693,7 +686,7 @@ class ResearchAgentRuntimeTest {
             }
 
             @Override
-            public ToolResult execute(ToolContext context, Map<String, Object> arguments) {
+            public ToolResult execute(ToolContext context, RawToolArguments arguments) {
                 mutation.accept(context);
                 return ToolResult.success(name + " 完成", Map.of());
             }

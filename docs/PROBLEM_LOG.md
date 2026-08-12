@@ -7,6 +7,7 @@
 | 优先级 | 编号 | 问题 | 状态 |
 | --- | --- | --- | --- |
 | P0 | 036 | 新证据使派生结果失效但重复调用锁仍阻止重算 | 已完成 |
+| P0 | 038 | Agent turn 分散写入导致状态不一致，工具和事件契约缺少统一恢复边界 | 已完成首版，MySQL 故障注入待补 |
 | P0 | 035 | Reviewer 结果结构化但 Runtime 仍按自由文本路由 | 已完成 |
 | P0 | 034 | 新增反思重写不等于去除固定工作流 | 已完成首版改造，真实模型验收待补 |
 | P1 | 033 | 报告能力散落且 ETF 只有单点行情 | 已完成首版 |
@@ -654,7 +655,7 @@ Reviewer 已能把证据问题路由回 Planner，但原 Runtime 只执行 Repla
 
 ### 解决方式
 
-新增 `EvidenceRecoveryDirective` 和工具调用历史。补证据期间，Planner 与 `ToolPolicyGuard` 只允许新的证据调用或明确停止；确定性降级优先切换数据源，来源耗尽后生成带轮次/尝试号的新 query。新增有效证据时，旧指标、风险、多空结论和覆盖检查统一失效，并只为对应确定性工具开放一次受控重执行；指令、尝试和权限全部进入 Checkpoint 与 `evidence_recovery_progress` Trace。
+新增 `EvidenceRecoveryDirective` 和工具调用历史。补证据期间，Planner 与 `ToolPolicyGuard` 只允许新的证据调用或明确停止；确定性降级优先切换数据源，来源耗尽后生成带轮次/尝试号的新 query。新增有效证据时，旧指标、风险、多空结论和覆盖检查统一失效，并只为对应确定性工具开放一次受控重执行；当前恢复指令与权限进入轻量 Checkpoint，调用参数和哈希从工具 journal 重建，进度进入 `evidence_recovery_progress` Trace。
 
 ### 结果
 
@@ -677,3 +678,21 @@ Reviewer 已能把证据问题路由回 Planner，但原 Runtime 只执行 Repla
 ### 结果
 
 2026-08-12 后端全量 `mvn.cmd test` 为 175 个测试零失败、零错误、跳过 3 项，`mvn.cmd package -DskipTests` 成功。测试已证明同级冲突可 fail-closed、更高优先级新证据可以解除旧冲突、指标选择不受证据顺序影响，且新旧快照均可反序列化；真实联网冲突样本和来源权重校准仍保留为后续验证项。
+
+## 038. Agent turn 分散写入导致状态不一致，工具和事件契约缺少统一恢复边界
+
+### 发生了什么
+
+一轮 Agent 执行会依次更新 `agent_turn`、`agent_tool_call`、证据、快照、指标、Checkpoint 和任务租约，任何中途异常都可能留下“工具已完成但证据未落库”或“指标已删除但新指标未写完”的状态。旧任务执行者只凭 `lease_owner` 续租，任务结束又没有租约条件；AgentState 每轮还重复序列化完整快照、报告和审查对象。前端实时 SSE 与历史 Trace 分别解释事件，`App.vue` 与 `StatusFlow.vue` 又各自保存状态机知识。
+
+### 原因
+
+持久化 seam 以 Mapper 为中心，没有形成一个能隐藏事务、幂等和租约 fencing 的深模块；工具协议只声明参数名，Planner JSON 直接以 `Map<String,Object>` 进入实现；Checkpoint 的 `state_version` 已写入但读取路径未使用；前端也缺少纯事件投影模块。
+
+### 解决方式
+
+新增 `DurableTurnCommitModule`，把工具结果、证据、快照、指标、turn、`agent-state-v2-lite` Checkpoint 和租约续期纳入同一事务；Flyway V5 增加单调 `lease_epoch`，提交和结束任务必须同时匹配 owner 与 epoch。新增 `ToolDefinition`、`ToolArguments`、类型化解码与稳定错误分类；新增 `AgentStateStore`，按版本迁移轻量状态并从业务表及工具 journal 重建大对象和调用索引。前端新增 `agentEventProjection.js`，实时 SSE 与 Trace 持久化事件使用同一 reducer，`StatusFlow` 复用统一标签。
+
+### 结果
+
+2026-08-12 后端全量 `mvn.cmd test` 为 180 个测试零失败、零错误、跳过 3 项；新增测试覆盖事务模块提交顺序、过期 lease 拒绝、v1/v2 状态迁移、工具 schema 类型错误和参数解码。前端 `npm.cmd test` 2 项通过，覆盖重复事件幂等和 SSE/Trace 重放等价；`npm.cmd run build` 成功。Docker 未运行，因此 V5 迁移、真实 MySQL 回滚和外部调用后事务前宕机窗口仍需故障注入验证，不能宣传 exactly-once。
