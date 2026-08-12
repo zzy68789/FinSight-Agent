@@ -7,6 +7,9 @@ import com.zzy.finsight.agent.planning.AgentActionType;
 import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.planning.ResearchPlanner;
 import com.zzy.finsight.agent.planning.ToolInvocation;
+import com.zzy.finsight.agent.quality.QualityGateDecision;
+import com.zzy.finsight.agent.quality.QualityGateDecisionEngine;
+import com.zzy.finsight.agent.quality.QualityGateRoute;
 import com.zzy.finsight.agent.tool.ResearchTool;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
 import com.zzy.finsight.agent.tool.ToolContext;
@@ -50,7 +53,7 @@ import java.util.concurrent.TimeoutException;
  */
 @Component
 public class ResearchAgentRuntime {
-    public static final String POLICY_VERSION = "research-agent-runtime-v1-fail-closed";
+    public static final String POLICY_VERSION = "research-agent-runtime-v2-typed-quality-routing";
     public static final String TOOLSET_VERSION = "financial-research-tools-v1";
 
     private final ResearchPlanner planner;
@@ -67,6 +70,7 @@ public class ResearchAgentRuntime {
     private final CitationReviewer citationReviewer;
     private final FinancialComplianceReviewer complianceReviewer;
     private final FinancialEvaluator evaluator;
+    private final QualityGateDecisionEngine qualityGateDecisionEngine;
     private final FinancialReportFingerprinter fingerprinter;
     private final ReportService reportService;
     private final ExecutorService toolExecutor;
@@ -86,6 +90,7 @@ public class ResearchAgentRuntime {
             CitationReviewer citationReviewer,
             FinancialComplianceReviewer complianceReviewer,
             FinancialEvaluator evaluator,
+            QualityGateDecisionEngine qualityGateDecisionEngine,
             FinancialReportFingerprinter fingerprinter,
             ReportService reportService,
             @Qualifier("financialProviderExecutor") ExecutorService toolExecutor
@@ -104,6 +109,7 @@ public class ResearchAgentRuntime {
         this.citationReviewer = citationReviewer;
         this.complianceReviewer = complianceReviewer;
         this.evaluator = evaluator;
+        this.qualityGateDecisionEngine = qualityGateDecisionEngine;
         this.fingerprinter = fingerprinter;
         this.reportService = reportService;
         this.toolExecutor = toolExecutor;
@@ -416,7 +422,7 @@ public class ResearchAgentRuntime {
             }
         }
 
-        CitationReviewResult previousReview = state.getCitationReview();
+        CitationReviewResult previousReview = writerFeedback(state);
         for (int attempt = 1; attempt <= budget.maxReportRewrites() + 1; attempt++) {
             BullBearResearchResult cases = state.getBullBearResearch() == null
                     ? BullBearResearchResult.empty() : state.getBullBearResearch();
@@ -449,17 +455,29 @@ public class ResearchAgentRuntime {
                 );
                 return new SynthesisOutcome(true, false, "COMPLETED", "全部确定性门禁通过", reportId);
             }
-            previousReview = review.citation();
+            previousReview = CitationReviewResult.fail(review.reason());
             state.setLastReviewReason(review.reason());
-            if (needsMoreEvidence(review.reason())) {
-                if (state.getReplanCount() < budget.maxReplans()
-                        && state.getToolCallCount() < budget.maxToolCalls()) {
+            QualityGateRoute route = review.decision().route();
+            publishQualityGateRoute(state, events, review.decision(), attempt);
+            if (route == QualityGateRoute.COLLECT_MORE_EVIDENCE) {
+                if (canReplan(state, budget, 1)) {
                     executeReplan(state, budget, events);
                     return new SynthesisOutcome(false, true, "RUNNING", review.reason(), 0L);
                 }
                 return new SynthesisOutcome(
                         false, false, "INSUFFICIENT_EVIDENCE", review.reason(), 0L
                 );
+            }
+            if (route == QualityGateRoute.RECALCULATE_DETERMINISTIC_RESULTS) {
+                if (canReplan(state, budget, 2)) {
+                    prepareDeterministicRecalculation(state);
+                    executeReplan(state, budget, events);
+                    return new SynthesisOutcome(false, true, "RUNNING", review.reason(), 0L);
+                }
+                return new SynthesisOutcome(false, false, "FAILED", review.reason(), 0L);
+            }
+            if (route == QualityGateRoute.STOP_FAILED) {
+                return new SynthesisOutcome(false, false, "FAILED", review.reason(), 0L);
             }
         }
         if (!state.getFinalReport().isBlank()) {
@@ -480,14 +498,26 @@ public class ResearchAgentRuntime {
         FinancialEvaluationResult evaluation = evaluator.evaluateOnline(
                 report, state.getSnapshot(), state.getMetrics()
         );
-        return new ReviewBundle(citation, compliance, evaluation);
+        QualityGateDecision decision = qualityGateDecisionEngine.decide(
+                citation, compliance, evaluation, state.getSnapshot()
+        );
+        return new ReviewBundle(citation, compliance, evaluation, decision);
     }
 
     private void applyReview(AgentState state, ReviewBundle review) {
         state.setCitationReview(review.citation());
         state.setComplianceReview(review.compliance());
         state.setEvaluation(review.evaluation());
+        state.setQualityGateDecision(review.decision());
         state.setLastReviewReason(review.reason());
+    }
+
+    private CitationReviewResult writerFeedback(AgentState state) {
+        QualityGateDecision decision = state.getQualityGateDecision();
+        if (decision != null && !decision.passed()) {
+            return CitationReviewResult.fail(decision.summary());
+        }
+        return state.getCitationReview();
     }
 
     private void publishReview(
@@ -497,12 +527,42 @@ public class ResearchAgentRuntime {
             boolean reused
     ) {
         publish(state, events, "review_completed", mapOf(
-                "reviewStatus", review.citation().status(),
+                "reviewStatus", review.decision().status(),
                 "critique", review.citation().reason(),
                 "compliance", review.compliance(),
                 "evaluation", review.evaluation(),
+                "qualityGateDecision", review.decision(),
                 "reused", reused
         ), 0L, review.passed() ? "SUCCESS" : "DEGRADED", review.reason());
+    }
+
+    private void publishQualityGateRoute(
+            AgentState state,
+            AgentEventListener events,
+            QualityGateDecision decision,
+            int attempt
+    ) {
+        publish(state, events, "quality_gate_routed", mapOf(
+                "attempt", attempt,
+                "route", decision.route(),
+                "issues", decision.issues(),
+                "summary", decision.summary()
+        ), 0L, "DEGRADED", decision.summary());
+    }
+
+    private boolean canReplan(AgentState state, AgentBudget budget, int requiredToolCalls) {
+        return state.getReplanCount() < budget.maxReplans()
+                && state.getToolCallCount() + requiredToolCalls <= budget.maxToolCalls();
+    }
+
+    /** 清除可能受错误数字影响的派生结果，并仅释放两个确定性工具的重复调用锁。 */
+    private void prepareDeterministicRecalculation(AgentState state) {
+        state.setMetrics(List.of());
+        state.setRiskAssessment(null);
+        for (String toolName : List.of("calculate_financial_metrics", "assess_financial_risk")) {
+            ToolInvocation invocation = new ToolInvocation(toolName, Map.of());
+            state.allowDeterministicReexecution(toolName, toolPolicyGuard.callHash(invocation));
+        }
     }
 
     private RuntimeOutcome complete(AgentState state, AgentEventListener events, long reportId) {
@@ -612,14 +672,6 @@ public class ResearchAgentRuntime {
                 && state.getRiskAssessment() != null;
     }
 
-    private boolean needsMoreEvidence(String reason) {
-        String normalized = reason == null ? "" : reason.toUpperCase(java.util.Locale.ROOT);
-        return normalized.contains("EVIDENCE_INSUFFICIENT")
-                || normalized.contains("EVIDENCE_CONFLICT")
-                || normalized.contains("证据不足")
-                || normalized.contains("证据冲突");
-    }
-
     private void publish(
             AgentState state,
             AgentEventListener listener,
@@ -712,19 +764,15 @@ public class ResearchAgentRuntime {
     private record ReviewBundle(
             CitationReviewResult citation,
             FinancialComplianceReviewResult compliance,
-            FinancialEvaluationResult evaluation
+            FinancialEvaluationResult evaluation,
+            QualityGateDecision decision
     ) {
         private boolean passed() {
-            return "PASS".equals(citation.status())
-                    && "PASS".equals(compliance.status())
-                    && "PASS".equals(evaluation.status());
+            return decision.passed();
         }
 
         private String reason() {
-            if (passed()) {
-                return "";
-            }
-            return (citation.reason() + " " + compliance.issues() + " " + evaluation.failedReasons()).trim();
+            return decision.summary();
         }
     }
 }

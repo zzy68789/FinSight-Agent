@@ -1,6 +1,7 @@
 package com.zzy.finsight.agent.memory;
 
 import com.zzy.finsight.agent.planning.ResearchPlan;
+import com.zzy.finsight.agent.quality.QualityGateDecision;
 import com.zzy.finsight.domain.stock.BullBearResearchResult;
 import com.zzy.finsight.domain.stock.CitationReviewResult;
 import com.zzy.finsight.domain.stock.FinancialComplianceReviewResult;
@@ -40,6 +41,7 @@ public class AgentState {
     private CitationReviewResult citationReview;
     private FinancialComplianceReviewResult complianceReview;
     private FinancialEvaluationResult evaluation;
+    private QualityGateDecision qualityGateDecision;
     private Set<String> executedCallHashes = new LinkedHashSet<>();
     private Set<String> completedTools = new LinkedHashSet<>();
     private List<String> observations = new ArrayList<>();
@@ -208,6 +210,14 @@ public class AgentState {
         this.evaluation = evaluation;
     }
 
+    public QualityGateDecision getQualityGateDecision() {
+        return qualityGateDecision;
+    }
+
+    public void setQualityGateDecision(QualityGateDecision qualityGateDecision) {
+        this.qualityGateDecision = qualityGateDecision;
+    }
+
     public Set<String> getExecutedCallHashes() {
         return executedCallHashes == null ? Set.of() : Set.copyOf(executedCallHashes);
     }
@@ -271,6 +281,16 @@ public class AgentState {
         observations.add(toolName + "：" + (summary == null ? "" : summary));
         if (observations.size() > 20) {
             observations.remove(0);
+        }
+    }
+
+    /** 仅为门禁要求的确定性重算释放指定工具调用，其他重复调用仍保持禁止。 */
+    public void allowDeterministicReexecution(String toolName, String callHash) {
+        if (toolName != null) {
+            completedTools.remove(toolName);
+        }
+        if (callHash != null) {
+            executedCallHashes.remove(callHash);
         }
     }
 }
