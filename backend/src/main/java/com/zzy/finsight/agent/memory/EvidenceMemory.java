@@ -93,9 +93,7 @@ public class EvidenceMemory {
                 .filter(item -> !beforeKeys.contains(evidenceKey(item)))
                 .toList();
         if (!validatedAdded.isEmpty()) {
-            state.setMetrics(List.of());
-            state.setRiskAssessment(null);
-            state.setBullBearResearch(null);
+            state.invalidateDerivedResultsAfterEvidenceChange();
         }
         return List.copyOf(validatedAdded);
     }

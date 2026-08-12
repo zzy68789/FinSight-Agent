@@ -12,17 +12,20 @@ import com.zzy.finsight.llm.LlmGenerationResult;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 使用 LLM 生成研究计划和下一步动作，并在模型不可用时显式降级为规则决策。
  */
 @Component
 public class ResearchPlanner {
-    public static final String PLANNER_VERSION = "research-planner-v1-bounded-tools";
+    public static final String PLANNER_VERSION = "research-planner-v2-evidence-recovery";
     private static final int MAX_STRUCTURE_ATTEMPTS = 2;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
@@ -59,6 +62,7 @@ public class ResearchPlanner {
                 每次只返回严格 JSON，不要 Markdown。格式：
                 {"type":"CALL_TOOL|CALL_TOOLS_PARALLEL|REPLAN|SYNTHESIZE|STOP_INSUFFICIENT_EVIDENCE","toolCalls":[{"toolName":"工具名","arguments":{}}],"reason":"..."}
                 规则：CALL_TOOL 必须且只能包含一个调用；并行调用只能选择 allowParallel=true 的独立工具；证据、指标和风险不足时不得 SYNTHESIZE；无法补证时停止。
+                如果 evidenceRecovery.status=PENDING，下一步必须调用 producesEvidence=true 的工具，并且相对 toolInvocationHistory 更换数据源或 arguments；不得继续综合、计算指标或原样重复检索。
                 当前状态：%s
                 可用工具：%s
                 """.formatted(json(stateSummary(state)), json(registry.catalog()));
@@ -66,9 +70,10 @@ public class ResearchPlanner {
             LlmGenerationResult result = generateStructured(prompt, AgentAction.class);
             AgentAction action = objectMapper.readValue(cleanJson(result.text()), AgentAction.class);
             validateActionShape(action);
+            validateEvidenceRecoveryAction(action, state, registry);
             return new PlannerOutput<>(action, false, "", result.inputTokens(), result.outputTokens(), result.durationMs());
         } catch (RuntimeException | JsonProcessingException exception) {
-            return PlannerOutput.degraded(fallbackAction(state), classify(exception));
+            return PlannerOutput.degraded(fallbackAction(state, registry), classify(exception));
         }
     }
 
@@ -80,6 +85,9 @@ public class ResearchPlanner {
         unresolved.addAll(state.getObservations().stream().skip(Math.max(0, state.getObservations().size() - 5)).toList());
         if (!state.getLastReviewReason().isBlank()) {
             unresolved.add("审查反馈：" + state.getLastReviewReason());
+        }
+        if (state.hasPendingEvidenceRecovery()) {
+            unresolved.add("补证据约束：下一步必须更换数据源或检索参数，并产生新增有效证据");
         }
         ResearchPlan revised = new ResearchPlan(
                 original.goal(), original.hypotheses(), original.requiredEvidence(),
@@ -143,9 +151,12 @@ public class ResearchPlanner {
         );
     }
 
-    private AgentAction fallbackAction(AgentState state) {
+    private AgentAction fallbackAction(AgentState state, ResearchToolRegistry registry) {
         if (state.getSubject() == null) {
             return AgentAction.call("resolve_security", "先解析并约束研究主体");
+        }
+        if (state.hasPendingEvidenceRecovery()) {
+            return fallbackEvidenceRecoveryAction(state, registry);
         }
         String question = state.getRequest().getResearchQuestion().toLowerCase(Locale.ROOT);
         List<String> desiredProviders = desiredProviders(state.getRequest(), question);
@@ -189,6 +200,71 @@ public class ResearchPlanner {
         return AgentAction.synthesize("主体、证据、指标和风险信息已满足综合条件");
     }
 
+    /** 在确定性降级模式下优先切换证据来源，来源耗尽后使用新的检索 query。 */
+    private AgentAction fallbackEvidenceRecoveryAction(AgentState state, ResearchToolRegistry registry) {
+        Set<String> availableEvidenceTools = evidenceToolNames(registry);
+        LinkedHashSet<String> candidates = new LinkedHashSet<>(desiredProviders(
+                state.getRequest(), state.getRequest().getResearchQuestion().toLowerCase(Locale.ROOT)
+        ));
+        candidates.addAll(List.of(
+                "get_financial_statements",
+                "get_market_snapshot",
+                "retrieve_uploaded_reports",
+                "search_public_evidence"
+        ));
+        for (String toolName : candidates) {
+            if (!availableEvidenceTools.contains(toolName)
+                    || state.getCompletedTools().contains(toolName)
+                    || !allowedBySearchMode(toolName, state.getRequest().getSearchMode())) {
+                continue;
+            }
+            return AgentAction.call(toolName, "质量门禁要求切换到尚未使用的证据来源");
+        }
+        if (availableEvidenceTools.contains("search_public_evidence")
+                && !"document".equals(state.getRequest().getSearchMode())) {
+            int recoveryNo = state.getEvidenceRecoveryDirective().recoveryNo();
+            int attemptNo = state.getEvidenceRecoveryDirective().attempts().size() + 1;
+            String issueFocus = String.join(" ", state.getEvidenceRecoveryDirective().issueCodes());
+            String query = "%s %s 交叉验证 补充证据 第%d轮第%d次".formatted(
+                    state.getRequest().getResearchQuestion(), issueFocus, recoveryNo, attemptNo
+            ).replaceAll("\\s+", " ").trim();
+            return new AgentAction(
+                    AgentActionType.CALL_TOOL,
+                    List.of(new ToolInvocation("search_public_evidence", Map.of("query", query))),
+                    "其他允许来源已使用，改用新的问题导向检索参数补证据"
+            );
+        }
+        return new AgentAction(
+                AgentActionType.STOP_INSUFFICIENT_EVIDENCE,
+                List.of(),
+                "允许的证据来源和差异化检索方式均已耗尽"
+        );
+    }
+
+    private Set<String> evidenceToolNames(ResearchToolRegistry registry) {
+        Collection<com.zzy.finsight.agent.tool.ResearchTool> tools = registry == null ? null : registry.all();
+        if (tools == null) {
+            return Set.of();
+        }
+        return tools.stream()
+                .filter(com.zzy.finsight.agent.tool.ResearchTool::producesEvidence)
+                .map(com.zzy.finsight.agent.tool.ResearchTool::name)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private boolean allowedBySearchMode(String toolName, String searchMode) {
+        if ("get_company_profile".equals(toolName)) {
+            return true;
+        }
+        if ("document".equals(searchMode)) {
+            return "retrieve_uploaded_reports".equals(toolName);
+        }
+        if ("web".equals(searchMode)) {
+            return !"retrieve_uploaded_reports".equals(toolName);
+        }
+        return true;
+    }
+
     private List<String> desiredProviders(ResearchRunRequest request, String question) {
         List<String> tools = new ArrayList<>();
         tools.add("get_company_profile");
@@ -221,6 +297,7 @@ public class ResearchPlanner {
         summary.put("turnNo", state.getTurnNo());
         summary.put("toolCallCount", state.getToolCallCount());
         summary.put("completedTools", state.getCompletedTools());
+        summary.put("toolInvocationHistory", state.getToolInvocationHistory());
         summary.put("observations", state.getObservations());
         summary.put("subjectResolved", state.getSubject() != null);
         summary.put("effectiveEvidenceCount", state.getSnapshot() == null ? 0L
@@ -228,6 +305,7 @@ public class ResearchPlanner {
         summary.put("metricsReady", !state.getMetrics().isEmpty());
         summary.put("riskReady", state.getRiskAssessment() != null);
         summary.put("lastReviewReason", state.getLastReviewReason());
+        summary.put("evidenceRecovery", state.getEvidenceRecoveryDirective());
         return summary;
     }
 
@@ -245,6 +323,34 @@ public class ResearchPlanner {
                 || action.type() == AgentActionType.CALL_TOOLS_PARALLEL;
         if (toolAction && action.toolCalls().isEmpty()) {
             throw new IllegalArgumentException("工具动作缺少 toolCalls");
+        }
+    }
+
+    /** 校验待补证据状态下的 LLM 动作必须是新的证据调用或明确停止。 */
+    private void validateEvidenceRecoveryAction(
+            AgentAction action,
+            AgentState state,
+            ResearchToolRegistry registry
+    ) {
+        if (!state.hasPendingEvidenceRecovery()
+                || action.type() == AgentActionType.STOP_INSUFFICIENT_EVIDENCE) {
+            return;
+        }
+        if (action.type() != AgentActionType.CALL_TOOL
+                && action.type() != AgentActionType.CALL_TOOLS_PARALLEL) {
+            throw new IllegalArgumentException("EVIDENCE_RECOVERY_ACTION_REQUIRED");
+        }
+        for (ToolInvocation invocation : action.toolCalls()) {
+            if (!registry.require(invocation.toolName()).producesEvidence()) {
+                throw new IllegalArgumentException("EVIDENCE_RECOVERY_TOOL_REQUIRED");
+            }
+            if (state.getToolInvocationHistory().contains(invocation)) {
+                throw new IllegalArgumentException("EVIDENCE_RECOVERY_NOT_NOVEL");
+            }
+            if (state.getCompletedTools().contains(invocation.toolName())
+                    && invocation.arguments().isEmpty()) {
+                throw new IllegalArgumentException("EVIDENCE_RECOVERY_ARGUMENTS_REQUIRED");
+            }
         }
     }
 
@@ -292,6 +398,9 @@ public class ResearchPlanner {
         }
         if (exception instanceof JsonProcessingException || message.contains("JSON")) {
             return "LLM_INVALID_STRUCTURE";
+        }
+        if (message.startsWith("EVIDENCE_RECOVERY_")) {
+            return "LLM_INVALID_ACTION";
         }
         return "LLM_CALL_FAILED";
     }

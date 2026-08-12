@@ -1,6 +1,7 @@
 package com.zzy.finsight.agent.memory;
 
 import com.zzy.finsight.agent.planning.ResearchPlan;
+import com.zzy.finsight.agent.planning.ToolInvocation;
 import com.zzy.finsight.agent.quality.QualityGateDecision;
 import com.zzy.finsight.domain.stock.BullBearResearchResult;
 import com.zzy.finsight.domain.stock.CitationReviewResult;
@@ -42,8 +43,12 @@ public class AgentState {
     private FinancialComplianceReviewResult complianceReview;
     private FinancialEvaluationResult evaluation;
     private QualityGateDecision qualityGateDecision;
+    private int evidenceRecoveryCount;
+    private EvidenceRecoveryDirective evidenceRecoveryDirective;
     private Set<String> executedCallHashes = new LinkedHashSet<>();
     private Set<String> completedTools = new LinkedHashSet<>();
+    private Set<String> reexecutionAllowedTools = new LinkedHashSet<>();
+    private List<ToolInvocation> toolInvocationHistory = new ArrayList<>();
     private List<String> observations = new ArrayList<>();
     private String lastReviewReason = "";
     private String stopReason = "";
@@ -218,6 +223,22 @@ public class AgentState {
         this.qualityGateDecision = qualityGateDecision;
     }
 
+    public int getEvidenceRecoveryCount() {
+        return evidenceRecoveryCount;
+    }
+
+    public void setEvidenceRecoveryCount(int evidenceRecoveryCount) {
+        this.evidenceRecoveryCount = Math.max(0, evidenceRecoveryCount);
+    }
+
+    public EvidenceRecoveryDirective getEvidenceRecoveryDirective() {
+        return evidenceRecoveryDirective;
+    }
+
+    public void setEvidenceRecoveryDirective(EvidenceRecoveryDirective evidenceRecoveryDirective) {
+        this.evidenceRecoveryDirective = evidenceRecoveryDirective;
+    }
+
     public Set<String> getExecutedCallHashes() {
         return executedCallHashes == null ? Set.of() : Set.copyOf(executedCallHashes);
     }
@@ -232,6 +253,26 @@ public class AgentState {
 
     public void setCompletedTools(Set<String> completedTools) {
         this.completedTools = new LinkedHashSet<>(completedTools == null ? Set.of() : completedTools);
+    }
+
+    public Set<String> getReexecutionAllowedTools() {
+        return reexecutionAllowedTools == null ? Set.of() : Set.copyOf(reexecutionAllowedTools);
+    }
+
+    public void setReexecutionAllowedTools(Set<String> reexecutionAllowedTools) {
+        this.reexecutionAllowedTools = new LinkedHashSet<>(
+                reexecutionAllowedTools == null ? Set.of() : reexecutionAllowedTools
+        );
+    }
+
+    public List<ToolInvocation> getToolInvocationHistory() {
+        return toolInvocationHistory == null ? List.of() : List.copyOf(toolInvocationHistory);
+    }
+
+    public void setToolInvocationHistory(List<ToolInvocation> toolInvocationHistory) {
+        this.toolInvocationHistory = new ArrayList<>(
+                toolInvocationHistory == null ? List.of() : toolInvocationHistory
+        );
     }
 
     public List<String> getObservations() {
@@ -274,20 +315,82 @@ public class AgentState {
         this.plannerDegraded = plannerDegraded;
     }
 
-    /** 记录一次成功或可解释失败的工具观察。 */
-    public void recordObservation(String toolName, String callHash, String summary) {
+    /** 记录一次成功或可解释失败的工具调用与观察。 */
+    public void recordObservation(ToolInvocation invocation, String callHash, String summary) {
+        String toolName = invocation == null ? "" : invocation.toolName();
         completedTools.add(toolName);
         executedCallHashes.add(callHash);
+        reexecutionAllowedTools.remove(toolName);
+        if (invocation != null) {
+            toolInvocationHistory.add(invocation);
+            if (toolInvocationHistory.size() > 30) {
+                toolInvocationHistory.remove(0);
+            }
+        }
         observations.add(toolName + "：" + (summary == null ? "" : summary));
         if (observations.size() > 20) {
             observations.remove(0);
         }
     }
 
+    /** 根据质量门禁创建一轮需要差异化调用证据工具的恢复任务。 */
+    public void beginEvidenceRecovery(QualityGateDecision decision) {
+        evidenceRecoveryCount++;
+        long effectiveEvidenceCount = snapshot == null ? 0L : snapshot.evidenceItems().stream()
+                .filter(com.zzy.finsight.domain.stock.FinancialEvidenceItem::effective)
+                .count();
+        List<String> issueCodes = decision == null ? List.of() : decision.issues().stream()
+                .map(issue -> issue.code())
+                .distinct()
+                .toList();
+        evidenceRecoveryDirective = EvidenceRecoveryDirective.pending(
+                evidenceRecoveryCount,
+                issueCodes,
+                decision == null ? "" : decision.summary(),
+                effectiveEvidenceCount
+        );
+    }
+
+    /** 记录补证据工具结果，并在新增有效证据后解除证据调用约束。 */
+    public void recordEvidenceRecoveryAttempt(ToolInvocation invocation, long newEffectiveEvidenceCount) {
+        if (evidenceRecoveryDirective != null) {
+            evidenceRecoveryDirective = evidenceRecoveryDirective.recordAttempt(
+                    invocation, newEffectiveEvidenceCount
+            );
+        }
+    }
+
+    /** 返回当前是否必须优先执行新的证据工具调用。 */
+    public boolean hasPendingEvidenceRecovery() {
+        return evidenceRecoveryDirective != null && evidenceRecoveryDirective.pending();
+    }
+
+    /** 新证据进入快照后清除派生结果，并允许相关确定性工具各重执行一次。 */
+    public void invalidateDerivedResultsAfterEvidenceChange() {
+        setMetrics(List.of());
+        setRiskAssessment(null);
+        setBullBearResearch(null);
+        for (String toolName : List.of(
+                "calculate_financial_metrics",
+                "assess_financial_risk",
+                "build_bull_bear_cases",
+                "check_evidence_coverage"
+        )) {
+            completedTools.remove(toolName);
+            reexecutionAllowedTools.add(toolName);
+        }
+    }
+
+    /** 返回指定工具是否因输入状态失效而获得一次受控重执行权限。 */
+    public boolean isToolReexecutionAllowed(String toolName) {
+        return reexecutionAllowedTools.contains(toolName);
+    }
+
     /** 仅为门禁要求的确定性重算释放指定工具调用，其他重复调用仍保持禁止。 */
     public void allowDeterministicReexecution(String toolName, String callHash) {
         if (toolName != null) {
             completedTools.remove(toolName);
+            reexecutionAllowedTools.add(toolName);
         }
         if (callHash != null) {
             executedCallHashes.remove(callHash);

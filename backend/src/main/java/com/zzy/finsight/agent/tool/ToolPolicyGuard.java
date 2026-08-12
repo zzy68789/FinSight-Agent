@@ -36,6 +36,12 @@ public class ToolPolicyGuard {
             if (!action.toolCalls().isEmpty()) {
                 throw new IllegalArgumentException("非工具动作不得携带 toolCalls");
             }
+            if (state.hasPendingEvidenceRecovery()
+                    && action.type() != AgentActionType.STOP_INSUFFICIENT_EVIDENCE) {
+                throw new IllegalArgumentException(
+                        "EVIDENCE_RECOVERY_ACTION_REQUIRED：补证据期间只允许调用证据工具或明确停止"
+                );
+            }
             return;
         }
         if (action.toolCalls().isEmpty()) {
@@ -53,6 +59,11 @@ public class ToolPolicyGuard {
         Set<String> currentHashes = new HashSet<>();
         for (ToolInvocation invocation : action.toolCalls()) {
             ResearchTool tool = registry.require(invocation.toolName());
+            if (state.hasPendingEvidenceRecovery() && !tool.producesEvidence()) {
+                throw new IllegalArgumentException(
+                        "EVIDENCE_RECOVERY_TOOL_REQUIRED：补证据期间不得调用非证据工具 " + tool.name()
+                );
+            }
             Set<String> unknownArguments = new HashSet<>(invocation.arguments().keySet());
             unknownArguments.removeAll(tool.allowedArguments());
             if (!unknownArguments.isEmpty()) {
@@ -64,7 +75,11 @@ public class ToolPolicyGuard {
                 throw new IllegalArgumentException("工具不允许并行执行：" + tool.name());
             }
             String callHash = callHash(invocation);
-            if (!currentHashes.add(callHash) || state.getExecutedCallHashes().contains(callHash)) {
+            if (!currentHashes.add(callHash)) {
+                throw new IllegalArgumentException("DUPLICATE_TOOL_CALL：" + invocation.toolName());
+            }
+            if (state.getExecutedCallHashes().contains(callHash)
+                    && !state.isToolReexecutionAllowed(tool.name())) {
                 throw new IllegalArgumentException("DUPLICATE_TOOL_CALL：" + invocation.toolName());
             }
         }

@@ -162,20 +162,20 @@ public class ResearchAgentRuntime {
             );
 
             try {
+                try {
+                    toolPolicyGuard.validate(
+                            action,
+                            state,
+                            budget.maxToolCalls() - state.getToolCallCount(),
+                            budget.maxParallelTools()
+                    );
+                } catch (IllegalArgumentException exception) {
+                    finishTurn(turnId, exception.getMessage(), "FAILED", turnStartedAt);
+                    return stop(state, events, "FAILED_INVALID_ACTION", exception.getMessage());
+                }
                 if (action.type() == AgentActionType.CALL_TOOL
                         || action.type() == AgentActionType.CALL_TOOLS_PARALLEL) {
                     state.setPhase("RUNNING_TOOLS");
-                    try {
-                        toolPolicyGuard.validate(
-                                action,
-                                state,
-                                budget.maxToolCalls() - state.getToolCallCount(),
-                                budget.maxParallelTools()
-                        );
-                    } catch (IllegalArgumentException exception) {
-                        finishTurn(turnId, exception.getMessage(), "FAILED", turnStartedAt);
-                        return stop(state, events, "FAILED_INVALID_ACTION", exception.getMessage());
-                    }
                     String observation = executeTools(
                             ownerId, state, action, turnId, budget, events
                     );
@@ -250,21 +250,32 @@ public class ResearchAgentRuntime {
         }
         List<String> summaries = new ArrayList<>();
         boolean evidenceToolCalled = false;
+        boolean recoveryBatch = state.hasPendingEvidenceRecovery();
         long newEffectiveEvidence = 0L;
         for (PendingToolExecution execution : pending) {
             CompletedToolExecution completed = awaitTool(
                     ownerId, state, turnId, execution, budget, events
             );
             summaries.add(completed.result().summary());
-            if (toolRegistry.require(completed.invocation().toolName()).producesEvidence()) {
+            boolean producesEvidence = toolRegistry.require(
+                    completed.invocation().toolName()
+            ).producesEvidence();
+            boolean recoveryAttempt = producesEvidence && recoveryBatch;
+            long toolNewEffectiveEvidence = completed.result().evidenceItems().stream()
+                    .filter(FinancialEvidenceItem::effective)
+                    .count();
+            if (producesEvidence) {
                 evidenceToolCalled = true;
-                newEffectiveEvidence += completed.result().evidenceItems().stream()
-                        .filter(FinancialEvidenceItem::effective)
-                        .count();
+                newEffectiveEvidence += toolNewEffectiveEvidence;
+            }
+            if (recoveryAttempt) {
+                state.recordEvidenceRecoveryAttempt(
+                        completed.invocation(), toolNewEffectiveEvidence
+                );
             }
             persistToolEffects(ownerId, state, completed.databaseId(), completed.invocation(), completed.result());
             state.recordObservation(
-                    completed.invocation().toolName(),
+                    completed.invocation(),
                     completed.callHash(),
                     completed.result().summary()
             );
@@ -276,6 +287,16 @@ public class ResearchAgentRuntime {
                     "errorCode", completed.result().errorCode(),
                     "retryable", completed.result().retryable()
             ), completed.durationMs(), completed.result().status(), completed.result().errorCode());
+            if (recoveryAttempt) {
+                publish(state, events, "evidence_recovery_progress", mapOf(
+                        "directive", state.getEvidenceRecoveryDirective(),
+                        "toolName", completed.invocation().toolName(),
+                        "arguments", completed.invocation().arguments(),
+                        "newEffectiveEvidenceCount", toolNewEffectiveEvidence
+                ), completed.durationMs(),
+                        state.hasPendingEvidenceRecovery() ? "DEGRADED" : "SUCCESS",
+                        state.hasPendingEvidenceRecovery() ? "本次调用未产生新增有效证据" : "");
+            }
         }
         if (evidenceToolCalled) {
             state.setConsecutiveNoNewEvidenceTurns(
@@ -461,6 +482,7 @@ public class ResearchAgentRuntime {
             publishQualityGateRoute(state, events, review.decision(), attempt);
             if (route == QualityGateRoute.COLLECT_MORE_EVIDENCE) {
                 if (canReplan(state, budget, 1)) {
+                    state.beginEvidenceRecovery(review.decision());
                     executeReplan(state, budget, events);
                     return new SynthesisOutcome(false, true, "RUNNING", review.reason(), 0L);
                 }
