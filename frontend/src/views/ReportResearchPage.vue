@@ -30,6 +30,7 @@
     </main>
 
     <main v-else-if="report" class="archive-main">
+      <p v-if="exportError" class="export-notice" role="alert">{{ exportError }}</p>
       <section class="identity-strip" aria-labelledby="report-title">
         <div class="identity-primary">
           <p class="eyebrow">VERIFIED RESEARCH RECORD · #{{ report.id }}</p>
@@ -145,9 +146,16 @@
               <span>{{ showComparison ? 'LINE-BY-LINE REVIEW' : 'APPROVED NARRATIVE' }}</span>
               <h2>{{ showComparison ? `V${report.version} 与 ${comparisonLabel}` : '报告正文' }}</h2>
             </div>
-            <div v-if="showComparison" class="diff-stats">
-              <span class="removed">−{{ diffStats.removed }}</span>
-              <span class="added">+{{ diffStats.added }}</span>
+            <div class="paper-actions">
+              <div v-if="showComparison" class="diff-stats">
+                <span class="removed">−{{ diffStats.removed }}</span>
+                <span class="added">+{{ diffStats.added }}</span>
+              </div>
+              <ReportExportMenu
+                :report-id="report.id"
+                label="导出当前版本"
+                @error="exportError = $event"
+              />
             </div>
           </header>
           <article v-if="!showComparison" class="archive-paper report-content" v-html="renderedReport"></article>
@@ -228,6 +236,7 @@ import {
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
 import MarketSeriesChart from '../components/MarketSeriesChart.vue';
+import ReportExportMenu from '../components/report/ReportExportMenu.vue';
 import {
   getCurrentUser,
   getReport,
@@ -244,6 +253,7 @@ const replay = ref(null);
 const taskLogs = ref([]);
 const isLoading = ref(true);
 const error = ref('');
+const exportError = ref('');
 const compareReportId = ref('');
 const showComparison = ref(false);
 const evidenceKeyword = ref('');
@@ -337,6 +347,7 @@ const diffStats = computed(() => diffRows.value.reduce((result, row) => {
 const loadReportArchive = async () => {
   isLoading.value = true;
   error.value = '';
+  exportError.value = '';
   compareReportId.value = '';
   showComparison.value = false;
   try {
@@ -410,6 +421,7 @@ onMounted(loadReportArchive);
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #c15b49; box-shadow: 0 0 0 4px rgba(193, 91, 73, .12); }
 .status-dot.is-pass { background: #64a996; box-shadow: 0 0 0 4px rgba(100, 169, 150, .12); }
 .archive-main { max-width: 1580px; margin: auto; padding: 28px 24px 64px; }
+.export-notice { margin: 0 0 16px; padding: 10px 12px; color: #8f3f34; background: #fff0ed; border: 1px solid #e6b8b0; font-size: 12px; }
 .identity-strip { display: flex; align-items: end; justify-content: space-between; gap: 36px; padding: 14px 0 22px; border-bottom: 1px solid #9aadb2; }
 .eyebrow, .section-kicker span, .rail-heading span, .paper-toolbar span { margin: 0 0 8px; color: #7a6640; font: 700 10px ui-monospace, monospace; letter-spacing: .15em; }
 .identity-primary h1 { margin: 0; color: #102831; font: 500 clamp(34px, 5vw, 66px)/.95 ui-serif, Georgia, serif; letter-spacing: -.03em; }
@@ -458,6 +470,7 @@ onMounted(loadReportArchive);
 .compare-toggle:disabled { opacity: .38; cursor: not-allowed; }
 .paper-toolbar { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, rgba(178, 139, 73, .08), transparent 42%); }
 .paper-toolbar h2 { font-size: 21px; }
+.paper-actions { display: flex; align-items: center; gap: 12px; }
 .diff-stats { display: flex; gap: 8px; font: 700 11px ui-monospace, monospace; }
 .diff-stats .removed { color: #a24c40; }.diff-stats .added { color: #287363; }
 .archive-paper { min-height: 720px; padding: clamp(28px, 5vw, 64px); color: #2c4148; background: linear-gradient(90deg, rgba(178, 139, 73, .045), transparent 6rem), #fff; }

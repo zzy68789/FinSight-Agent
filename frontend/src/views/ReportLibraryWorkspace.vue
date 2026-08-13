@@ -145,6 +145,7 @@ import {
   updateReportFavorite
 } from '../services/api';
 import { formatDate, statusLabel, statusStyles } from '../modules/presentation';
+import { saveReportArtifact } from '../modules/reportExport.js';
 
 const props = defineProps({
   threadId: {
@@ -223,15 +224,10 @@ const copySelectedReport = async () => {
 const downloadSelectedReport = async (format = 'pdf') => {
   if (!selectedReport.value) return;
   try {
-    const result = await exportReport(selectedReport.value.id, format);
-    const url = URL.createObjectURL(result.blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = result.filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    const artifact = await exportReport(selectedReport.value.id, format);
+    saveReportArtifact(artifact);
   } catch (error) {
-    emit('warning', error.message);
+    emit('warning', `报告导出失败：${error.message}`);
   }
 };
 
@@ -284,4 +280,3 @@ watch(() => props.threadId, () => {
 watch(() => props.refreshRevision, () => loadReports(props.threadId));
 onMounted(() => loadReports(props.threadId));
 </script>
-

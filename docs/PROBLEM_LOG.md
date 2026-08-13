@@ -866,3 +866,21 @@ V6 已把 canonical Agent 事件与业务事务一起写入 outbox，但发布�
 ### 结果
 
 后端全量 `mvn.cmd test` 共 229 项，零失败、零错误、跳过 3 项；测试覆盖规范化、上限、主证券/跨资产拒绝、Planner 采集守卫、主/可比指标隔离、证据冲突隔离、恢复哈希、报告引用归属和缺失降级。前端 `npm.cmd test` 共 21 项全部通过，生产构建完成 2423 个模块转换。Docker 与真实 TuShare 未运行，因此 V9 MySQL 迁移、真实股票/ETF 比较口径和浏览器端到端归属仍保留为后续验收；ECharts `charts` chunk 约 591 kB 的既有警告未在本轮扩大范围处理。
+
+## 048. 报告草稿提前展示且三个导出入口各自解释下载链路
+
+### 发生了什么
+
+Agent 在 `synthesis_completed` 时就把尚未通过引用、合规和评测门禁的正文写入前端 `finalReport`，用户可能在最终事务提交前看到一份看似正式的报告。失败路径还会把末次草稿保存为 `FAIL` 报告；报告库虽然已有 PDF/Word/Markdown 按钮，当前 Run 和独立研究页却没有统一导出入口，浏览器下载和错误处理也直接写在页面中。
+
+### 原因
+
+事件投影没有区分内部 `draftReport` 与已持久化的发布报告，报告查询 SQL 也没有把 PASS 作为普通用户可见边界。导出服务虽已从 `ReportResponse` 纯派生文件，但 Interface 没有明确“不调用模型、不修改状态”的约束，页面又各自负责对象 URL、文件名和点击下载，导致同一报告链在展示层分叉。
+
+### 解决方式
+
+`agentEventProjection` 只在 `synthesis_completed` 保存内部草稿，直到最终事务提交的 `run_completed` 携带 `finalReport + reportId` 才发布正文；实时 SSE 与 Trace 回放使用同一规则。Runtime 删除失败草稿落库，普通报告详情、版本和列表 SQL 只查询 PASS，`ReportService` 删除事务外保存入口。`ReportExportService` 明确只从 PASS 持久化版本派生文件，增加统一的 `ReportExportMenu`、文件名解析和浏览器下载模块，并分别接入当前 Run、独立研究页和报告库快捷按钮。
+
+### 结果
+
+在线正文、报告库记录和导出制品现在由同一个最终事务与 `reportId/version` 驱动；下载失败只产生界面 warning，不会改写报告或任务状态。2026-08-13 后端全量 230 项测试零失败、零错误、跳过 3 项；前端 26 项测试全部通过，生产构建完成 2425 个模块转换。尚未启动真实浏览器执行三种文件下载、PDF/Word 视觉排版、键盘和移动端菜单验收；Docker MySQL 集成测试仍按设计跳过。

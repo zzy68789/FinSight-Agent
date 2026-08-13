@@ -24,10 +24,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(
@@ -87,7 +85,6 @@ class ApplicationSmokeTest {
     @BeforeEach
     void setUp() {
         when(userContext.currentUserId()).thenReturn(7L);
-        when(reportMapper.findLatestByThread(org.mockito.ArgumentMatchers.eq(7L), anyString())).thenReturn(Optional.empty());
     }
 
     @Test

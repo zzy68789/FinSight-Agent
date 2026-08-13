@@ -549,12 +549,6 @@ public class ResearchAgentRuntime {
                 return new SynthesisOutcome(false, false, "FAILED", review.reason(), null);
             }
         }
-        if (!state.getFinalReport().isBlank()) {
-            reportService.saveLatest(
-                    ownerId, state.getThreadId(), state.getTaskId(), state.getFinalReport(), "FAIL",
-                    state.getLastReviewReason(), state.getSnapshotId(), dataHash, contextHash, null
-            );
-        }
         return new SynthesisOutcome(false, false, "FAILED", state.getLastReviewReason(), null);
     }
 

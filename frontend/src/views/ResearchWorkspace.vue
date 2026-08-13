@@ -47,7 +47,9 @@
           :current-step="currentStep"
           :search-mode="activeRunSnapshot?.searchMode || searchMode"
           :run-snapshot="activeRunSnapshot"
+          :report-id="agentProjection.reportId"
           @select-example="researchQuestion = $event"
+          @export-error="emit('warning', $event)"
         />
 
         <ResearchRunInspector

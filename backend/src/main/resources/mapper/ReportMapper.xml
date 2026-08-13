@@ -61,14 +61,6 @@
         LIMIT 1
     </select>
 
-    <select id="findByTask" resultMap="reusableReportResult">
-        SELECT id, content, review_status
-        FROM report
-        WHERE owner_id = #{ownerId} AND task_id = #{taskId} AND deleted_at IS NULL
-        ORDER BY id DESC
-        LIMIT 1
-    </select>
-
     <select id="findReportByTask" resultMap="reportResult">
         SELECT <include refid="reportColumns"/>
         FROM report
@@ -77,25 +69,23 @@
         LIMIT 1
     </select>
 
-    <select id="findLatestByThread" resultType="string">
-        SELECT content
-        FROM report
-        WHERE owner_id = #{ownerId} AND thread_id = #{threadId} AND deleted_at IS NULL
-        ORDER BY version DESC, id DESC
-        LIMIT 1
-    </select>
-
     <select id="findReportsByThread" resultMap="reportResult">
         SELECT <include refid="reportColumns"/>
         FROM report
-        WHERE owner_id = #{ownerId} AND thread_id = #{threadId} AND deleted_at IS NULL
+        WHERE owner_id = #{ownerId}
+          AND thread_id = #{threadId}
+          AND review_status = 'PASS'
+          AND deleted_at IS NULL
         ORDER BY version DESC, id DESC
     </select>
 
     <select id="findReportById" resultMap="reportResult">
         SELECT <include refid="reportColumns"/>
         FROM report
-        WHERE owner_id = #{ownerId} AND id = #{reportId} AND deleted_at IS NULL
+        WHERE owner_id = #{ownerId}
+          AND id = #{reportId}
+          AND review_status = 'PASS'
+          AND deleted_at IS NULL
     </select>
 
     <select id="findReports" resultMap="reportResult">
@@ -103,6 +93,7 @@
         FROM report
         <where>
             owner_id = #{ownerId}
+            AND review_status = 'PASS'
             AND deleted_at IS NULL
             <if test="favoriteOnly">AND favorite = true</if>
             <if test="keyword != null and keyword != ''">

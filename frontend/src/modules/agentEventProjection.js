@@ -49,7 +49,9 @@ export function createAgentEventProjection() {
     evaluation: null,
     bullBearResearch: null,
     providerStages: [],
+    draftReport: '',
     finalReport: '',
+    reportId: null,
     logs: []
   };
 }
@@ -155,7 +157,7 @@ export function reduceAgentEvent(previous, rawEvent) {
     state.evidenceRecoveryCount += 1;
     state.logs.push(`[补证据] ${payload.summary || payload.errorMessage || '已记录一次证据恢复结果'}`);
   } else if (step === 'synthesis_completed' || step === 'writer') {
-    state.finalReport = payload.finalReport || payload.final_report || state.finalReport;
+    state.draftReport = payload.finalReport || payload.final_report || state.draftReport;
     state.logs.push(`[综合] 第 ${payload.attempt || 1} 版研究报告已生成。`);
   } else if (step === 'review_completed' || step === 'reviewer') {
     state.compliance = payload.compliance || null;
@@ -165,7 +167,10 @@ export function reduceAgentEvent(previous, rawEvent) {
     state.logs.push(passed ? '[门禁] 引用、合规和评测已通过。' : `[门禁] 未通过：${payload.critique || '请查看轨迹'}`);
   } else if (step === 'run_completed' || step === 'done') {
     state.taskId = payload.taskId || state.taskId;
-    state.finalReport = payload.finalReport || state.finalReport;
+    state.reportId = Number(payload.reportId || state.reportId) || null;
+    if (state.reportId) {
+      state.finalReport = payload.finalReport || state.draftReport || state.finalReport;
+    }
     state.runStats = {
       turnCount: Number(payload.turnCount || 0),
       toolCallCount: Number(payload.toolCallCount || 0),

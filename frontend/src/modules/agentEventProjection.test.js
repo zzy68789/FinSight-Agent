@@ -44,3 +44,29 @@ test('版本化 outbox 事件可重放并按任务序号去重', () => {
   assert.equal(projection.metrics[0].metricName, 'ROE');
   assert.equal(projection.currentStep, 'tool_completed');
 });
+
+test('报告草稿只在最终事务提交事件后成为可发布正文', () => {
+  const draft = reduceAgentEvent(createAgentEventProjection(), {
+    step: 'synthesis_completed',
+    data: { eventId: 'draft-1', finalReport: '# 待门禁报告' }
+  });
+  assert.equal(draft.draftReport, '# 待门禁报告');
+  assert.equal(draft.finalReport, '');
+  assert.equal(draft.reportId, null);
+
+  const published = reduceAgentEvent(draft, {
+    step: 'run_completed',
+    data: { eventId: 'done-1', taskId: 7, reportId: 21, finalReport: '# 已发布报告' }
+  });
+  assert.equal(published.finalReport, '# 已发布报告');
+  assert.equal(published.reportId, 21);
+});
+
+test('缺少持久化报告标识的结束信号不能发布内部草稿', () => {
+  const projection = replayAgentEvents([
+    { step: 'synthesis_completed', data: { eventId: 'draft-2', finalReport: '# 未提交草稿' } },
+    { step: 'done', data: { eventId: 'done-2', taskId: 8 } }
+  ]);
+  assert.equal(projection.finalReport, '');
+  assert.equal(projection.reportId, null);
+});

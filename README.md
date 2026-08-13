@@ -22,13 +22,14 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **幂等提交与刷新恢复**：任务创建使用 `Idempotency-Key` 和用户级数据库唯一约束；前端持久化 task/thread/最后 sequence，首次 SSE 连接失败或页面刷新后通过 Trace + `Last-Event-ID` 接续同一权威任务，不重新创建 Agent Run。
 - **类型化只读工具**：Planner 参数先按工具 schema 解码为强类型命令，工具只读取不可变上下文并返回类型化 `ToolPayload`，状态变更统一由 Runtime reducer 串行应用。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
-- **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
+- **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点、ETF ECharts 行情图和当前版本统一导出菜单。
 - **证据约束多空工具**：`BullBearCaseBuilder` 由 `build_bull_bear_cases` 工具调用，基于同一确定性指标/风险快照输出正反条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 除检查证据数量、报告期和就近引用外，还会抽取正文中的百分比、倍数和金额并逐项对齐确定性指标/冻结证据；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
 - **分层评测门控**：所有股票和 ETF 都执行线上引用、数字、报告期和方向性观点硬门禁；离线 `dataset-v1` 另提供 20 个冻结报告样例、24 个检索标注、RAG 指标、历史基线和可选 LLM-as-Judge。
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
-- **报告库与导出**：支持报告列表、版本查看、Markdown/PDF/Word 导出、收藏、软删除和加入 RAG。
+- **单一发布与导出链路**：综合阶段正文只作为内部草稿，只有引用、合规和评测门禁通过且最终事务提交后，`run_completed` 才发布带 `reportId` 的在线报告；当前 Run、独立研究页和报告库统一从同一持久化版本派生 Markdown/PDF/Word，导出不再次调用 LLM，也不修改报告或任务状态。
+- **报告库管理**：支持 PASS 报告列表、版本查看、收藏、软删除和加入 RAG；报告库保留 PDF、Word、Markdown 三种快捷导出。
 - **用户隔离知识库**：PDF 上传、报告加入 RAG、BM25/Chroma 检索和知识库清理均绑定当前登录用户，不跨用户共享文档。
 - **本地可演示降级**：未配置 LLM、Tavily、TuShare、Redis 或 ChromaDB 时，仍可通过本地 fallback 跑通核心流程。
 
@@ -367,6 +368,8 @@ POST /api/reports/{reportId}/favorite?favorite=true
 POST /api/reports/{reportId}/knowledge-base
 DELETE /api/reports/{reportId}
 ```
+
+报告查询和导出只暴露已通过门禁的 `PASS` 版本。导出文件名使用 `report-{threadId}-v{version}.{format}`，内容由该 `reportId` 对应的持久化正文直接派生，不重新生成报告；导出失败只影响本次下载请求。
 
 登录后可从报告库点击“独立研究页”，或直接访问前端路由：
 

@@ -16,10 +16,6 @@ import java.util.Optional;
  */
 @Mapper
 public interface ReportMapper {
-    default void save(long ownerId, long taskId, String threadId, String content, String reviewStatus, String critique) {
-        save(ownerId, taskId, threadId, content, reviewStatus, critique, null, null, null, null);
-    }
-
     default long save(
             long ownerId,
             long taskId,
@@ -63,11 +59,7 @@ public interface ReportMapper {
             @Param("generationContextHash") String generationContextHash
     );
 
-    Optional<ReusableReportRecord> findByTask(@Param("ownerId") long ownerId, @Param("taskId") long taskId);
-
     Optional<ReportRecord> findReportByTask(@Param("ownerId") long ownerId, @Param("taskId") long taskId);
-
-    Optional<String> findLatestByThread(@Param("ownerId") long ownerId, @Param("threadId") String threadId);
 
     List<ReportRecord> findReportsByThread(@Param("ownerId") long ownerId, @Param("threadId") String threadId);
 

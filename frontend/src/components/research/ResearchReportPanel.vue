@@ -8,11 +8,19 @@
           <h2 id="research-report-title" class="mt-1 font-serif text-xl font-semibold text-slate-950">研究报告</h2>
           <p class="mt-1 text-xs text-slate-500">通过引用、合规与评测门禁后发布的权威正文</p>
         </div>
-        <div class="flex flex-wrap gap-2 text-[10px] font-semibold">
-          <span v-if="runSnapshot?.ticker" class="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-slate-700">{{ runSnapshot.ticker }}</span>
-          <span v-if="runSnapshot?.comparisonTickers?.length" class="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">对比 {{ runSnapshot.comparisonTickers.length }}</span>
-          <span class="rounded border border-slate-200 bg-white px-2 py-1 text-slate-600">{{ searchModeLabel }}</span>
-          <span class="rounded border px-2 py-1" :class="isRunning ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-600'">{{ currentStepLabel }}</span>
+        <div class="flex flex-col items-start gap-3 sm:items-end">
+          <div class="flex flex-wrap gap-2 text-[10px] font-semibold">
+            <span v-if="runSnapshot?.ticker" class="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-slate-700">{{ runSnapshot.ticker }}</span>
+            <span v-if="runSnapshot?.comparisonTickers?.length" class="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">对比 {{ runSnapshot.comparisonTickers.length }}</span>
+            <span class="rounded border border-slate-200 bg-white px-2 py-1 text-slate-600">{{ searchModeLabel }}</span>
+            <span class="rounded border px-2 py-1" :class="isRunning ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-600'">{{ currentStepLabel }}</span>
+          </div>
+          <ReportExportMenu
+            v-if="reportId && reportContent && !isRunning"
+            :report-id="reportId"
+            label="导出已发布报告"
+            @error="$emit('export-error', $event)"
+          />
         </div>
       </div>
       <p v-if="runSnapshot?.researchQuestion" class="mt-4 max-w-3xl border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-600">
@@ -88,6 +96,7 @@ import {
 } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
+import ReportExportMenu from '../report/ReportExportMenu.vue';
 import { agentEventTypeLabel } from '../../modules/agentEventProjection.js';
 
 const props = defineProps({
@@ -96,10 +105,11 @@ const props = defineProps({
   isTyping: { type: Boolean, default: false },
   currentStep: { type: String, default: 'idle' },
   searchMode: { type: String, default: 'hybrid' },
-  runSnapshot: { type: Object, default: null }
+  runSnapshot: { type: Object, default: null },
+  reportId: { type: Number, default: null }
 });
 
-defineEmits(['select-example']);
+defineEmits(['select-example', 'export-error']);
 
 const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
 md.use(mk);

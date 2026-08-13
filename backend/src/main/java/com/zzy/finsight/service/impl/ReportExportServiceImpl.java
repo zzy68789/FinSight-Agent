@@ -36,6 +36,9 @@ public class ReportExportServiceImpl implements ReportExportService {
     private static final float MARGIN = 54f;
 
     public ExportedReport export(ReportResponse report, String format) {
+        if (!"PASS".equals(report.reviewStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "仅允许导出已通过全部门禁的报告");
+        }
         String normalizedFormat = normalizeFormat(format);
         String filename = filename(report, normalizedFormat);
         try {

@@ -520,10 +520,6 @@ class ResearchAgentRuntimeTest {
                 anyString(), anyString(), anyString(), anyString()
         )).thenReturn("generation-hash");
         when(reportService.findReusable(anyLong(), anyString())).thenReturn(Optional.empty());
-        when(reportService.saveLatest(
-                anyLong(), anyString(), anyLong(), anyString(), anyString(), anyString(),
-                any(), anyString(), anyString(), any()
-        )).thenReturn(99L);
         when(commitModule.commitCompletedRun(
                 any(AgentTurnCommit.class), any(LeaseToken.class), any(FinalReportCommit.class),
                 any(AgentEventDraft.class)

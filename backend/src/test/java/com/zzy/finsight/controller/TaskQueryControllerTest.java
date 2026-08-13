@@ -22,6 +22,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -142,7 +144,7 @@ class TaskQueryControllerTest {
     }
 
     @Test
-    void exportReportReturnsDownloadableFile() throws Exception {
+    void exportReportReadsOneApprovedVersionWithoutMutatingReportState() throws Exception {
         ReportResponse report = new ReportResponse(21L, 1L, "thread-1", "# Report", 1, "PASS", "", LocalDateTime.now(), false, null);
         ExportedReport exported = new ExportedReport(
                 "report-thread-1-v1.pdf",
@@ -157,6 +159,10 @@ class TaskQueryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "application/pdf"))
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"report-thread-1-v1.pdf\""));
+
+        verify(taskQueryService).getReport(7L, 21L);
+        verify(reportExportService).export(report, "pdf");
+        verifyNoMoreInteractions(taskQueryService, reportExportService);
     }
 
     @Test

@@ -1,6 +1,7 @@
 // frontend/src/services/api.js
 
 import { consumeSseChunk } from '../modules/sseEventStream.js';
+import { parseReportExportFilename } from '../modules/reportExport.js';
 
 const API_BASE = "http://localhost:8000/api";
 let authToken = localStorage.getItem('finsight_token') || '';
@@ -164,13 +165,15 @@ export async function getReport(reportId) {
 export async function exportReport(reportId, format = 'pdf') {
   const response = await fetch(`${API_BASE}/reports/${reportId}/export?format=${encodeURIComponent(format)}`, withAuth());
   if (!response.ok) {
-      throw new Error(`导出失败：${response.status}`);
+      const payload = await response.json().catch(() => null);
+      const error = new Error(payload?.message || payload?.detail || `导出失败：${response.status}`);
+      error.status = response.status;
+      throw error;
   }
   const disposition = response.headers.get('Content-Disposition') || '';
-  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
   return {
       blob: await response.blob(),
-      filename: filenameMatch ? filenameMatch[1] : `report.${format}`
+      filename: parseReportExportFilename(disposition, `report.${format}`)
   };
 }
 
