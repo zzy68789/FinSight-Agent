@@ -9,7 +9,8 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 ## 功能特性
 
 - **受约束 Research Agent**：`POST /api/research-runs` 接收证券代码和自然语言研究问题，由 Planner 动态选择只读白名单工具，并通过 SSE 推送计划、工具调用、观察、重规划、综合、门禁和停止事件；`POST /api/stock-reports` 仅作为兼容入口转入同一 Runtime。
-- **A股/ETF 解析**：普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`；常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
+- **A股/ETF 搜索与解析**：`GET /api/securities/search` 支持按代码或本地主档名称返回候选，`GET /api/securities/{ticker}/preview` 返回规范化代码、资产类型和名称确认状态；普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`，常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
+- **类型化研究意图**：Research Agent 请求支持综合研究、财务质量、估值风险、ETF 跟踪和事件影响；意图进入 Planner 与恢复/复用指纹，但不在 Runtime 中写死工具执行顺序，股票/ETF 不兼容意图会在入队前拒绝。
 - **增量证据账本**：Planner 可按问题选择公司主档、TuShare 财务、公开行情、用户上传报告和问题导向的公开网页检索工具；每次工具观察增量合并、校验和去重证据，不再无条件执行全部 Provider。
 - **ETF 深度快照**：ETF 聚合 TuShare `fund_daily`、`fund_basic`、`fund_nav`，保存 60 日 OHLC/成交量/成交额、基金资料、单位/累计净值、资产净值和同日折溢价；单接口失败按项降级。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
@@ -264,6 +265,15 @@ POST /api/clear
 
 ### 启动 Research Agent
 
+创建任务前可先搜索或预解析证券：
+
+```http
+GET /api/securities/search?query=贵州茅台
+GET /api/securities/600519/preview
+```
+
+名称搜索只返回本地主档能够确认的候选；代码受支持但主档缺少名称时，`preview` 会返回 `resolved=true`、`nameResolved=false`，不会伪造证券名称。前端必须让用户从候选中确认规范化代码，正式 Agent Run 仍会重新解析证券主体。
+
 ```http
 POST /api/research-runs
 Content-Type: application/json
@@ -276,6 +286,7 @@ Accept: text/event-stream
 {
   "ticker": "600519",
   "research_question": "最近两个季度毛利率变化的主要原因是什么？",
+  "research_intent": "FINANCIAL_QUALITY",
   "thread_id": "optional",
   "as_of_date": "2026-08-12",
   "time_horizon": "2Y",
@@ -293,6 +304,7 @@ Accept: text/event-stream
 
 - `ticker`：普通 A 股或常见 ETF 的 6 位代码，也支持 `.SH` / `.SZ` 后缀。
 - `research_question`：必填，决定计划、证据需求和工具选择。
+- `research_intent`：可选，支持 `COMPREHENSIVE`、`FINANCIAL_QUALITY`、`VALUATION_RISK`、`ETF_TRACKING`、`EVENT_IMPACT`，默认 `COMPREHENSIVE`。意图只约束 Planner 研究重点；`FINANCIAL_QUALITY` 仅适用于普通股票，`ETF_TRACKING` 仅适用于 ETF。
 - `as_of_date`、`time_horizon`：限定研究时点与观察区间。
 - `research_depth`：支持 `quick`、`standard`、`deep`，映射到服务端预算上限。
 - `search_mode`：支持 `document`、`hybrid`、`web`。

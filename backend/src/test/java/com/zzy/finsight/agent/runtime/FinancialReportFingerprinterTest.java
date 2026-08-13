@@ -85,6 +85,20 @@ class FinancialReportFingerprinterTest {
         assertThat(service.dataSnapshotHash(first)).isNotEqualTo(service.dataSnapshotHash(changed));
     }
 
+    @Test
+    void generationContextChangesWithResearchIntent() {
+        String comprehensive = service.generationContextHash(
+                "snapshot", "分析当前表现", "COMPREHENSIVE", "2026-08-13", "2Y", "standard",
+                "planner", "toolset", "policy"
+        );
+        String eventImpact = service.generationContextHash(
+                "snapshot", "分析当前表现", "EVENT_IMPACT", "2026-08-13", "2Y", "standard",
+                "planner", "toolset", "policy"
+        );
+
+        assertThat(comprehensive).isNotEqualTo(eventImpact);
+    }
+
     private FinancialSnapshot etfSnapshot(String close) {
         return new FinancialSnapshot(
                 new StockSubject("588200", "SH", "588200.SH", "科创芯片ETF", "ETF"),

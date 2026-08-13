@@ -129,6 +129,7 @@ public class DurableAgentRunner {
         String canonical = String.join("|",
                 safe(request.getTicker()).toUpperCase(java.util.Locale.ROOT),
                 safe(request.getResearchQuestion()).replaceAll("\\s+", " ").trim(),
+                request.getResearchIntent().name(),
                 request.getAsOfDate().toString(),
                 request.getTimeHorizon(),
                 request.getResearchDepth(),

@@ -6,6 +6,7 @@ import com.zzy.finsight.domain.stock.reference.AShareCompanyDirectory;
 
 
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -23,11 +24,12 @@ public class StockCodeResolver {
         this(new AShareCompanyDirectory());
     }
 
+    @Autowired
     public StockCodeResolver(AShareCompanyDirectory companyDirectory) {
         this.companyDirectory = companyDirectory;
     }
 
-    /** 将股票名称或代码解析为标准证券标识。 */
+    /** 将股票或 ETF 代码解析为标准证券标识。 */
     public StockSubject resolve(String input) {
         if (input == null || input.isBlank()) {
             throw new IllegalArgumentException("股票代码不能为空");
@@ -37,6 +39,7 @@ public class StockCodeResolver {
         if (explicit.matches()) {
             String ticker = explicit.group(1);
             String exchange = explicit.group(2).toUpperCase(Locale.ROOT);
+            validateExchange(ticker, exchange);
             return subject(ticker, exchange, assetType(ticker, exchange));
         }
         if (!normalized.matches("\\d{6}")) {
@@ -56,6 +59,16 @@ public class StockCodeResolver {
         }
         throw new IllegalArgumentException("当前仅支持沪深 A 股普通股票代码和常见 ETF 代码（沪市 6xxxxx/5xxxxx，深市 0/2/3xxxxx/15xxxx/16xxxx/18xxxx）；"
                 + normalized + " 这类代码暂不支持 B 股、债券或北交所标的。");
+    }
+
+    private void validateExchange(String ticker, String exchange) {
+        boolean shanghai = ticker.startsWith("6") || ticker.startsWith("5");
+        boolean shenzhen = ticker.startsWith("0") || ticker.startsWith("2") || ticker.startsWith("3")
+                || ticker.startsWith("15") || ticker.startsWith("16") || ticker.startsWith("18");
+        if (("SH".equals(exchange) && shanghai) || ("SZ".equals(exchange) && shenzhen)) {
+            return;
+        }
+        throw new IllegalArgumentException("证券代码与交易所后缀不匹配：" + ticker + "." + exchange);
     }
 
     private StockAssetType assetType(String ticker, String exchange) {

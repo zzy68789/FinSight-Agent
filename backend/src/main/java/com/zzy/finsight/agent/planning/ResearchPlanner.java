@@ -7,6 +7,7 @@ import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchIntent;
 import com.zzy.finsight.llm.LlmClient;
 import com.zzy.finsight.llm.LlmGenerationResult;
 import org.springframework.stereotype.Component;
@@ -24,7 +25,7 @@ import java.util.Set;
  */
 @Component
 public class ResearchPlanner {
-    public static final String PLANNER_VERSION = "research-planner-v3-feedback-aware-routing";
+    public static final String PLANNER_VERSION = "research-planner-v4-intent-aware-routing";
     private static final int MAX_STRUCTURE_ATTEMPTS = 2;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
@@ -42,9 +43,17 @@ public class ResearchPlanner {
                 你是受约束的 A股/ETF 投研 Planner。只规划研究，不给买卖、仓位或收益保证。
                 根据研究问题和工具目录返回严格 JSON，不要 Markdown：
                 {"goal":"...","hypotheses":["..."],"requiredEvidence":["..."],"completedItems":[],"unresolvedQuestions":["..."],"plannerMode":"LLM","version":"%s"}
+                研究意图：%s
+                意图重点：%s
                 研究请求：%s
                 可用工具：%s
-                """.formatted(PLANNER_VERSION, json(request), json(registry.catalog()));
+                """.formatted(
+                PLANNER_VERSION,
+                request.getResearchIntent().name(),
+                request.getResearchIntent().plannerInstruction(),
+                json(request),
+                json(registry.catalog())
+        );
         try {
             StructuredGeneration<ResearchPlan> generation = generateStructured(
                     prompt, ResearchPlan.class, modelPolicy.select("CREATE_PLAN", null)
@@ -267,8 +276,30 @@ public class ResearchPlanner {
 
     private ResearchPlan fallbackPlan(ResearchRunRequest request) {
         String question = request.getResearchQuestion();
+        ResearchIntent intent = request.getResearchIntent();
         List<String> hypotheses = new ArrayList<>();
         List<String> evidence = new ArrayList<>(List.of("证券主体信息", "可追溯原始证据", "确定性金融指标"));
+        switch (intent) {
+            case FINANCIAL_QUALITY -> {
+                hypotheses.add("盈利质量和现金流变化需要由法定财务口径验证");
+                evidence.add("财务报表、现金流及同比口径");
+            }
+            case VALUATION_RISK -> {
+                hypotheses.add("估值结论需要结合市场快照和风险证据验证");
+                evidence.add("行情、估值与风险维度快照");
+            }
+            case ETF_TRACKING -> {
+                hypotheses.add("ETF 跟踪特征需要结合基金资料、净值和行情证据验证");
+                evidence.add("基金资料、净值与跟踪风险证据");
+            }
+            case EVENT_IMPACT -> {
+                hypotheses.add("事件影响需要由截止日期前的公告和交叉来源验证");
+                evidence.add("公告、事件时间线与交叉来源");
+            }
+            case COMPREHENSIVE -> {
+                // 综合研究继续由自然语言问题决定具体证据重点。
+            }
+        }
         if (containsAny(question, "风险", "波动", "下跌", "偿债")) {
             hypotheses.add("当前财务或市场证据可能暴露需要优先复核的风险因素");
             evidence.add("风险维度与行情观察");
@@ -412,9 +443,16 @@ public class ResearchPlanner {
     private List<String> desiredProviders(ResearchRunRequest request, String question) {
         List<String> tools = new ArrayList<>();
         tools.add("get_company_profile");
-        boolean financial = containsAny(question, "财务", "营收", "利润", "毛利", "现金流", "roe", "负债", "估值", "etf", "基金");
-        boolean market = containsAny(question, "行情", "价格", "波动", "新闻", "事件", "催化", "风险", "技术", "pe", "pb");
-        boolean publicEvidence = containsAny(question, "新闻", "事件", "公告", "原因", "催化", "舆情", "监管");
+        ResearchIntent intent = request.getResearchIntent();
+        boolean financial = intent == ResearchIntent.FINANCIAL_QUALITY
+                || intent == ResearchIntent.ETF_TRACKING
+                || containsAny(question, "财务", "营收", "利润", "毛利", "现金流", "roe", "负债", "估值", "etf", "基金");
+        boolean market = intent == ResearchIntent.VALUATION_RISK
+                || intent == ResearchIntent.ETF_TRACKING
+                || intent == ResearchIntent.EVENT_IMPACT
+                || containsAny(question, "行情", "价格", "波动", "新闻", "事件", "催化", "风险", "技术", "pe", "pb");
+        boolean publicEvidence = intent == ResearchIntent.EVENT_IMPACT
+                || containsAny(question, "新闻", "事件", "公告", "原因", "催化", "舆情", "监管");
         if ("document".equals(request.getSearchMode())) {
             tools.add("retrieve_uploaded_reports");
         } else if ("web".equals(request.getSearchMode())) {

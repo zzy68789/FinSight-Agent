@@ -14,6 +14,7 @@ import com.zzy.finsight.agent.tool.ToolContext;
 import com.zzy.finsight.agent.tool.ToolResult;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchIntent;
 import com.zzy.finsight.llm.LlmClient;
 import com.zzy.finsight.llm.LlmGenerationResult;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,54 @@ class ResearchPlannerTest {
         assertThat(financial.plannerMode()).isEqualTo("DETERMINISTIC_FALLBACK");
         assertThat(financial.requiredEvidence()).contains("财务报表及同比口径");
         assertThat(market.requiredEvidence()).contains("行情和估值快照");
+    }
+
+    @Test
+    void fallbackPlanUsesResearchIntentWhenQuestionIsGeneric() {
+        ResearchPlanner planner = new ResearchPlanner(unavailableLlm(), new ObjectMapper().findAndRegisterModules());
+        ResearchToolRegistry registry = mock(ResearchToolRegistry.class);
+        when(registry.catalog()).thenReturn(List.of());
+        ResearchRunRequest request = request("请完成本次研究");
+        request.setResearchIntent(ResearchIntent.FINANCIAL_QUALITY);
+
+        ResearchPlan plan = planner.createPlan(request, registry).value();
+
+        assertThat(plan.requiredEvidence()).contains("财务报表、现金流及同比口径");
+        assertThat(plan.hypotheses()).anyMatch(value -> value.contains("盈利质量"));
+    }
+
+    @Test
+    void createPlanSendsTypedResearchIntentToModel() {
+        AtomicReference<String> prompt = new AtomicReference<>();
+        LlmClient llm = new LlmClient() {
+            @Override
+            public String generate(String ignored, ModelType modelType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public LlmGenerationResult generateWithMetadata(String value, ModelType modelType) {
+                prompt.set(value);
+                return new LlmGenerationResult(
+                        "{\"goal\":\"核验事件影响\",\"hypotheses\":[\"公告影响待验证\"],"
+                                + "\"requiredEvidence\":[\"公告与交叉来源\"],\"completedItems\":[],"
+                                + "\"unresolvedQuestions\":[\"影响范围\"],\"plannerMode\":\"LLM\","
+                                + "\"version\":\"research-planner-v4-intent-aware-routing\"}",
+                        "smart-model", 20, 10, 30, "STOP", 8L
+                );
+            }
+        };
+        ResearchRunRequest request = request("核验近期公告影响");
+        request.setResearchIntent(ResearchIntent.EVENT_IMPACT);
+
+        new ResearchPlanner(llm, new ObjectMapper().findAndRegisterModules())
+                .createPlan(request, new ResearchToolRegistry(List.of()));
+
+        assertThat(prompt.get()).contains(
+                "研究意图：EVENT_IMPACT",
+                "重点核验截止日期前的公告、事件及其影响证据",
+                "research_intent"
+        );
     }
 
     @Test
@@ -139,7 +188,7 @@ class ResearchPlannerTest {
                         "{\"goal\":\"解决证据冲突\",\"hypotheses\":[\"公告口径可交叉验证\"],"
                                 + "\"requiredEvidence\":[\"不同来源公告\"],\"completedItems\":[\"原始检索\"],"
                                 + "\"unresolvedQuestions\":[\"冲突来源尚未核验\"],\"plannerMode\":\"LLM\","
-                                + "\"version\":\"research-planner-v3-feedback-aware-routing\"}",
+                                + "\"version\":\"research-planner-v4-intent-aware-routing\"}",
                         "smart-model", 120, 40, 160, "STOP", 25L
                 );
             }

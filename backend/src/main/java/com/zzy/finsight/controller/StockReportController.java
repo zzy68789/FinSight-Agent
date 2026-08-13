@@ -8,6 +8,7 @@ import com.zzy.finsight.dto.stock.StockReportRequest;
 import com.zzy.finsight.service.StockReportService;
 import com.zzy.finsight.dto.stock.StockReportTraceResponse;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchIntent;
 import com.zzy.finsight.service.ResearchAgentService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -82,6 +83,7 @@ public class StockReportController {
         adapted.setThreadId(request.getThreadId());
         adapted.setSearchMode(request.getSearchMode());
         adapted.setResearchDepth("standard");
+        adapted.setResearchIntent(ResearchIntent.COMPREHENSIVE);
         String reportPeriod = request.getReportPeriod();
         if (reportPeriod.matches("\\d{8}")) {
             try {

@@ -5,6 +5,9 @@ import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.agent.event.AgentEventStreamModule;
 import com.zzy.finsight.agent.runtime.AgentTraceReader;
 import com.zzy.finsight.agent.runtime.DurableAgentRunner;
+import com.zzy.finsight.agent.planning.ResearchIntentPolicy;
+import com.zzy.finsight.component.analysis.StockCodeResolver;
+import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.TaskExecutionRecord;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.dto.agent.ResearchRunTraceResponse;
@@ -34,6 +37,8 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
     private final SseService sseService;
     private final AgentEventStreamModule eventStreamModule;
     private final ExecutorService executorService;
+    private final StockCodeResolver stockCodeResolver;
+    private final ResearchIntentPolicy researchIntentPolicy;
 
     public ResearchAgentServiceImpl(
             DurableAgentRunner runner,
@@ -42,7 +47,9 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
             AgentTraceReader traceReader,
             SseService sseService,
             AgentEventStreamModule eventStreamModule,
-            @Qualifier("agentExecutor") ExecutorService executorService
+            @Qualifier("agentExecutor") ExecutorService executorService,
+            StockCodeResolver stockCodeResolver,
+            ResearchIntentPolicy researchIntentPolicy
     ) {
         this.runner = runner;
         this.taskMapper = taskMapper;
@@ -51,10 +58,15 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
         this.sseService = sseService;
         this.eventStreamModule = eventStreamModule;
         this.executorService = executorService;
+        this.stockCodeResolver = stockCodeResolver;
+        this.researchIntentPolicy = researchIntentPolicy;
     }
 
     @Override
     public void run(long ownerId, ResearchRunRequest request, SseEmitter emitter) {
+        StockSubject subject = stockCodeResolver.resolve(request.getTicker());
+        researchIntentPolicy.validate(request.getResearchIntent(), subject.assetType());
+        request.setTicker(subject.fullCode());
         AgentEventListener listener = eventListener(emitter);
         try {
             executorService.submit(() -> runner.runNew(ownerId, request, listener));

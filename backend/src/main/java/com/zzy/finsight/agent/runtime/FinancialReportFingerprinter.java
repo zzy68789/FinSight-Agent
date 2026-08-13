@@ -137,6 +137,7 @@ public class FinancialReportFingerprinter {
     public String generationContextHash(
             String dataSnapshotHash,
             String researchQuestion,
+            String researchIntent,
             String asOfDate,
             String timeHorizon,
             String researchDepth,
@@ -147,6 +148,7 @@ public class FinancialReportFingerprinter {
         return sha256(String.join("|",
                 safe(dataSnapshotHash),
                 safe(researchQuestion).replaceAll("\\s+", " ").trim(),
+                safe(researchIntent),
                 safe(asOfDate),
                 safe(timeHorizon),
                 safe(researchDepth),

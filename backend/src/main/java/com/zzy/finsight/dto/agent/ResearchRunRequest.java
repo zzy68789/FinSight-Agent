@@ -21,6 +21,10 @@ public class ResearchRunRequest {
     @JsonProperty("research_question")
     private String researchQuestion;
 
+    /** 本次运行的研究意图，只约束研究重点而不固定工具链。 */
+    @JsonProperty("research_intent")
+    private ResearchIntent researchIntent = ResearchIntent.COMPREHENSIVE;
+
     /** 会话标识。 */
     @JsonProperty("thread_id")
     private String threadId;
@@ -59,6 +63,14 @@ public class ResearchRunRequest {
 
     public void setResearchQuestion(String researchQuestion) {
         this.researchQuestion = researchQuestion;
+    }
+
+    public ResearchIntent getResearchIntent() {
+        return researchIntent == null ? ResearchIntent.COMPREHENSIVE : researchIntent;
+    }
+
+    public void setResearchIntent(ResearchIntent researchIntent) {
+        this.researchIntent = researchIntent;
     }
 
     public String getThreadId() {

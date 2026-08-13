@@ -49,6 +49,13 @@ class StockCodeResolverTest {
     }
 
     @Test
+    void rejectsMismatchedExplicitExchangeSuffix() {
+        assertThatThrownBy(() -> resolver.resolve("600519.SZ"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("证券代码与交易所后缀不匹配");
+    }
+
+    @Test
     void rejectsUnsupportedCode() {
         assertThatThrownBy(() -> resolver.resolve("900001"))
                 .isInstanceOf(IllegalArgumentException.class)

@@ -45,6 +45,7 @@ class ResearchAgentControllerTest {
                                 {
                                   "ticker": "600519",
                                   "research_question": "最近两个季度毛利率变化的主要原因是什么？",
+                                  "research_intent": "FINANCIAL_QUALITY",
                                   "thread_id": "agent-thread",
                                   "as_of_date": "2026-08-12",
                                   "time_horizon": "2Y",
@@ -60,7 +61,22 @@ class ResearchAgentControllerTest {
                 org.mockito.ArgumentMatchers.eq(7L), captor.capture(), any(SseEmitter.class)
         );
         assertThat(captor.getValue().getResearchQuestion()).contains("毛利率");
+        assertThat(captor.getValue().getResearchIntent().name()).isEqualTo("FINANCIAL_QUALITY");
         assertThat(captor.getValue().getAsOfDate()).hasToString("2026-08-12");
+    }
+
+    @Test
+    void rejectsUnknownResearchIntent() throws Exception {
+        mockMvc.perform(post("/api/research-runs")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "ticker": "600519",
+                                  "research_question": "分析盈利质量",
+                                  "research_intent": "UNKNOWN_INTENT"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

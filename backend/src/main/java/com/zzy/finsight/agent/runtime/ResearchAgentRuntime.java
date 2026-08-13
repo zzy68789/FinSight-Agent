@@ -453,6 +453,7 @@ public class ResearchAgentRuntime {
         String contextHash = fingerprinter.generationContextHash(
                 dataHash,
                 state.getRequest().getResearchQuestion(),
+                state.getRequest().getResearchIntent().name(),
                 state.getRequest().getAsOfDate().toString(),
                 state.getRequest().getTimeHorizon(),
                 state.getRequest().getResearchDepth(),

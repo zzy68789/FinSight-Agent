@@ -10,6 +10,8 @@ import java.util.Map;
 /**
  * 提供给 Planner 的固定大小状态投影，避免把完整 AgentState 和历史参数值重复注入 Prompt。
  * @param question 当前研究问题。
+ * @param researchIntent 当前研究意图。
+ * @param intentInstruction 当前研究意图对应的 Planner 重点。
  * @param plan 当前计划的必要字段。
  * @param turnNo 当前轮次。
  * @param toolCallCount 已用工具次数。
@@ -25,6 +27,8 @@ import java.util.Map;
  */
 public record PlannerContextProjection(
         String question,
+        String researchIntent,
+        String intentInstruction,
         Map<String, Object> plan,
         int turnNo,
         int toolCallCount,
@@ -42,6 +46,8 @@ public record PlannerContextProjection(
 
     public PlannerContextProjection {
         question = question == null ? "" : question;
+        researchIntent = researchIntent == null ? "COMPREHENSIVE" : researchIntent;
+        intentInstruction = intentInstruction == null ? "" : intentInstruction;
         plan = plan == null ? Map.of() : Map.copyOf(plan);
         completedTools = completedTools == null ? List.of() : List.copyOf(completedTools);
         recentToolCalls = recentToolCalls == null ? List.of() : List.copyOf(recentToolCalls);
@@ -69,6 +75,8 @@ public record PlannerContextProjection(
                 : state.getSnapshot().evidenceItems().stream().filter(FinancialEvidenceItem::effective).count();
         return new PlannerContextProjection(
                 state.getRequest() == null ? "" : state.getRequest().getResearchQuestion(),
+                state.getRequest() == null ? "COMPREHENSIVE" : state.getRequest().getResearchIntent().name(),
+                state.getRequest() == null ? "" : state.getRequest().getResearchIntent().plannerInstruction(),
                 plan,
                 state.getTurnNo(),
                 state.getToolCallCount(),

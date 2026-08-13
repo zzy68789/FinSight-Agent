@@ -1,6 +1,9 @@
 package com.zzy.finsight.domain.stock.reference;
 
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -23,6 +26,39 @@ public class AShareCompanyDirectory {
 
     public Optional<AShareCompanyProfile> findByTicker(String ticker) {
         return Optional.ofNullable(profiles.get(ticker));
+    }
+
+    /** 按代码或公司名称搜索本地主档，并按匹配程度稳定排序。 */
+    public List<AShareCompanyProfile> search(String query, int limit) {
+        if (query == null || query.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        String normalized = query.trim().toUpperCase(Locale.ROOT);
+        return profiles.values().stream()
+                .filter(profile -> profile.ticker().contains(normalized)
+                        || profile.companyName().toUpperCase(Locale.ROOT).contains(normalized))
+                .sorted(Comparator
+                        .comparingInt((AShareCompanyProfile profile) -> relevance(profile, normalized))
+                        .thenComparing(AShareCompanyProfile::ticker))
+                .limit(Math.min(limit, 100))
+                .toList();
+    }
+
+    private int relevance(AShareCompanyProfile profile, String query) {
+        String name = profile.companyName().toUpperCase(Locale.ROOT);
+        if (profile.ticker().equals(query)) {
+            return 0;
+        }
+        if (name.equals(query)) {
+            return 1;
+        }
+        if (profile.ticker().startsWith(query)) {
+            return 2;
+        }
+        if (name.startsWith(query)) {
+            return 3;
+        }
+        return 4;
     }
 
     /**

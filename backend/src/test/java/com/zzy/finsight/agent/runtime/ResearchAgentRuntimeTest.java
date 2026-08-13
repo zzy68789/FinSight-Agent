@@ -397,7 +397,7 @@ class ResearchAgentRuntimeTest {
         when(fingerprinter.dataSnapshotHash(any())).thenReturn("snapshot-hash");
         when(fingerprinter.generationContextHash(
                 anyString(), anyString(), anyString(), anyString(), anyString(),
-                anyString(), anyString(), anyString()
+                anyString(), anyString(), anyString(), anyString()
         )).thenReturn("generation-hash");
         when(reportService.findReusable(anyLong(), anyString())).thenReturn(Optional.empty());
 
@@ -517,7 +517,7 @@ class ResearchAgentRuntimeTest {
         when(fingerprinter.dataSnapshotHash(any())).thenReturn("snapshot-hash");
         when(fingerprinter.generationContextHash(
                 anyString(), anyString(), anyString(), anyString(), anyString(),
-                anyString(), anyString(), anyString()
+                anyString(), anyString(), anyString(), anyString()
         )).thenReturn("generation-hash");
         when(reportService.findReusable(anyLong(), anyString())).thenReturn(Optional.empty());
         when(reportService.saveLatest(
