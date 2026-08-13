@@ -156,7 +156,12 @@
             owner_id = #{ownerId}
             <if test="status != null and status != ''">AND status = #{status}</if>
             <if test="keyword != null and keyword != ''">
-                AND (query LIKE CONCAT('%', #{keyword}, '%') OR thread_id LIKE CONCAT('%', #{keyword}, '%'))
+                AND (
+                  CAST(id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                  OR query LIKE CONCAT('%', #{keyword}, '%')
+                  OR thread_id LIKE CONCAT('%', #{keyword}, '%')
+                  OR request_payload LIKE CONCAT('%', #{keyword}, '%')
+                )
             </if>
         </where>
         ORDER BY updated_at DESC, id DESC
@@ -170,7 +175,12 @@
             owner_id = #{ownerId}
             <if test="status != null and status != ''">AND status = #{status}</if>
             <if test="keyword != null and keyword != ''">
-                AND (query LIKE CONCAT('%', #{keyword}, '%') OR thread_id LIKE CONCAT('%', #{keyword}, '%'))
+                AND (
+                  CAST(id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                  OR query LIKE CONCAT('%', #{keyword}, '%')
+                  OR thread_id LIKE CONCAT('%', #{keyword}, '%')
+                  OR request_payload LIKE CONCAT('%', #{keyword}, '%')
+                )
             </if>
         </where>
     </select>

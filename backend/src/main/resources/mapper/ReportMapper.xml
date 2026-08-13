@@ -106,7 +106,11 @@
             AND deleted_at IS NULL
             <if test="favoriteOnly">AND favorite = true</if>
             <if test="keyword != null and keyword != ''">
-                AND (thread_id LIKE CONCAT('%', #{keyword}, '%') OR content LIKE CONCAT('%', #{keyword}, '%'))
+                AND (
+                  CAST(id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                  OR thread_id LIKE CONCAT('%', #{keyword}, '%')
+                  OR content LIKE CONCAT('%', #{keyword}, '%')
+                )
             </if>
         </where>
         ORDER BY created_at DESC, id DESC

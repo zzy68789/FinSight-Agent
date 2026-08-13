@@ -34,6 +34,13 @@ export function createAgentEventProjection() {
     plan: null,
     budget: null,
     taskId: null,
+    requestSummary: null,
+    latestTool: null,
+    replanCount: 0,
+    evidenceRecoveryCount: 0,
+    qualityGateDecision: null,
+    stopReason: '',
+    runStats: null,
     metrics: [],
     evidence: [],
     snapshotSummary: null,
@@ -99,38 +106,88 @@ export function reduceAgentEvent(previous, rawEvent) {
     id: eventId,
     type: step,
     status: payload.status || 'SUCCESS',
+    sequence: Number(payload.sequence || 0),
     turnNo: payload.turnNo || 0,
     toolName: payload.toolName || '',
-    summary: payload.summary || payload.reason || ''
+    summary: payload.summary || payload.reason || '',
+    durationMs: Number(payload.durationMs || 0),
+    reason: payload.reason || payload.errorMessage || '',
+    route: payload.route || '',
+    timestamp: payload.timestamp || ''
   }].slice(-30);
 
   if (step === 'run_created') {
     state.budget = payload.budget || null;
     state.taskId = payload.taskId || state.taskId;
+    state.requestSummary = {
+      ticker: payload.ticker || '',
+      researchQuestion: payload.researchQuestion || '',
+      asOfDate: payload.asOfDate || '',
+      researchDepth: payload.researchDepth || ''
+    };
     state.logs.push(`[运行时] 任务 #${payload.taskId || '-'} 已创建，最大 ${payload.budget?.maxTurns || '-'} 轮。`);
   } else if (step === 'plan_created' || step === 'replanned') {
     state.plan = payload.plan || null;
+    if (step === 'replanned') state.replanCount = Number(payload.replanCount || state.replanCount + 1);
     state.logs.push(`[规划] ${state.plan?.goal || '研究问题已更新'}`);
     if (payload.degraded) state.logs.push(`[规划降级] ${payload.degradedReason || 'LLM 不可用，使用确定性策略'}`);
   } else if (step === 'tool_started') {
+    state.latestTool = {
+      name: payload.toolName || '',
+      status: 'RUNNING',
+      turnNo: Number(payload.turnNo || 0),
+      summary: '工具执行中',
+      durationMs: 0
+    };
     state.logs.push(`[工具] 第 ${payload.turnNo || '-'} 轮调用 ${payload.toolName || '-'}。`);
   } else if (step === 'tool_completed') {
+    state.latestTool = {
+      name: payload.toolName || '',
+      status: payload.status || 'SUCCESS',
+      turnNo: Number(payload.turnNo || 0),
+      summary: payload.summary || '',
+      durationMs: Number(payload.durationMs || 0)
+    };
     applyToolResult(state, payload);
+  } else if (step === 'evidence_recovery_progress') {
+    state.evidenceRecoveryCount += 1;
+    state.logs.push(`[补证据] ${payload.summary || payload.errorMessage || '已记录一次证据恢复结果'}`);
   } else if (step === 'synthesis_completed' || step === 'writer') {
     state.finalReport = payload.finalReport || payload.final_report || state.finalReport;
     state.logs.push(`[综合] 第 ${payload.attempt || 1} 版研究报告已生成。`);
   } else if (step === 'review_completed' || step === 'reviewer') {
     state.compliance = payload.compliance || null;
     state.evaluation = payload.evaluation || state.evaluation;
+    state.qualityGateDecision = payload.qualityGateDecision || state.qualityGateDecision;
     const passed = (payload.reviewStatus || payload.review_status) === 'PASS';
     state.logs.push(passed ? '[门禁] 引用、合规和评测已通过。' : `[门禁] 未通过：${payload.critique || '请查看轨迹'}`);
   } else if (step === 'run_completed' || step === 'done') {
     state.taskId = payload.taskId || state.taskId;
     state.finalReport = payload.finalReport || state.finalReport;
+    state.runStats = {
+      turnCount: Number(payload.turnCount || 0),
+      toolCallCount: Number(payload.toolCallCount || 0),
+      plannerDegraded: Boolean(payload.plannerDegraded)
+    };
+    state.stopReason = 'COMPLETED';
     state.logs.push(`[完成] 任务 #${state.taskId || '-'} 已写入报告库。`);
   } else if (step === 'run_stopped') {
     state.taskId = payload.taskId || state.taskId;
+    state.stopReason = payload.reason || 'Agent 未能在预算内形成可发布报告';
+    state.runStats = {
+      turnCount: Number(payload.turnCount || 0),
+      toolCallCount: Number(payload.toolCallCount || 0),
+      plannerDegraded: false
+    };
     state.logs.push(`[停止] ${payload.reason || 'Agent 未能在预算内形成可发布报告'}`);
+  } else if (step === 'quality_gate_routed') {
+    state.qualityGateDecision = {
+      ...(state.qualityGateDecision || {}),
+      route: payload.route || '',
+      issues: payload.issues || [],
+      summary: payload.summary || ''
+    };
+    state.logs.push(`[门禁路由] ${payload.summary || payload.route || '已确定后续动作'}`);
   } else {
     applyLegacyEvent(state, step, payload);
   }

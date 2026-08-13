@@ -127,6 +127,7 @@
       <ResearchWorkspace
         v-if="activeWorkspace === 'run'"
         :thread-id="activeThreadId"
+        :refresh-revision="dataRevision"
         @completed="handleResearchCompleted"
         @warning="triggerWarning"
       />

@@ -24,157 +24,28 @@
           @submit="startStockResearch"
         />
 
-        <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" :events="agentEvents" />
-
-        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-blue-950">证券报告质检</h2>
-              <p class="mt-1 text-xs text-slate-500">指标、证据和 Bad Case 回放</p>
-            </div>
-            <ShieldCheckIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
-          </div>
-
-          <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
-            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
-              <span>风险评分</span>
-              <span class="mt-1 font-semibold text-slate-900">{{ financialRiskAssessment?.finalScore ?? '-' }}/10 · {{ financialRiskAssessment?.riskLevel || '-' }}</span>
-            </div>
-            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
-              <span>合规审查</span>
-              <span class="mt-1 font-semibold" :class="financialCompliance?.status === 'PASS' ? 'text-emerald-700' : 'text-amber-700'">
-                {{ financialCompliance?.status || '-' }} · {{ financialCompliance?.score ?? '-' }}
-              </span>
-            </div>
-            <div class="flex min-h-12 flex-col justify-center rounded-md bg-slate-50 px-3 py-2">
-              <span>评测门控</span>
-              <span class="mt-1 font-semibold" :class="financialEvaluation?.status === 'PASS' ? 'text-emerald-700' : 'text-amber-700'">
-                {{ financialEvaluation?.status || '-' }} · {{ financialEvaluation?.overallScore ?? '-' }}
-              </span>
-            </div>
-            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-              <span>证据条目</span>
-              <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.evidenceCount ?? financialEvidence.length }}</span>
-            </div>
-            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-              <span>缺失项</span>
-              <span class="font-semibold text-slate-900">{{ financialSnapshotSummary?.missingCount ?? 0 }}</span>
-            </div>
-          </div>
-
-          <div v-if="financialRiskAssessment" class="mt-4">
-            <div class="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div class="h-full rounded-full transition-all" :class="riskScorePercent > 60 ? 'bg-rose-500' : 'bg-blue-700'" :style="{ width: `${riskScorePercent}%` }"></div>
-            </div>
-            <div class="mt-3 space-y-2">
-              <div v-for="dimension in financialRiskAssessment.dimensions" :key="dimension.name" class="rounded-md border border-slate-100 px-3 py-2 text-xs">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="font-semibold text-slate-800">{{ dimension.name }}</span>
-                  <span class="font-mono text-slate-600">{{ dimension.score }}/10 · {{ dimension.weight }}%</span>
-                </div>
-                <p class="mt-1 leading-5 text-slate-500">{{ dimension.reason }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="financialMetrics.length > 0" class="mt-4 space-y-2">
-            <div v-for="metric in financialMetrics" :key="metric.metricName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
-              <span class="min-w-0 truncate font-medium text-slate-700">{{ metric.metricName }}</span>
-              <span class="shrink-0 font-semibold" :class="metric.status === 'OK' ? 'text-emerald-700' : 'text-amber-700'">{{ metric.displayValue }}</span>
-            </div>
-          </div>
-
-          <div v-if="financialProviderStages.length > 0" class="mt-4 space-y-2">
-            <p class="text-xs font-semibold text-slate-500">数据源执行</p>
-            <div v-for="stage in financialProviderStages" :key="stage.stageName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
-              <span class="min-w-0 truncate font-medium text-slate-700">{{ stage.stageName }}</span>
-              <span class="shrink-0 font-mono" :class="stage.status === 'SUCCESS' ? 'text-emerald-700' : 'text-rose-700'">{{ stage.status }} · {{ stage.durationMs }}ms</span>
-            </div>
-          </div>
-
-          <div v-if="evidenceBreakdown.length > 0" class="mt-4 flex flex-wrap gap-2">
-            <span v-for="item in evidenceBreakdown" :key="item.sourceType" class="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
-              {{ item.sourceType }} · {{ item.count }}
-            </span>
-          </div>
-
-          <div v-if="financialCompliance?.issues?.length" class="mt-4 space-y-2">
-            <p class="text-xs font-semibold text-amber-700">合规问题</p>
-            <div v-for="issue in financialCompliance.issues" :key="`${issue.category}-${issue.description}`" class="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              <div class="font-semibold">{{ issue.category }} · {{ issue.severity }}</div>
-              <p class="mt-1 leading-5">{{ issue.description }}</p>
-            </div>
-          </div>
-
-          <div v-if="financialEvaluation?.metricScores?.length" class="mt-4 space-y-2">
-            <p class="text-xs font-semibold text-slate-500">评测指标</p>
-            <div v-for="metric in financialEvaluation.metricScores" :key="metric.metricName" class="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-xs">
-              <span class="min-w-0 truncate font-medium text-slate-700">{{ metric.metricName }}</span>
-              <span class="shrink-0 font-mono" :class="metric.status === 'PASS' ? 'text-emerald-700' : 'text-rose-700'">{{ metric.status }} · {{ metric.score }}</span>
-            </div>
-            <div v-if="financialEvaluation.failedReasons?.length" class="rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-              {{ financialEvaluation.failedReasons.join('；') }}
-            </div>
-          </div>
-
-          <div class="mt-4 grid grid-cols-2 gap-2">
-            <button
-              v-for="type in ['数字错', '引用错', '逻辑错', '信息过期']"
-              :key="type"
-              type="button"
-              class="min-h-9 rounded-lg border border-slate-200 px-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-              :disabled="!latestStockTaskId"
-              @click="submitStockFeedback(type)"
-            >
-              {{ type }}
-            </button>
-          </div>
-          <input
-            v-model="stockFeedbackDetail"
-            type="text"
-            class="mt-2 min-h-9 w-full rounded-lg border border-slate-200 px-3 text-xs outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-            placeholder="可选：补充反馈说明"
-          />
-          <button
-            type="button"
-            class="mt-3 flex min-h-9 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            :disabled="!latestStockTaskId"
-            @click="loadStockReplay"
-          >
-            <EyeIcon class="h-3.5 w-3.5" aria-hidden="true" />
-            回放本次快照
-          </button>
-        </section>
-
-        <section class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-sm">
-          <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3">
-            <div class="flex items-center gap-2">
-              <TerminalIcon class="h-4 w-4 text-blue-300" aria-hidden="true" />
-              <h2 class="text-xs font-semibold tracking-wide text-slate-200">运行日志</h2>
-            </div>
-            <span class="text-xs text-slate-500">SSE</span>
-          </div>
-          <div
-            ref="logsContainer"
-            class="h-36 overflow-y-auto p-4 font-mono text-[11px] leading-5"
-            aria-live="polite"
-          >
-            <div v-if="logs.length === 0" class="text-slate-500">系统已就绪，等待输入。</div>
-            <div v-for="(log, i) in logs" :key="i" class="flex gap-2 py-0.5">
-              <span class="shrink-0 text-blue-300">&gt;</span>
-              <span class="break-all text-slate-300">{{ log }}</span>
-            </div>
-            <div v-if="isLoading" class="mt-2 animate-pulse text-blue-300">_</div>
-          </div>
-        </section>
       </aside>
 
-      <section class="lg:col-span-8">
+      <section class="space-y-6 lg:col-span-8">
+        <ResearchMissionControl
+          :projection="agentProjection"
+          :is-running="isLoading"
+          :run-snapshot="activeRunSnapshot"
+          :active-tasks="missionTasks"
+          :recent-reports="missionReports"
+          :records-loading="isMissionRecordsLoading"
+          :records-error="missionRecordsError"
+          @feedback="submitStockFeedback"
+          @replay="loadStockReplay"
+          @search-records="searchMissionRecords"
+          @refresh-records="loadMissionRecords"
+        />
+
         <div class="flex min-h-[calc(100vh-9rem)] flex-col overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
           <div class="flex flex-col gap-3 border-b border-blue-100 bg-blue-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 class="text-base font-semibold text-blue-950">研究报告</h2>
-              <p class="mt-1 text-sm text-slate-500">智能体工作流生成的报告内容</p>
+              <p class="mt-1 text-sm text-slate-500">Research Agent 通过质量门禁后发布的在线报告</p>
             </div>
             <div class="flex items-center gap-2 text-xs font-medium text-slate-500">
               <span class="rounded-md bg-white px-2 py-1 text-blue-700 ring-1 ring-blue-100">证券代码分析</span>
@@ -298,19 +169,16 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
-  EyeIcon,
   FileOutputIcon,
   Loader2Icon,
-  ShieldCheckIcon,
-  TerminalIcon,
   XIcon
 } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
 import ResearchLauncherSidebar from '../components/research/ResearchLauncherSidebar.vue';
-import StatusFlow from '../components/StatusFlow.vue';
+import ResearchMissionControl from '../components/research/ResearchMissionControl.vue';
 import { useAgentRunProjection } from '../composables/useAgentRunProjection';
 import { agentEventTypeLabel } from '../modules/agentEventProjection';
 import {
@@ -322,6 +190,8 @@ import {
   clearContext,
   getResearchRunTrace,
   getStockReplay,
+  listReports,
+  listTasks,
   saveStockFeedback,
   searchSecurities,
   streamResearchRun,
@@ -332,6 +202,10 @@ const props = defineProps({
   threadId: {
     type: String,
     required: true
+  },
+  refreshRevision: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -356,20 +230,9 @@ const researchAsOfDate = ref(new Date().toISOString().slice(0, 10));
 const researchDepth = ref('standard');
 const researchTimeHorizon = ref('2Y');
 const {
-  agentPlan,
-  agentBudget,
-  agentEvents,
+  agentProjection,
   latestStockTaskId,
-  financialMetrics,
-  financialEvidence,
-  financialSnapshotSummary,
-  financialRiskAssessment,
-  financialCompliance,
-  financialEvaluation,
-  bullBearResearch,
-  financialProviderStages,
   currentStep,
-  completedSteps,
   logs,
   displayedReport,
   isTyping,
@@ -380,15 +243,19 @@ const {
   markAgentRunDone
 } = useAgentRunProjection();
 
-const stockFeedbackDetail = ref('');
 const stockReplay = ref(null);
 const stockTrace = ref(null);
 const isLoading = ref(false);
-const logsContainer = ref(null);
 const uploadedFiles = ref([]);
 const isDragging = ref(false);
 const isDocumentReady = ref(true);
 const searchMode = ref('hybrid');
+const activeRunSnapshot = ref(null);
+const missionTasks = ref([]);
+const missionReports = ref([]);
+const missionRecordKeyword = ref('');
+const isMissionRecordsLoading = ref(false);
+const missionRecordsError = ref('');
 let securitySearchTimer = null;
 const securitySearchGate = createLatestRequestGate();
 
@@ -406,20 +273,6 @@ const researchReadiness = computed(() => resolveResearchReadiness({
   isSubmitting: isLoading.value
 }));
 
-const riskScorePercent = computed(() => {
-  const score = Number(financialRiskAssessment.value?.finalScore || 0);
-  return Math.max(0, Math.min(100, score * 10));
-});
-
-const evidenceBreakdown = computed(() => {
-  const counts = financialEvidence.value.reduce((result, item) => {
-    const key = item.sourceType || 'UNKNOWN';
-    result[key] = (result[key] || 0) + 1;
-    return result;
-  }, {});
-  return Object.entries(counts).map(([sourceType, count]) => ({ sourceType, count }));
-});
-
 const renderedReport = computed(() => {
   let raw = displayedReport.value || '';
   raw = raw.replace(/\\\[/g, () => '$$').replace(/\\\]/g, () => '$$');
@@ -427,11 +280,6 @@ const renderedReport = computed(() => {
   raw = raw.replace(/\[\s*(\\text|\\frac|\\sum|\\int)/g, '$$$$ $1');
   return md.render(raw);
 });
-
-const scrollToBottom = async () => {
-  await nextTick();
-  if (logsContainer.value) logsContainer.value.scrollTop = logsContainer.value.scrollHeight;
-};
 
 const processFiles = async (files) => {
   const selectedFiles = Array.from(files || []);
@@ -510,6 +358,9 @@ const scheduleSecuritySearch = queryValue => {
 };
 
 watch(subjectQuery, scheduleSecuritySearch, { immediate: true });
+watch(() => props.refreshRevision, () => loadMissionRecords());
+
+onMounted(() => loadMissionRecords());
 
 onBeforeUnmount(() => {
   securitySearchGate.invalidate();
@@ -519,12 +370,52 @@ onBeforeUnmount(() => {
 const currentStepLabel = (step) => agentEventTypeLabel(step);
 const searchModeLabel = mode => mode === 'document' ? '仅文档' : '混合检索';
 
+const loadMissionRecords = async () => {
+  isMissionRecordsLoading.value = true;
+  missionRecordsError.value = '';
+  try {
+    const keyword = missionRecordKeyword.value;
+    const [createdPage, runningPage, reports] = await Promise.all([
+      listTasks({ page: 1, size: 5, status: 'CREATED', keyword }),
+      listTasks({ page: 1, size: 5, status: 'RUNNING', keyword }),
+      listReports({ keyword, favoriteOnly: false })
+    ]);
+    const taskMap = new Map(
+      [...(runningPage.items || []), ...(createdPage.items || [])].map(task => [task.id, task])
+    );
+    missionTasks.value = [...taskMap.values()]
+      .sort((left, right) => String(right.updatedAt || right.createdAt).localeCompare(String(left.updatedAt || left.createdAt)))
+      .slice(0, 6);
+    missionReports.value = (reports || []).slice(0, 5);
+  } catch (error) {
+    missionRecordsError.value = error.message || '任务与报告加载失败';
+  } finally {
+    isMissionRecordsLoading.value = false;
+  }
+};
+
+const searchMissionRecords = keyword => {
+  missionRecordKeyword.value = String(keyword || '').trim();
+  loadMissionRecords();
+};
+
 const startStockResearch = async () => {
   if (!researchReadiness.value.canSubmit || isLoading.value) return;
 
   const security = selectedSecurity.value;
 
   isLoading.value = true;
+  activeRunSnapshot.value = {
+    ticker: security.fullCode,
+    companyName: security.companyName || '',
+    assetType: security.assetType,
+    researchIntent: researchIntent.value,
+    researchQuestion: researchQuestion.value.trim(),
+    asOfDate: researchAsOfDate.value,
+    researchDepth: researchDepth.value,
+    timeHorizon: researchTimeHorizon.value,
+    searchMode: searchMode.value
+  };
   stockReplay.value = null;
   stockTrace.value = null;
   resetAgentRun('[初始化] Research Agent：' + security.fullCode
@@ -557,12 +448,10 @@ const startStockResearch = async () => {
         markAgentRunDone();
         pushAgentLog('[完成] Research Agent 已结束运行。');
         emit('completed');
-        scrollToBottom();
       },
       (error) => {
         isLoading.value = false;
         logs.value.push('[错误] ' + error.message);
-        scrollToBottom();
       },
       props.threadId
     );
@@ -575,16 +464,14 @@ const startStockResearch = async () => {
 
 const handleStockEvent = (event) => {
   handleAgentEvent(event);
-  scrollToBottom();
+  if ((event?.step || event?.type) === 'run_created') loadMissionRecords();
 };
 
-const submitStockFeedback = async (feedbackType) => {
+const submitStockFeedback = async (feedbackType, feedbackDetail = '') => {
   if (!latestStockTaskId.value) return;
   try {
-    await saveStockFeedback(latestStockTaskId.value, feedbackType, stockFeedbackDetail.value);
+    await saveStockFeedback(latestStockTaskId.value, feedbackType, feedbackDetail);
     logs.value.push('[反馈] 已记录 Bad Case：' + feedbackType);
-    stockFeedbackDetail.value = '';
-    scrollToBottom();
   } catch (error) {
     emit('warning', error.message);
   }
@@ -606,7 +493,6 @@ const loadStockReplay = async () => {
       );
     }
     logs.value.push('[回放] 已加载本次快照、证据、指标与可信度轨迹。');
-    scrollToBottom();
   } catch (error) {
     emit('warning', error.message);
   }

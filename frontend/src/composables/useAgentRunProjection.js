@@ -100,6 +100,7 @@ export function useAgentRunProjection() {
   };
 
   return {
+    agentProjection,
     agentPlan,
     agentBudget,
     agentEvents,
