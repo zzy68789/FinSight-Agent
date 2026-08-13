@@ -1,163 +1,28 @@
 <template>
     <main class="workspace-main mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12 lg:px-8">
       <aside class="space-y-5 lg:col-span-4">
-        <section class="overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm shadow-blue-100/50">
-          <div class="border-b border-blue-100 bg-blue-50/70 px-5 py-4">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <h2 class="text-sm font-semibold text-blue-950">知识库</h2>
-                <p class="mt-1 text-xs text-slate-500">上传 PDF 后可使用文档检索模式</p>
-              </div>
-              <span class="rounded-md bg-white px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">最多 5 个 PDF</span>
-            </div>
-          </div>
-
-          <div class="p-5">
-            <label
-              for="pdf-upload"
-              class="group relative flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center transition focus-within:ring-2 focus-within:ring-blue-600 focus-within:ring-offset-2"
-              :class="isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40'"
-              @dragover.prevent="isDragging = true"
-              @dragleave.prevent="isDragging = false"
-              @drop.prevent="handleDrop"
-            >
-              <input
-                id="pdf-upload"
-                type="file"
-                multiple
-                accept=".pdf"
-                class="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="上传 PDF 文档"
-                @change="handleFileSelect"
-              />
-
-              <div v-if="uploadedFiles.length === 0" class="pointer-events-none flex flex-col items-center">
-                <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-white text-blue-700 shadow-sm ring-1 ring-slate-200">
-                  <UploadCloudIcon class="h-5 w-5" aria-hidden="true" />
-                </div>
-                <p class="text-sm font-medium text-slate-800">拖拽 PDF 文件到这里</p>
-                <p class="mt-1 text-xs text-slate-500">也可以点击选择本地文件</p>
-              </div>
-
-              <div v-else class="pointer-events-none z-10 w-full space-y-2">
-                <div
-                  v-for="(file, i) in uploadedFiles"
-                  :key="i"
-                  class="flex min-h-10 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-xs shadow-sm"
-                >
-                  <div class="flex min-w-0 items-center gap-2">
-                    <FileTextIcon class="h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
-                    <span class="truncate font-medium text-slate-700">{{ file.name }}</span>
-                  </div>
-                  <CheckCircle2Icon class="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
-                </div>
-              </div>
-            </label>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-blue-950">检索模式</h2>
-              <p class="mt-1 text-xs text-slate-500">选择本次研究使用的证据来源</p>
-            </div>
-            <SearchIcon class="h-4 w-4 text-slate-400" aria-hidden="true" />
-          </div>
-
-          <div class="grid grid-cols-2 gap-2" role="group" aria-label="检索模式">
-            <button
-              type="button"
-              :aria-pressed="searchMode === 'document'"
-              :disabled="uploadedFiles.length === 0"
-              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-              :class="searchMode === 'document' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
-              @click="setMode('document')"
-            >
-              <FileTextIcon class="h-4 w-4" aria-hidden="true" />
-              仅文档
-            </button>
-
-            <button
-              type="button"
-              :aria-pressed="searchMode === 'hybrid'"
-              class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-              :class="searchMode === 'hybrid' ? 'border-blue-700 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
-              @click="setMode('hybrid')"
-            >
-              <Globe2Icon class="h-4 w-4" aria-hidden="true" />
-              混合检索
-            </button>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-blue-100 bg-white p-5 shadow-sm shadow-blue-100/50">
-          <label for="stock-ticker" class="text-sm font-semibold text-blue-950">证券代码</label>
-          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
-            <input
-              id="stock-ticker"
-              v-model="stockTicker"
-              type="text"
-              inputmode="text"
-              class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              placeholder="600519 或 588200"
-              :disabled="isLoading"
-            />
-            <select
-              v-model="researchTimeHorizon"
-              class="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-              :disabled="isLoading"
-            >
-              <option value="6M">近 6 个月</option>
-              <option value="1Y">近 1 年</option>
-              <option value="2Y">近 2 年</option>
-              <option value="5Y">近 5 年</option>
-            </select>
-          </div>
-          <label for="research-question" class="mt-4 block text-sm font-semibold text-blue-950">研究问题</label>
-          <textarea
-            id="research-question"
-            v-model="researchQuestion"
-            rows="4"
-            maxlength="500"
-            class="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-50"
-            placeholder="例如：最近两个季度毛利率变化的主要原因是什么？"
-            :disabled="isLoading"
-          ></textarea>
-          <div class="mt-3 grid grid-cols-2 gap-3">
-            <label class="text-xs font-medium text-slate-600">
-              研究截止日
-              <input
-                v-model="researchAsOfDate"
-                type="date"
-                class="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-                :disabled="isLoading"
-              />
-            </label>
-            <label class="text-xs font-medium text-slate-600">
-              研究深度
-              <select
-                v-model="researchDepth"
-                class="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-                :disabled="isLoading"
-              >
-                <option value="quick">快速</option>
-                <option value="standard">标准</option>
-                <option value="deep">深度</option>
-              </select>
-            </label>
-          </div>
-          <button
-            type="button"
-            class="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
-            :disabled="isLoading || !canStartRun"
-            @click="startStockResearch"
-          >
-            <Loader2Icon v-if="isLoading" class="h-4 w-4 animate-spin" aria-hidden="true" />
-            <SendIcon v-else class="h-4 w-4" aria-hidden="true" />
-            <span>{{ isLoading ? 'Agent 运行中' : '启动研究 Agent' }}</span>
-          </button>
-        </section>
+        <ResearchLauncherSidebar
+          v-model:subject-query="subjectQuery"
+          v-model:research-intent="researchIntent"
+          v-model:research-question="researchQuestion"
+          v-model:as-of-date="researchAsOfDate"
+          v-model:time-horizon="researchTimeHorizon"
+          v-model:research-depth="researchDepth"
+          v-model:search-mode="searchMode"
+          :candidates="securityCandidates"
+          :selected-security="selectedSecurity"
+          :security-state="securitySearchState"
+          :security-error="securitySearchError"
+          :uploaded-files="uploadedFiles"
+          :is-dragging="isDragging"
+          :is-document-ready="isDocumentReady"
+          :is-submitting="isLoading"
+          :readiness="researchReadiness"
+          @select-security="selectSecurity"
+          @files-selected="processFiles"
+          @drag-state-change="isDragging = $event"
+          @submit="startStockResearch"
+        />
 
         <StatusFlow :currentStep="currentStep" :completedSteps="completedSteps" :events="agentEvents" />
 
@@ -433,30 +298,32 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
-  CheckCircle2Icon,
   EyeIcon,
   FileOutputIcon,
-  FileTextIcon,
-  Globe2Icon,
   Loader2Icon,
-  SearchIcon,
-  SendIcon,
   ShieldCheckIcon,
   TerminalIcon,
-  UploadCloudIcon
+  XIcon
 } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import mk from 'markdown-it-katex';
+import ResearchLauncherSidebar from '../components/research/ResearchLauncherSidebar.vue';
 import StatusFlow from '../components/StatusFlow.vue';
 import { useAgentRunProjection } from '../composables/useAgentRunProjection';
 import { agentEventTypeLabel } from '../modules/agentEventProjection';
+import {
+  createLatestRequestGate,
+  researchIntentOptions,
+  resolveResearchReadiness
+} from '../modules/researchLauncher.js';
 import {
   clearContext,
   getResearchRunTrace,
   getStockReplay,
   saveStockFeedback,
+  searchSecurities,
   streamResearchRun,
   uploadFiles
 } from '../services/api';
@@ -477,8 +344,14 @@ const md = new MarkdownIt({
 });
 md.use(mk);
 
-const stockTicker = ref('600519');
-const researchQuestion = ref('分析该证券近期财务表现、估值观察、主要风险和后续需要跟踪的证据。');
+const subjectQuery = ref('');
+const selectedSecurity = ref(null);
+const securityCandidates = ref([]);
+const securitySearchState = ref('idle');
+const securitySearchError = ref('');
+const securitySearchCompleted = ref(false);
+const researchIntent = ref('COMPREHENSIVE');
+const researchQuestion = ref('');
 const researchAsOfDate = ref(new Date().toISOString().slice(0, 10));
 const researchDepth = ref('standard');
 const researchTimeHorizon = ref('2Y');
@@ -514,10 +387,24 @@ const isLoading = ref(false);
 const logsContainer = ref(null);
 const uploadedFiles = ref([]);
 const isDragging = ref(false);
+const isDocumentReady = ref(true);
 const searchMode = ref('hybrid');
+let securitySearchTimer = null;
+const securitySearchGate = createLatestRequestGate();
 
-const canStartRun = computed(() => /^\d{6}(\.(SH|SZ))?$/i.test(stockTicker.value.trim())
-  && researchQuestion.value.trim().length > 0);
+const researchReadiness = computed(() => resolveResearchReadiness({
+  subjectQuery: subjectQuery.value,
+  selectedSecurity: selectedSecurity.value,
+  isResolving: securitySearchState.value === 'resolving',
+  candidateCount: securityCandidates.value.length,
+  searchCompleted: securitySearchCompleted.value,
+  searchError: securitySearchError.value,
+  researchQuestion: researchQuestion.value,
+  searchMode: searchMode.value,
+  uploadedFileCount: uploadedFiles.value.length,
+  isDocumentReady: isDocumentReady.value,
+  isSubmitting: isLoading.value
+}));
 
 const riskScorePercent = computed(() => {
   const score = Number(financialRiskAssessment.value?.finalScore || 0);
@@ -546,57 +433,108 @@ const scrollToBottom = async () => {
   if (logsContainer.value) logsContainer.value.scrollTop = logsContainer.value.scrollHeight;
 };
 
-const handleFileSelect = (event) => {
-  processFiles(event.target.files);
-};
-
-const handleDrop = (event) => {
-  isDragging.value = false;
-  processFiles(event.dataTransfer.files);
-};
-
 const processFiles = async (files) => {
-  if (files.length > 5) {
+  const selectedFiles = Array.from(files || []);
+  if (selectedFiles.length > 5) {
     window.alert('最多只能上传 5 个文件。');
     return;
   }
+  if (selectedFiles.some(file => file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'))) {
+    window.alert('仅支持上传 PDF 文件。');
+    return;
+  }
 
-  uploadedFiles.value = Array.from(files);
+  uploadedFiles.value = selectedFiles;
+  isDocumentReady.value = selectedFiles.length === 0;
   if (uploadedFiles.value.length === 0) return;
 
-  logs.value.push('[系统] 正在上传 ' + files.length + ' 个文档...');
+  logs.value.push('[系统] 正在上传 ' + selectedFiles.length + ' 个文档...');
   try {
     const result = await uploadFiles(uploadedFiles.value);
+    isDocumentReady.value = true;
     logs.value.push('[系统] 知识库已构建，已索引 ' + result.chunks_stored + ' 个文本块。');
   } catch (error) {
+    isDocumentReady.value = true;
     logs.value.push('[错误] 上传失败：' + error.message);
     window.alert('上传失败：' + error.message);
     uploadedFiles.value = [];
   }
 };
 
-const setMode = (mode) => {
-  searchMode.value = mode;
+const selectSecurity = candidate => {
+  selectedSecurity.value = candidate;
+  securityCandidates.value = [];
+  securitySearchCompleted.value = true;
+  securitySearchState.value = 'done';
+  securitySearchError.value = '';
+  const validIntents = researchIntentOptions(candidate?.assetType).map(option => option.value);
+  if (!validIntents.includes(researchIntent.value)) {
+    researchIntent.value = 'COMPREHENSIVE';
+  }
 };
 
+const runSecuritySearch = async (query, requestToken) => {
+  try {
+    const candidates = await searchSecurities(query);
+    if (!securitySearchGate.isCurrent(requestToken)) return;
+    securityCandidates.value = Array.isArray(candidates) ? candidates : [];
+    securitySearchCompleted.value = true;
+    securitySearchState.value = 'done';
+    if (/^\d{6}(\.(SH|SZ))?$/i.test(query) && securityCandidates.value.length === 1) {
+      selectSecurity(securityCandidates.value[0]);
+    }
+  } catch (error) {
+    if (!securitySearchGate.isCurrent(requestToken)) return;
+    securityCandidates.value = [];
+    securitySearchCompleted.value = true;
+    securitySearchState.value = 'error';
+    securitySearchError.value = error.message || '证券搜索失败，请稍后重试';
+  }
+};
+
+const scheduleSecuritySearch = queryValue => {
+  const requestToken = securitySearchGate.issue();
+  if (securitySearchTimer) clearTimeout(securitySearchTimer);
+  selectedSecurity.value = null;
+  securityCandidates.value = [];
+  securitySearchError.value = '';
+  securitySearchCompleted.value = false;
+
+  const query = String(queryValue || '').trim();
+  if (query.length < 2) {
+    securitySearchState.value = 'idle';
+    return;
+  }
+  securitySearchState.value = 'resolving';
+  securitySearchTimer = setTimeout(() => runSecuritySearch(query, requestToken), 400);
+};
+
+watch(subjectQuery, scheduleSecuritySearch, { immediate: true });
+
+onBeforeUnmount(() => {
+  securitySearchGate.invalidate();
+  if (securitySearchTimer) clearTimeout(securitySearchTimer);
+});
+
 const currentStepLabel = (step) => agentEventTypeLabel(step);
+const searchModeLabel = mode => mode === 'document' ? '仅文档' : '混合检索';
 
 const startStockResearch = async () => {
-  if (!canStartRun.value) return;
+  if (!researchReadiness.value.canSubmit || isLoading.value) return;
+
+  const security = selectedSecurity.value;
 
   isLoading.value = true;
   stockReplay.value = null;
   stockTrace.value = null;
-  resetAgentRun('[初始化] Research Agent：' + stockTicker.value.trim().toUpperCase()
+  resetAgentRun('[初始化] Research Agent：' + security.fullCode
     + '，问题：' + researchQuestion.value.trim());
 
-  const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
+  const actualMode = searchMode.value;
 
   try {
     if (uploadedFiles.value.length > 0) {
-      logs.value.push('[系统] 正在上传 ' + uploadedFiles.value.length + ' 个研究资料...');
-      const result = await uploadFiles(uploadedFiles.value);
-      logs.value.push('[系统] 证券研究知识库已构建，已索引 ' + result.chunks_stored + ' 个文本块。');
+      logs.value.push('[系统] 已绑定 ' + uploadedFiles.value.length + ' 个解析完成的研究文档。');
     } else {
       logs.value.push('[系统] 正在清理上一轮知识库上下文...');
       await clearContext();
@@ -605,7 +543,8 @@ const startStockResearch = async () => {
 
     streamResearchRun(
       {
-        ticker: stockTicker.value.trim().toUpperCase(),
+        ticker: security.fullCode,
+        research_intent: researchIntent.value,
         research_question: researchQuestion.value.trim(),
         as_of_date: researchAsOfDate.value,
         time_horizon: researchTimeHorizon.value,
@@ -673,5 +612,3 @@ const loadStockReplay = async () => {
   }
 };
 </script>
-
-

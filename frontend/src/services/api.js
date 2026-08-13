@@ -19,10 +19,10 @@ export const currentThreadId = SESSION_THREAD_ID;
 
 async function requestJson(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, withAuth(options));
+  const payload = await response.json().catch(() => null);
   if (!response.ok) {
-      throw new Error(`请求失败：${response.status}`);
+      throw new Error(payload?.message || payload?.detail || `请求失败：${response.status}`);
   }
-  const payload = await response.json();
   if (payload && typeof payload === 'object' && 'code' in payload) {
       if (payload.code !== 0) {
           throw new Error(payload.message || '请求失败');
@@ -71,6 +71,17 @@ export async function register(username, email, password) {
 
 export async function getCurrentUser() {
   return requestJson('/auth/me');
+}
+
+/**
+ * 按代码或名称搜索当前系统支持的 A 股和 ETF。
+ *
+ * @param {string} query 用户输入的证券代码或名称。
+ * @returns {Promise<Array<object>>} 待用户确认的证券候选。
+ */
+export async function searchSecurities(query) {
+  const params = new URLSearchParams({ query: String(query || '').trim() });
+  return requestJson(`/securities/search?${params.toString()}`);
 }
 /**
  * 批量上传文件
