@@ -810,3 +810,21 @@ V6 已把 canonical Agent 事件与业务事务一起写入 outbox，但发布�
 ### 结果
 
 左栏现在只负责启动任务，右侧 Mission Control 统一承载运行解释，固定 `StatusFlow.vue` 已删除。2026-08-13 前端 13 项测试全部通过并完成生产构建；Mapper XML 与租户隔离聚焦回归 3 项全部通过。尚未启动真实后端任务做浏览器视觉/断线回放验收，报告正文和可信度 Trace 仍需下一阶段继续组件化。
+
+## 045. 报告正文、可信度回放和质量复核挤在同一页面层级
+
+### 发生了什么
+
+`ResearchWorkspace.vue` 同时维护报告空态、生成骨架、Markdown 渲染、可信度 Trace、混合检索表和持久化阶段表；Mission Control 又包含指标、证据、门禁、Bad Case 和日志。报告是用户主产物，但调试数据与正文处于同一视觉层级，组件也必须理解回放 JSON 的序列化细节。
+
+### 原因
+
+此前虽然完成 canonical Agent Event reducer 和 Mission Control，但“阅读报告”与“复核一次 Agent Run”仍没有明确模块边界。实时投影、持久化 snapshot/evidence/metric 和 Trace 各自直接进入页面模板，缺少统一的检查器数据适配层，也没有默认收起低频诊断信息。
+
+### 解决方式
+
+新增 `ResearchReportPanel` 独立承载研究空态、生成态和报告正文；新增默认折叠的 `ResearchRunInspector`，以 `AgentTracePanel`、`EvidenceInspectorPanel`、`QualityGatePanel` 和 `RuntimeLogPanel` 分别内聚事件、证据、门禁和日志。Mission Control 收窄为运行概览、实时活动和任务记录。`researchRunInspector.js` 统一安全解析持久化回放，在未加载回放时回退到实时投影，并提供证据有效、缺失、冲突和来源摘要。
+
+### 结果
+
+报告正文恢复为默认主视图，技术哈希、检索轨迹、证据筛选、评测明细、Bad Case 和日志只在用户展开检查器后出现；加载可信度回放会自动展开并复用同一事件投影。2026-08-13 执行 `npm.cmd test`，16 项测试全部通过；`npm.cmd run build` 完成 2421 个模块转换并成功构建。尚未启动真实后端任务进行浏览器视觉、键盘、移动端和断线恢复验收，ECharts `charts` chunk 约 591 kB 的构建警告仍保留为后续拆包项。

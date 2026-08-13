@@ -134,66 +134,7 @@
         <p v-else class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-xs text-slate-500">任务创建后显示持久化 Agent 事件。</p>
       </div>
 
-      <div v-else-if="activeTab === 'quality'" role="tabpanel" class="space-y-5">
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <QualityStat label="风险评分" :value="riskLabel" :tone="riskTone" />
-          <QualityStat label="合规审查" :value="projection.compliance?.status || '-'" :tone="projection.compliance?.status === 'PASS' ? 'positive' : 'neutral'" />
-          <QualityStat label="评测门控" :value="projection.evaluation?.status || '-'" :tone="projection.evaluation?.status === 'PASS' ? 'positive' : 'neutral'" />
-          <QualityStat label="证据缺失" :value="String(mission.missingEvidenceCount)" :tone="mission.missingEvidenceCount ? 'warning' : 'positive'" />
-        </div>
-
-        <div class="grid gap-4 md:grid-cols-2">
-          <section class="rounded-lg border border-slate-200 p-4">
-            <h3 class="text-xs font-bold text-slate-900">确定性指标</h3>
-            <div v-if="projection.metrics?.length" class="mt-3 space-y-2">
-              <div v-for="metric in projection.metrics.slice(0, 8)" :key="metric.metricName" class="flex items-center justify-between gap-3 text-xs">
-                <span class="min-w-0 truncate text-slate-600">{{ metric.metricName }}</span>
-                <span class="shrink-0 font-semibold" :class="metric.status === 'OK' ? 'text-emerald-700' : 'text-amber-700'">{{ metric.displayValue }}</span>
-              </div>
-            </div>
-            <p v-else class="mt-3 text-xs text-slate-400">等待指标计算事件。</p>
-          </section>
-
-          <section class="rounded-lg border border-slate-200 p-4">
-            <h3 class="text-xs font-bold text-slate-900">工具与数据源执行</h3>
-            <div v-if="dataSourceStages.length" class="mt-3 space-y-2">
-              <div v-for="stage in dataSourceStages" :key="`${stage.stageName}-${stage.turnNo || 0}`" class="flex items-center justify-between gap-3 text-xs">
-                <span class="min-w-0 truncate text-slate-600">{{ stage.stageName }}</span>
-                <span class="shrink-0 font-mono" :class="statusTextClass(stage.status)">{{ statusLabel(stage.status) }}<span v-if="stage.durationMs"> · {{ stage.durationMs }}ms</span></span>
-              </div>
-            </div>
-            <p v-else class="mt-3 text-xs text-slate-400">等待 Provider 执行结果。</p>
-          </section>
-        </div>
-
-        <div v-if="evidenceBreakdown.length" class="flex flex-wrap gap-2">
-          <span v-for="item in evidenceBreakdown" :key="item.sourceType" class="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-800 ring-1 ring-blue-100">{{ item.sourceType }} · {{ item.count }}</span>
-        </div>
-
-        <div v-if="projection.compliance?.issues?.length" class="space-y-2">
-          <div v-for="issue in projection.compliance.issues" :key="`${issue.category}-${issue.description}`" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-            <p class="font-bold">{{ issue.category }} · {{ issue.severity }}</p>
-            <p class="mt-1 leading-5">{{ issue.description }}</p>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <label class="min-w-0 flex-1 text-xs font-semibold text-slate-700">
-              记录 Bad Case
-              <input v-model="feedbackDetail" type="text" class="mt-1 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-xs font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" placeholder="可选：补充问题位置或说明" />
-            </label>
-            <button type="button" class="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-45" :disabled="!projection.taskId" @click="$emit('replay')">
-              回放可信度快照
-            </button>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button v-for="type in feedbackTypes" :key="type" type="button" class="min-h-8 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-800 disabled:opacity-45" :disabled="!projection.taskId" @click="submitFeedback(type)">{{ type }}</button>
-          </div>
-        </div>
-      </div>
-
-      <div v-else-if="activeTab === 'records'" role="tabpanel">
+      <div v-else role="tabpanel">
         <div class="flex flex-col gap-2 sm:flex-row">
           <input v-model="recordKeyword" type="search" class="min-h-10 flex-1 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" placeholder="搜索证券、报告编号或研究问题" @keyup.enter="$emit('search-records', recordKeyword)" />
           <button type="button" class="min-h-10 rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50" @click="$emit('search-records', recordKeyword)">搜索</button>
@@ -224,20 +165,12 @@
           </section>
         </div>
       </div>
-
-      <div v-else role="tabpanel">
-        <div ref="logsContainer" class="h-64 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-4 font-mono text-[11px] leading-5" aria-live="polite">
-          <div v-if="!projection.logs?.length" class="text-slate-500">尚无诊断日志。</div>
-          <div v-for="(log, index) in projection.logs" :key="`${index}-${log}`" class="flex gap-2 py-0.5"><span class="shrink-0 text-blue-300">&gt;</span><span class="break-all text-slate-300">{{ log }}</span></div>
-          <div v-if="isRunning" class="mt-2 animate-pulse text-blue-300">_</div>
-        </div>
-      </div>
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import {
   CheckIcon,
@@ -248,7 +181,6 @@ import {
 import { agentEventTypeLabel } from '../../modules/agentEventProjection.js';
 import { deriveMissionControlView } from '../../modules/researchMissionControl.js';
 import { formatDate } from '../../modules/presentation.js';
-import QualityStat from './QualityStat.vue';
 
 const props = defineProps({
   projection: { type: Object, required: true },
@@ -260,46 +192,17 @@ const props = defineProps({
   recordsError: { type: String, default: '' }
 });
 
-const emit = defineEmits(['feedback', 'replay', 'search-records', 'refresh-records']);
+defineEmits(['search-records', 'refresh-records']);
 const activeTab = ref('overview');
-const feedbackDetail = ref('');
 const recordKeyword = ref('');
-const logsContainer = ref(null);
-const feedbackTypes = ['数字错', '引用错', '逻辑错', '信息过期'];
 const tabs = [
   { id: 'overview', label: '运行概览' },
   { id: 'activity', label: '活动轨迹' },
-  { id: 'quality', label: '质量与证据' },
-  { id: 'records', label: '任务与报告' },
-  { id: 'logs', label: '诊断日志' }
+  { id: 'records', label: '任务与报告' }
 ];
 
 const mission = computed(() => deriveMissionControlView(props.projection, props.isRunning));
 const activeRequest = computed(() => props.runSnapshot || mission.value.requestSummary || {});
-const evidenceBreakdown = computed(() => {
-  const counts = (props.projection.evidence || []).reduce((result, item) => {
-    const key = item.sourceType || 'UNKNOWN';
-    result[key] = (result[key] || 0) + 1;
-    return result;
-  }, {});
-  return Object.entries(counts).map(([sourceType, count]) => ({ sourceType, count }));
-});
-const dataSourceStages = computed(() => {
-  if (props.projection.providerStages?.length) return props.projection.providerStages;
-  return (props.projection.events || [])
-    .filter(event => event.type === 'tool_completed' && event.toolName)
-    .slice(-8)
-    .map(event => ({
-      stageName: event.toolName,
-      status: event.status,
-      durationMs: event.durationMs,
-      turnNo: event.turnNo
-    }));
-});
-const riskLabel = computed(() => props.projection.riskAssessment
-  ? `${props.projection.riskAssessment.finalScore ?? '-'}/10 · ${props.projection.riskAssessment.riskLevel || '-'}`
-  : '-');
-const riskTone = computed(() => Number(props.projection.riskAssessment?.finalScore || 0) > 6 ? 'danger' : 'neutral');
 const gateStatusLabel = computed(() => {
   if (mission.value.status === 'COMPLETED') return 'PASS';
   if (mission.value.status === 'STOPPED') return 'STOPPED';
@@ -316,10 +219,6 @@ const statusDotClass = computed(() => ({
   IDLE: 'bg-slate-500', RUNNING: 'bg-amber-300', COMPLETED: 'bg-emerald-400', STOPPED: 'bg-amber-400'
 })[mission.value.status]);
 
-const submitFeedback = type => {
-  emit('feedback', type, feedbackDetail.value);
-  feedbackDetail.value = '';
-};
 const eventTypeLabel = type => agentEventTypeLabel(type);
 const intentLabel = value => ({ COMPREHENSIVE: '综合研究', FINANCIAL_QUALITY: '财务质量', VALUATION_RISK: '估值风险', ETF_TRACKING: 'ETF 跟踪', EVENT_IMPACT: '事件影响' })[value] || value;
 const toolLabel = name => name || '等待工具调用';
@@ -330,9 +229,4 @@ const statusTextClass = status => ['SUCCESS', 'PASS', 'COMPLETED'].includes(stat
   : ['FAILED', 'ERROR'].includes(status) ? 'text-rose-700'
     : ['DEGRADED', 'STOPPED'].includes(status) ? 'text-amber-700' : 'text-blue-700';
 
-watch(() => props.projection.logs?.length, async () => {
-  if (activeTab.value !== 'logs') return;
-  await nextTick();
-  if (logsContainer.value) logsContainer.value.scrollTop = logsContainer.value.scrollHeight;
-});
 </script>
