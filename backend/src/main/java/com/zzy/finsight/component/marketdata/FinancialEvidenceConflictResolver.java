@@ -20,7 +20,7 @@ import java.util.Map;
  */
 @Component
 public class FinancialEvidenceConflictResolver {
-    public static final String POLICY_VERSION = "financial-evidence-arbitration-v1";
+    public static final String POLICY_VERSION = "financial-evidence-arbitration-v2-subject-attribution";
     private static final BigDecimal ABSOLUTE_TOLERANCE = new BigDecimal("0.01");
     private static final BigDecimal RELATIVE_TOLERANCE = new BigDecimal("0.005");
 
@@ -159,7 +159,7 @@ public class FinancialEvidenceConflictResolver {
             if (!item.effective() || item.normalizedValue() == null || blank(item.metricName())) {
                 continue;
             }
-            String key = safe(item.metricName()) + "|" + safe(item.reportPeriod());
+            String key = safe(item.subjectCode()) + "|" + safe(item.metricName()) + "|" + safe(item.reportPeriod());
             groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new IndexedEvidence(index, item));
         }
         return groups;
@@ -225,7 +225,9 @@ public class FinancialEvidenceConflictResolver {
                 item.excerpt(),
                 item.confidence(),
                 item.asOf(),
-                issueCode
+                issueCode,
+                item.subjectCode(),
+                item.comparisonSnapshotId()
         );
     }
 

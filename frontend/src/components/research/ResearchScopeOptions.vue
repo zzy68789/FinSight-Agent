@@ -61,6 +61,13 @@
         </label>
       </div>
 
+      <ComparisonSecurityPicker
+        :primary-security="primarySecurity"
+        :model-value="comparisonSecurities"
+        :disabled="disabled"
+        @update:model-value="$emit('update:comparisonSecurities', $event)"
+      />
+
       <div>
         <div class="mb-2 flex items-center justify-between gap-3">
           <div>
@@ -116,12 +123,15 @@ import {
   Loader2Icon,
   UploadCloudIcon
 } from 'lucide-vue-next';
+import ComparisonSecurityPicker from './ComparisonSecurityPicker.vue';
 
 const props = defineProps({
   asOfDate: { type: String, required: true },
   timeHorizon: { type: String, required: true },
   researchDepth: { type: String, required: true },
   searchMode: { type: String, required: true },
+  primarySecurity: { type: Object, default: null },
+  comparisonSecurities: { type: Array, default: () => [] },
   uploadedFiles: { type: Array, default: () => [] },
   isDragging: { type: Boolean, default: false },
   isDocumentReady: { type: Boolean, default: true },
@@ -133,6 +143,7 @@ const emit = defineEmits([
   'update:timeHorizon',
   'update:researchDepth',
   'update:searchMode',
+  'update:comparisonSecurities',
   'files-selected',
   'drag-state-change'
 ]);

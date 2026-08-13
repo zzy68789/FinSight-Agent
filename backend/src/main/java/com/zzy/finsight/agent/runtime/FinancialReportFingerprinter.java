@@ -59,6 +59,14 @@ public class FinancialReportFingerprinter {
         if (snapshot.etfDeepData() != null) {
             append(canonical, canonicalEtfDeepData(snapshot.etfDeepData()));
         }
+        snapshot.comparisonSnapshots().stream()
+                .map(item -> String.join("|",
+                        safe(item.snapshotId()),
+                        item.subject() == null ? "" : safe(item.subject().fullCode()),
+                        safe(item.status())
+                ))
+                .sorted()
+                .forEach(value -> append(canonical, value));
         return sha256(canonical.toString());
     }
 
@@ -81,6 +89,8 @@ public class FinancialReportFingerprinter {
         append(canonical, decimal(item.normalizedValue()));
         append(canonical, item.excerpt());
         append(canonical, item.issueCode());
+        append(canonical, item.subjectCode());
+        append(canonical, item.comparisonSnapshotId());
         return canonical.toString();
     }
 

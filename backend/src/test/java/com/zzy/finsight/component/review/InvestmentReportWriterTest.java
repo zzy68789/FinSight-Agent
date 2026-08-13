@@ -68,13 +68,13 @@ class InvestmentReportWriterTest {
                         "最终引用附录由系统确定性覆盖",
                         "八章节正文总长度不超过 2500 个中文字符",
                         "可用证据索引",
-                        "[E1] ETF_CLOSE"
+                        "[E1] [主证券 588200.SH] ETF_CLOSE"
                 )
                 .doesNotContain("[E1] AUTHORIZED_MARKET / TuShare Pro", "### 指标计算公式", "### 风险评分明细");
         assertThat(report).contains("LLM 生成的基金概况");
         assertThat(report).contains("仅作研究辅助，不构成投资建议");
         assertThat(report).contains("<!-- FinSight generation-mode: llm -->");
-        assertThat(report).contains("[E1] AUTHORIZED_MARKET / TuShare Pro");
+        assertThat(report).contains("[E1] [主证券 588200.SH] AUTHORIZED_MARKET / TuShare Pro");
     }
 
     @Test

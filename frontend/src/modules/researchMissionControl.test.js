@@ -5,7 +5,7 @@ import { deriveMissionControlView } from './researchMissionControl.js';
 
 test('Mission Control 从 canonical 事件生成运行摘要且不计算伪进度', () => {
   const projection = replayAgentEvents([
-    { step: 'run_created', data: { eventId: 'e1', taskId: 12, ticker: '600519.SH', researchQuestion: '解释毛利率变化' } },
+    { step: 'run_created', data: { eventId: 'e1', taskId: 12, ticker: '600519.SH', researchQuestion: '解释毛利率变化', comparisonTickers: ['000858.SZ'] } },
     { step: 'plan_created', data: { eventId: 'e2', plan: { goal: '解释毛利率变化', unresolvedQuestions: ['收入结构'] } } },
     { step: 'tool_started', data: { eventId: 'e3', turnNo: 2, toolName: 'fetch_financial_data' } },
     { step: 'tool_completed', data: { eventId: 'e4', turnNo: 2, toolName: 'fetch_financial_data', summary: '新增证据', result: { evidence: [{ issueCode: '' }, { issueCode: 'DATA_MISSING' }] } } }
@@ -16,6 +16,7 @@ test('Mission Control 从 canonical 事件生成运行摘要且不计算伪进�
   assert.equal(view.latestTool.name, 'fetch_financial_data');
   assert.equal(view.evidenceCount, 2);
   assert.equal(view.effectiveEvidenceCount, 1);
+  assert.deepEqual(projection.requestSummary.comparisonTickers, ['000858.SZ']);
   assert.equal('progressPercent' in view, false);
 });
 

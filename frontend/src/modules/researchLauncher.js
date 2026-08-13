@@ -143,6 +143,41 @@ export function suggestedResearchQuestions(security, intent = 'COMPREHENSIVE') {
 }
 
 /**
+ * 只保留与主证券同资产类型、且尚未选择的可比证券候选。
+ *
+ * @param {object[]} candidates 后端证券搜索候选。
+ * @param {object|null} primarySecurity 主证券。
+ * @param {object[]} selected 已确认的可比证券。
+ * @returns {object[]}
+ */
+export function filterComparisonCandidates(candidates, primarySecurity, selected = []) {
+  if (!primarySecurity) return [];
+  const blocked = new Set([
+    String(primarySecurity.fullCode || '').toUpperCase(),
+    ...selected.map(item => String(item.fullCode || '').toUpperCase())
+  ]);
+  return (candidates || []).filter(candidate => (
+    candidate?.assetType === primarySecurity.assetType
+    && candidate?.fullCode
+    && !blocked.has(String(candidate.fullCode).toUpperCase())
+  ));
+}
+
+/**
+ * 向已确认列表追加一个可比证券，最多保留三个且不允许主证券或跨资产类型。
+ *
+ * @param {object[]} selected 已确认的可比证券。
+ * @param {object} candidate 待追加候选。
+ * @param {object|null} primarySecurity 主证券。
+ * @returns {object[]}
+ */
+export function appendComparisonSecurity(selected = [], candidate, primarySecurity) {
+  if (!candidate || !primarySecurity || selected.length >= 3) return [...selected];
+  if (!filterComparisonCandidates([candidate], primarySecurity, selected).length) return [...selected];
+  return [...selected, candidate];
+}
+
+/**
  * 为异步搜索签发单调令牌，调用方只接收最后一次输入对应的响应。
  *
  * @returns {{issue: function(): number, isCurrent: function(number): boolean, invalidate: function(): void}}

@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  */
 @Component
 public class InvestmentReportWriter {
-    public static final String WRITER_VERSION = "investment-report-writer-v7-source-arbitration";
+    public static final String WRITER_VERSION = "investment-report-writer-v8-comparison-attribution";
     private static final Logger log = LoggerFactory.getLogger(InvestmentReportWriter.class);
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final String GENERATION_MODE_PREFIX = "<!-- FinSight generation-mode: ";
@@ -156,6 +156,7 @@ public class InvestmentReportWriter {
                 "未取得可复核的结构化市盈率、市净率或总市值数据，本节不判断估值高低。"
         );
         report.append(valuationEvidence).append("\n\n");
+        appendComparisonSection(report, snapshot, metrics);
 
         report.append("## 6. 新闻与催化因素\n\n");
         report.append(evidenceSentence(snapshot, "NEWS_SUMMARY", "未取得足够新闻摘要，暂不输出催化因素判断。")).append("\n\n");
@@ -212,6 +213,7 @@ public class InvestmentReportWriter {
                 13. 行情与估值优先使用结构化 PE_TTM、PB 和总市值证据；不得把不同网页、不同日期的成交额和换手率拼成一组。
                 14. 不得使用“股价修复可期”“上涨空间明确”“分红托底”等无充分证据的方向性措辞；新闻观点必须说明来源及证据限制。
                 15. 若第 8 节包含“### 多空研究 Agent”，必须逐字保留该子标题、多头/空头角色、条件化表述及其证据编号，不得改写为买卖建议。
+                16. 若草稿包含“### 可比证券确定性对照”，必须逐字保留标题、证券代码、DATA_MISSING 和对应证据编号，不得混用不同证券的数据。
 
                 证券代码：%s
                 资产类型：%s
@@ -310,6 +312,10 @@ public class InvestmentReportWriter {
                 && !bullBearResearch.bullCases().isEmpty()
                 && !report.contains("### 多空研究 Agent")) {
             throw new IllegalStateException("LLM 报告缺少多空研究 Agent 子节");
+        }
+        if (!snapshot.comparisonSnapshots().isEmpty()
+                && !report.contains("### 可比证券确定性对照")) {
+            throw new IllegalStateException("LLM 报告缺少可比证券确定性对照");
         }
     }
 
@@ -429,6 +435,7 @@ public class InvestmentReportWriter {
 
         report.append("## 5. 净值、规模与持仓缺口\n\n");
         appendEtfDepth(report, snapshot);
+        appendComparisonSection(report, snapshot, metrics);
 
         report.append("## 6. 新闻与催化因素\n\n");
         report.append(evidenceSentence(snapshot, "NEWS_SUMMARY", "未取得足够 ETF 新闻、指数或行业催化摘要，暂不输出方向性判断。")).append("\n\n");
@@ -497,6 +504,54 @@ public class InvestmentReportWriter {
         report.append("\n");
     }
 
+    /** 把 Java 计算的可比指标和独立快照标识写入正文，并显式展示缺失状态。 */
+    private void appendComparisonSection(
+            StringBuilder report,
+            FinancialSnapshot snapshot,
+            List<FinancialMetricResult> metrics
+    ) {
+        if (snapshot.comparisonSnapshots().isEmpty()) {
+            return;
+        }
+        report.append("### 可比证券确定性对照\n\n");
+        for (com.zzy.finsight.domain.stock.ComparisonSecuritySnapshot comparison
+                : snapshot.comparisonSnapshots()) {
+            String fullCode = comparison.subject().fullCode();
+            report.append("- **").append(fullCode).append(" / ")
+                    .append(blankToDash(comparison.subject().companyName())).append("**")
+                    .append("（快照 ").append(shortSnapshotId(comparison.snapshotId())).append("；")
+                    .append(comparison.status()).append("）");
+            List<FinancialMetricResult> comparisonMetrics = metrics.stream()
+                    .filter(metric -> metric.metricName().startsWith(fullCode + " "))
+                    .toList();
+            if (comparisonMetrics.isEmpty()) {
+                report.append("：DATA_MISSING（未生成可比较指标）。\n");
+                continue;
+            }
+            report.append("：");
+            for (int index = 0; index < comparisonMetrics.size(); index++) {
+                FinancialMetricResult metric = comparisonMetrics.get(index);
+                if (index > 0) {
+                    report.append("；");
+                }
+                String label = metric.metricName().substring((fullCode + " ").length());
+                report.append(label).append(" ").append(metric.displayValue());
+                if ("OK".equals(metric.status())) {
+                    report.append(citationRefs(snapshot, metric.evidenceRefs(), fullCode));
+                } else {
+                    report.append("（").append(metric.reason()).append("）");
+                }
+            }
+            report.append("。\n");
+        }
+        report.append("\n");
+    }
+
+    private String shortSnapshotId(String snapshotId) {
+        String value = snapshotId == null ? "" : snapshotId;
+        return value.length() <= 12 ? value : value.substring(0, 12);
+    }
+
     private void appendMetric(
             StringBuilder report,
             FinancialSnapshot snapshot,
@@ -551,6 +606,7 @@ public class InvestmentReportWriter {
         int index = 1;
         for (FinancialEvidenceItem item : snapshot.evidenceItems()) {
             report.append("- [E").append(index++).append("] ")
+                    .append("[").append(evidenceSubjectLabel(snapshot, item)).append("] ")
                     .append(item.sourceType()).append(" / ")
                     .append(item.sourceName()).append(" / ")
                     .append(blankToDash(item.reportPeriod())).append(" / ")
@@ -619,7 +675,7 @@ public class InvestmentReportWriter {
         int included = 0;
         for (int index = 0; index < snapshot.evidenceItems().size(); index++) {
             FinancialEvidenceItem item = snapshot.evidenceItems().get(index);
-            if (item.effective() && metricName.equals(item.metricName())) {
+            if (primaryEvidence(snapshot, item) && item.effective() && metricName.equals(item.metricName())) {
                 joiner.add("- " + item.excerpt() + " [E" + (index + 1) + "]");
                 included++;
                 if (included >= 2) {
@@ -635,7 +691,7 @@ public class InvestmentReportWriter {
         StringJoiner joiner = new StringJoiner("\n");
         for (int index = 0; index < snapshot.evidenceItems().size(); index++) {
             FinancialEvidenceItem item = snapshot.evidenceItems().get(index);
-            if (item.effective() && metricNames.contains(item.metricName())) {
+            if (primaryEvidence(snapshot, item) && item.effective() && metricNames.contains(item.metricName())) {
                 joiner.add("- " + item.excerpt() + " [E" + (index + 1) + "]");
             }
         }
@@ -647,7 +703,7 @@ public class InvestmentReportWriter {
         StringJoiner joiner = new StringJoiner("\n");
         for (int index = 0; index < snapshot.evidenceItems().size(); index++) {
             FinancialEvidenceItem item = snapshot.evidenceItems().get(index);
-            if (item.effective()
+            if (primaryEvidence(snapshot, item) && item.effective()
                     && "UPLOADED_REPORT".equals(item.sourceType())
                     && "LOCAL_CONTEXT".equals(item.metricName())) {
                 joiner.add("- " + item.excerpt() + " [E" + (index + 1) + "]");
@@ -667,6 +723,7 @@ public class InvestmentReportWriter {
                 continue;
             }
             joiner.add("- [E" + (index + 1) + "] "
+                    + "[" + evidenceSubjectLabel(snapshot, item) + "] "
                     + blankToDash(item.metricName()) + " / "
                     + blankToDash(item.reportPeriod()) + " / "
                     + blankToDash(item.sourceName()) + "："
@@ -684,6 +741,14 @@ public class InvestmentReportWriter {
 
     /** 将指标输入字段映射为原始证据编号，供确定性正文和风险说明引用。 */
     private String citationRefs(FinancialSnapshot snapshot, List<String> metricNames) {
+        return citationRefs(snapshot, metricNames, snapshot.subject().fullCode());
+    }
+
+    private String citationRefs(
+            FinancialSnapshot snapshot,
+            List<String> metricNames,
+            String subjectCode
+    ) {
         Set<String> expected = metricNames.stream()
                 .filter(item -> item != null && !item.isBlank())
                 .flatMap(item -> evidenceMetricNames(item).stream())
@@ -691,7 +756,10 @@ public class InvestmentReportWriter {
         StringBuilder refs = new StringBuilder();
         for (int index = 0; index < snapshot.evidenceItems().size(); index++) {
             FinancialEvidenceItem item = snapshot.evidenceItems().get(index);
-            if (item.effective() && expected.contains(item.metricName())) {
+            boolean subjectMatches = subjectCode.equalsIgnoreCase(snapshot.subject().fullCode())
+                    ? primaryEvidence(snapshot, item)
+                    : subjectCode.equalsIgnoreCase(item.subjectCode());
+            if (subjectMatches && item.effective() && expected.contains(item.metricName())) {
                 refs.append("[E").append(index + 1).append("]");
             }
         }
@@ -764,6 +832,7 @@ public class InvestmentReportWriter {
                 .distinct()
                 .toList();
         List<String> evidenceIssues = snapshot.evidenceItems().stream()
+                .filter(item -> primaryEvidence(snapshot, item))
                 .filter(item -> FinancialEvidenceIssueCodes.DATA_MISSING.equals(item.issueCode())
                         || FinancialEvidenceIssueCodes.LOW_QUALITY_CONTENT.equals(item.issueCode()))
                 .map(item -> FinancialEvidenceIssueCodes.LOW_QUALITY_CONTENT.equals(item.issueCode())
@@ -788,6 +857,7 @@ public class InvestmentReportWriter {
     private String reportPeriodSummary(FinancialSnapshot snapshot) {
         String financialPeriod = latestFinancialPeriod(snapshot);
         String marketPeriod = snapshot.evidenceItems().stream()
+                .filter(item -> primaryEvidence(snapshot, item))
                 .filter(FinancialEvidenceItem::effective)
                 .filter(item -> List.of(
                         "PE_TTM",
@@ -819,6 +889,7 @@ public class InvestmentReportWriter {
     /** 从有效财务证据中识别最新报告期，排除行情数据日干扰。 */
     private String latestFinancialPeriod(FinancialSnapshot snapshot) {
         return snapshot.evidenceItems().stream()
+                .filter(item -> primaryEvidence(snapshot, item))
                 .filter(FinancialEvidenceItem::effective)
                 .filter(item -> List.of(
                         FinancialMetricInputNames.OPERATING_REVENUE,
@@ -865,5 +936,15 @@ public class InvestmentReportWriter {
 
     private boolean concretePeriod(String period) {
         return period != null && period.matches("\\d{8}");
+    }
+
+    private boolean primaryEvidence(FinancialSnapshot snapshot, FinancialEvidenceItem item) {
+        return item.belongsTo(snapshot.subject().fullCode());
+    }
+
+    private String evidenceSubjectLabel(FinancialSnapshot snapshot, FinancialEvidenceItem item) {
+        return primaryEvidence(snapshot, item)
+                ? "主证券 " + snapshot.subject().fullCode()
+                : "可比 " + item.subjectCode();
     }
 }

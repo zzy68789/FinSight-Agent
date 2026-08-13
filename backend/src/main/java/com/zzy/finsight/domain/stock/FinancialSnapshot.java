@@ -18,6 +18,7 @@ import java.util.List;
  * @param marketSeries 可视化使用的行情序列。
  * @param etfDeepData ETF 基础资料与净值快照。
  * @param createdAt 创建时间。
+ * @param comparisonSnapshots 可比证券独立快照索引。
  */
 public record FinancialSnapshot(
         StockSubject subject,
@@ -29,7 +30,8 @@ public record FinancialSnapshot(
         List<RagRetrievalResult> retrievalResults,
         List<MarketDataPoint> marketSeries,
         EtfDeepData etfDeepData,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        List<ComparisonSecuritySnapshot> comparisonSnapshots
 ) {
     public FinancialSnapshot {
         evidenceItems = evidenceItems == null ? List.of() : List.copyOf(evidenceItems);
@@ -37,6 +39,24 @@ public record FinancialSnapshot(
         stageResults = stageResults == null ? List.of() : List.copyOf(stageResults);
         retrievalResults = retrievalResults == null ? List.of() : List.copyOf(retrievalResults);
         marketSeries = marketSeries == null ? List.of() : List.copyOf(marketSeries);
+        comparisonSnapshots = comparisonSnapshots == null ? List.of() : List.copyOf(comparisonSnapshots);
+    }
+
+    /** 兼容未包含可比证券快照的既有完整构造方式。 */
+    public FinancialSnapshot(
+            StockSubject subject,
+            String reportPeriod,
+            String searchMode,
+            List<FinancialEvidenceItem> evidenceItems,
+            List<FinancialEvidenceArbitration> evidenceArbitrations,
+            List<FinancialAgentStageResult> stageResults,
+            List<RagRetrievalResult> retrievalResults,
+            List<MarketDataPoint> marketSeries,
+            EtfDeepData etfDeepData,
+            LocalDateTime createdAt
+    ) {
+        this(subject, reportPeriod, searchMode, evidenceItems, evidenceArbitrations, stageResults,
+                retrievalResults, marketSeries, etfDeepData, createdAt, List.of());
     }
 
     /** 保留未携带仲裁结果的旧快照构造方式。 */
@@ -52,7 +72,7 @@ public record FinancialSnapshot(
             LocalDateTime createdAt
     ) {
         this(subject, reportPeriod, searchMode, evidenceItems, List.of(), stageResults, retrievalResults,
-                marketSeries, etfDeepData, createdAt);
+                marketSeries, etfDeepData, createdAt, List.of());
     }
 
     public FinancialSnapshot(

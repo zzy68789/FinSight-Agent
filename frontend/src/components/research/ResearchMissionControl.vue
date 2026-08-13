@@ -67,6 +67,9 @@
               </div>
               <p class="mt-3 text-sm leading-6 text-slate-700">{{ activeRequest.researchQuestion || '等待任务问题' }}</p>
               <p v-if="activeRequest.asOfDate" class="mt-2 text-[11px] text-slate-500">数据截止日 {{ activeRequest.asOfDate }} · {{ activeRequest.researchDepth || '-' }}</p>
+              <p v-if="activeRequest.comparisonTickers?.length" class="mt-1 text-[11px] text-slate-500">
+                可比证券 {{ activeRequest.comparisonTickers.join('、') }}
+              </p>
             </article>
 
             <article class="rounded-lg border border-slate-200 bg-white p-4">

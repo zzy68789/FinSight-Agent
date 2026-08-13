@@ -122,8 +122,10 @@ export function reduceAgentEvent(previous, rawEvent) {
     state.requestSummary = {
       ticker: payload.ticker || '',
       researchQuestion: payload.researchQuestion || '',
+      researchIntent: payload.researchIntent || '',
       asOfDate: payload.asOfDate || '',
-      researchDepth: payload.researchDepth || ''
+      researchDepth: payload.researchDepth || '',
+      comparisonTickers: Array.isArray(payload.comparisonTickers) ? payload.comparisonTickers : []
     };
     state.logs.push(`[运行时] 任务 #${payload.taskId || '-'} 已创建，最大 ${payload.budget?.maxTurns || '-'} 轮。`);
   } else if (step === 'plan_created' || step === 'replanned') {

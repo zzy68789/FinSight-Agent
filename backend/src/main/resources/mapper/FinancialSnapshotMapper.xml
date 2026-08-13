@@ -39,12 +39,14 @@
 
     <insert id="insertEvidence" parameterType="map">
         INSERT IGNORE INTO stock_evidence_item(
-          snapshot_id, task_id, tool_call_id, evidence_key, source_type, source_name, url, page_number, report_period,
+          snapshot_id, task_id, tool_call_id, evidence_key, subject_code, comparison_snapshot_id,
+          source_type, source_name, url, page_number, report_period,
           metric_name, raw_value, normalized_value, excerpt, confidence, as_of_time,
           issue_code, created_at
         )
         VALUES (
-          #{snapshotId}, #{taskId}, #{toolCallId}, #{evidenceKey}, #{sourceType}, #{sourceName}, #{url}, #{pageNumber}, #{reportPeriod},
+          #{snapshotId}, #{taskId}, #{toolCallId}, #{evidenceKey}, #{subjectCode}, #{comparisonSnapshotId},
+          #{sourceType}, #{sourceName}, #{url}, #{pageNumber}, #{reportPeriod},
           #{metricName}, #{rawValue}, #{normalizedValue}, #{excerpt}, #{confidence}, #{asOfTime},
           #{issueCode}, #{createdAt}
         )
@@ -121,6 +123,8 @@
         SELECT JSON_OBJECT(
           'sourceType', source_type,
           'sourceName', source_name,
+          'subjectCode', subject_code,
+          'comparisonSnapshotId', comparison_snapshot_id,
           'url', url,
           'reportPeriod', report_period,
           'metricName', metric_name,

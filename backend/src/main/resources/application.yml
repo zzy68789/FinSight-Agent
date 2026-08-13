@@ -94,7 +94,7 @@ finsight:
     financial-provider-queue-capacity: 24
     financial-provider-timeout: PT15S
   agent:
-    max-turns: 8
+    max-turns: 12
     max-tool-calls: 12
     max-replans: 3
     max-evidence-recoveries: 2

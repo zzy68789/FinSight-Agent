@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createLatestRequestGate,
+  appendComparisonSecurity,
+  filterComparisonCandidates,
   RESEARCH_READINESS,
   researchIntentOptions,
   resolveResearchReadiness,
@@ -79,4 +81,29 @@ test('证券搜索只接受最后一次输入对应的异步响应', () => {
   assert.equal(gate.isCurrent(latestRequest), true);
   gate.invalidate();
   assert.equal(gate.isCurrent(latestRequest), false);
+});
+
+test('可比证券候选排除主证券、跨资产类型和重复项', () => {
+  const candidates = [
+    selectedEquity,
+    { fullCode: '000858.SZ', companyName: '五粮液', assetType: 'EQUITY' },
+    { fullCode: '510300.SH', companyName: '沪深300ETF', assetType: 'ETF' }
+  ];
+  const selected = [{ fullCode: '000858.SZ', companyName: '五粮液', assetType: 'EQUITY' }];
+  assert.deepEqual(filterComparisonCandidates(candidates, selectedEquity, selected), []);
+});
+
+test('可比证券只追加已确认同类候选且最多三个', () => {
+  const peers = [
+    { fullCode: '000858.SZ', assetType: 'EQUITY' },
+    { fullCode: '000568.SZ', assetType: 'EQUITY' },
+    { fullCode: '600809.SH', assetType: 'EQUITY' },
+    { fullCode: '603369.SH', assetType: 'EQUITY' }
+  ];
+  const selected = peers.reduce(
+    (current, candidate) => appendComparisonSecurity(current, candidate, selectedEquity),
+    []
+  );
+  assert.deepEqual(selected.map(item => item.fullCode), ['000858.SZ', '000568.SZ', '600809.SH']);
+  assert.equal(appendComparisonSecurity(selected, selectedEquity, selectedEquity).length, 3);
 });

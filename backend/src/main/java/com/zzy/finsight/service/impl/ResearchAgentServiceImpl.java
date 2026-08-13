@@ -7,6 +7,7 @@ import com.zzy.finsight.agent.runtime.AgentTraceReader;
 import com.zzy.finsight.agent.runtime.DurableAgentRunner;
 import com.zzy.finsight.agent.planning.ResearchIntentPolicy;
 import com.zzy.finsight.component.analysis.StockCodeResolver;
+import com.zzy.finsight.component.analysis.ComparisonTickerPolicy;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.TaskExecutionRecord;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
@@ -44,6 +45,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
     private final AgentEventStreamModule eventStreamModule;
     private final ExecutorService executorService;
     private final StockCodeResolver stockCodeResolver;
+    private final ComparisonTickerPolicy comparisonTickerPolicy;
     private final ResearchIntentPolicy researchIntentPolicy;
 
     public ResearchAgentServiceImpl(
@@ -55,6 +57,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
             AgentEventStreamModule eventStreamModule,
             @Qualifier("agentExecutor") ExecutorService executorService,
             StockCodeResolver stockCodeResolver,
+            ComparisonTickerPolicy comparisonTickerPolicy,
             ResearchIntentPolicy researchIntentPolicy
     ) {
         this.runner = runner;
@@ -65,6 +68,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
         this.eventStreamModule = eventStreamModule;
         this.executorService = executorService;
         this.stockCodeResolver = stockCodeResolver;
+        this.comparisonTickerPolicy = comparisonTickerPolicy;
         this.researchIntentPolicy = researchIntentPolicy;
     }
 
@@ -112,6 +116,9 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
         StockSubject subject = stockCodeResolver.resolve(request.getTicker());
         researchIntentPolicy.validate(request.getResearchIntent(), subject.assetType());
         request.setTicker(subject.fullCode());
+        request.setComparisonTickers(comparisonTickerPolicy.normalize(
+                subject, request.getComparisonTickers(), request.getResearchDepth()
+        ));
     }
 
     /** 把已持久化任务提交到有界执行器，队列拒绝时同步落失败状态。 */

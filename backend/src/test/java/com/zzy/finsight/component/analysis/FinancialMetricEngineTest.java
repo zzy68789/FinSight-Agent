@@ -92,6 +92,34 @@ class FinancialMetricEngineTest {
         assertThat(metric(results, "营收同比").value()).isEqualByComparingTo("20.00");
     }
 
+    @Test
+    void ignoresComparisonEvidenceWhenComputingPrimaryMetrics() {
+        FinancialEvidenceItem comparisonRevenue = new FinancialEvidenceItem(
+                "AUTHORIZED_MARKET",
+                "TuShare Pro",
+                "",
+                1,
+                "2025",
+                FinancialMetricInputNames.OPERATING_REVENUE,
+                new BigDecimal("999"),
+                new BigDecimal("999"),
+                "可比证券营业收入=999",
+                new BigDecimal("0.95"),
+                LocalDateTime.of(2026, 7, 3, 10, 0),
+                "",
+                "000858.SZ",
+                "comparison-snapshot"
+        );
+        FinancialSnapshot snapshot = snapshot(
+                evidence(FinancialMetricInputNames.OPERATING_REVENUE, "120"),
+                evidence(FinancialMetricInputNames.OPERATING_REVENUE_PRIOR, "100"),
+                comparisonRevenue
+        );
+
+        assertThat(metric(engine.compute(snapshot), "营收同比").value())
+                .isEqualByComparingTo("20.00");
+    }
+
     private FinancialMetricResult metric(List<FinancialMetricResult> results, String name) {
         return results.stream()
                 .filter(result -> result.metricName().equals(name))

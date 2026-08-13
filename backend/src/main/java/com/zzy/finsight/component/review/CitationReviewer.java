@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  */
 @Component
 public class CitationReviewer {
-    public static final String POLICY_VERSION = "citation-policy-v5-evidence-conflict";
+    public static final String POLICY_VERSION = "citation-policy-v6-subject-attribution";
     private static final String CITATION_HEADING = "## 引用与数据快照";
     private static final Pattern CITATION_PATTERN = Pattern.compile("\\[E(\\d+)]");
     private static final List<String> DIRECTIONAL_TOKENS = List.of(
@@ -65,7 +65,10 @@ public class CitationReviewer {
                     "EVIDENCE_SEMANTIC_INVALID: " + item.metricName() + " 存在 " + item.issueCode()
             );
         }
-        long effectiveEvidenceCount = snapshot.evidenceItems().stream().filter(FinancialEvidenceItem::effective).count();
+        long effectiveEvidenceCount = snapshot.evidenceItems().stream()
+                .filter(item -> item.belongsTo(snapshot.subject().fullCode()))
+                .filter(FinancialEvidenceItem::effective)
+                .count();
         if (effectiveEvidenceCount < 3) {
             return CitationReviewResult.fail("EVIDENCE_INSUFFICIENT: 有效证据少于 3 条");
         }
@@ -107,7 +110,7 @@ public class CitationReviewer {
             }
             String metricLine = lineContaining(body, metric.displayValue());
             Set<Integer> lineReferences = citationReferences(metricLine);
-            Set<Integer> expectedReferences = expectedEvidenceReferences(snapshot.evidenceItems(), metric.evidenceRefs());
+            Set<Integer> expectedReferences = expectedEvidenceReferences(snapshot, metric);
             if (lineReferences.stream().noneMatch(expectedReferences::contains)) {
                 return CitationReviewResult.fail(
                         "METRIC_BODY_CITATION_MISSING: " + metric.metricName() + " 未就近引用对应原始证据"
@@ -156,13 +159,16 @@ public class CitationReviewer {
     }
 
     /** 计算指定指标输入字段可使用的有效证据编号。 */
-    private Set<Integer> expectedEvidenceReferences(
-            List<FinancialEvidenceItem> evidenceItems,
-            List<String> metricNames
-    ) {
-        Set<String> expectedNames = metricNames.stream().collect(Collectors.toSet());
+    private Set<Integer> expectedEvidenceReferences(FinancialSnapshot snapshot, FinancialMetricResult metric) {
+        List<FinancialEvidenceItem> evidenceItems = snapshot.evidenceItems();
+        Set<String> expectedNames = metric.evidenceRefs().stream().collect(Collectors.toSet());
+        String metricSubject = metric.metricName().matches("^\\d{6}\\.(SH|SZ) .+")
+                ? metric.metricName().substring(0, 9) : snapshot.subject().fullCode();
         return java.util.stream.IntStream.range(0, evidenceItems.size())
                 .filter(index -> evidenceItems.get(index).effective())
+                .filter(index -> metricSubject.equalsIgnoreCase(snapshot.subject().fullCode())
+                        ? evidenceItems.get(index).belongsTo(snapshot.subject().fullCode())
+                        : metricSubject.equalsIgnoreCase(evidenceItems.get(index).subjectCode()))
                 .filter(index -> expectedNames.contains(evidenceItems.get(index).metricName()))
                 .map(index -> index + 1)
                 .boxed()

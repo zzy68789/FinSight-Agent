@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS stock_evidence_item (
   task_id BIGINT NOT NULL COMMENT '关联的股票分析任务ID',
   tool_call_id BIGINT COMMENT '产生该证据的工具调用ID',
   evidence_key CHAR(64) COMMENT '证据稳定去重摘要',
+  subject_code VARCHAR(16) NOT NULL DEFAULT '' COMMENT '证据所属规范化证券代码，空值表示主证券历史证据',
+  comparison_snapshot_id CHAR(64) NOT NULL DEFAULT '' COMMENT '可比证券独立快照标识，主证券证据为空',
   source_type VARCHAR(64) NOT NULL COMMENT '证据来源类型',
   source_name VARCHAR(255) NOT NULL COMMENT '证据来源名称',
   url VARCHAR(1024) COMMENT '网页证据URL',
@@ -247,6 +249,7 @@ CREATE TABLE IF NOT EXISTS stock_evidence_item (
   INDEX idx_stock_evidence_task (task_id),
   INDEX idx_stock_evidence_metric (metric_name),
   INDEX idx_stock_evidence_tool_call (tool_call_id),
+  INDEX idx_stock_evidence_subject (task_id, subject_code),
   UNIQUE KEY uk_stock_evidence_task_key (task_id, evidence_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

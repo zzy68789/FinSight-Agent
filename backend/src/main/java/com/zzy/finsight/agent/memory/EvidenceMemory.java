@@ -81,11 +81,13 @@ public class EvidenceMemory {
                 state.getRequest().getAsOfDate().toString(),
                 state.getRequest().getSearchMode(),
                 List.copyOf(unique.values()),
+                current == null ? List.of() : current.evidenceArbitrations(),
                 stages,
                 retrievals,
                 marketSeries,
                 etfDeepData,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                current == null ? List.of() : current.comparisonSnapshots()
         );
         FinancialSnapshot validated = evidenceValidator.validate(updated);
         state.setSnapshot(validated);
@@ -110,6 +112,8 @@ public class EvidenceMemory {
                 item.pageNumber() == null ? "" : item.pageNumber().toString(),
                 safe(item.reportPeriod()),
                 safe(item.metricName()),
+                safe(item.subjectCode()),
+                safe(item.comparisonSnapshotId()),
                 item.rawValue() == null ? "" : item.rawValue().stripTrailingZeros().toPlainString(),
                 safe(item.excerpt())
         );

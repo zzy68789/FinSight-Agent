@@ -289,6 +289,31 @@ class ResearchPlannerTest {
         assertThat(output.durationMs()).isEqualTo(14L);
     }
 
+    @Test
+    void collectsComparisonEvidenceBeforeMetricsSynthesisOrEarlyStop() {
+        ResearchPlanner planner = new ResearchPlanner((prompt, modelType) -> """
+                {"type":"STOP_INSUFFICIENT_EVIDENCE","toolCalls":[],"reason":"来源不足"}
+                """, new ObjectMapper().findAndRegisterModules());
+        AgentState state = new AgentState();
+        ResearchRunRequest request = request("比较主营业务质量与估值差异");
+        request.setComparisonTickers(List.of("000858.SZ"));
+        state.setRequest(request);
+        state.setSubject(new StockSubject("600519", "SH", "600519.SH", "贵州茅台", "食品饮料"));
+        state.setCompletedTools(Set.of(
+                "get_company_profile",
+                "get_financial_statements",
+                "get_market_snapshot",
+                "retrieve_uploaded_reports",
+                "search_public_evidence"
+        ));
+
+        PlannerOutput<AgentAction> output = planner.nextAction(state, new ResearchToolRegistry(List.of()));
+
+        assertThat(output.degraded()).isTrue();
+        assertThat(output.value().toolCalls()).extracting(ToolInvocation::toolName)
+                .containsExactly("collect_comparison_evidence");
+    }
+
     private ResearchRunRequest request(String question) {
         ResearchRunRequest request = new ResearchRunRequest();
         request.setTicker("600519");

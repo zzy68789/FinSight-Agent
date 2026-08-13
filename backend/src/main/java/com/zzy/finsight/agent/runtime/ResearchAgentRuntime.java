@@ -54,7 +54,7 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class ResearchAgentRuntime {
     public static final String POLICY_VERSION = "research-agent-runtime-v3-durable-progress-routing";
-    public static final String TOOLSET_VERSION = "financial-research-tools-v2-typed-outcome";
+    public static final String TOOLSET_VERSION = "financial-research-tools-v3-comparison-evidence";
 
     private final ResearchPlanner planner;
     private final ResearchToolRegistry toolRegistry;
@@ -129,8 +129,10 @@ public class ResearchAgentRuntime {
         publish(state, events, "run_created", mapOf(
                 "researchQuestion", state.getRequest().getResearchQuestion(),
                 "ticker", state.getRequest().getTicker(),
+                "researchIntent", state.getRequest().getResearchIntent().name(),
                 "asOfDate", state.getRequest().getAsOfDate(),
                 "researchDepth", state.getRequest().getResearchDepth(),
+                "comparisonTickers", state.getRequest().getComparisonTickers(),
                 "budget", budget,
                 "resumed", state.getTurnNo() > 0
         ), 0L, "SUCCESS", "");

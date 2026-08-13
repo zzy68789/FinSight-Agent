@@ -227,7 +227,8 @@ public class FinancialMetricEngine {
     private Map<String, FinancialEvidenceItem> indexInputs(FinancialSnapshot snapshot) {
         Map<String, FinancialEvidenceItem> inputs = new LinkedHashMap<>();
         for (FinancialEvidenceItem item : snapshot.evidenceItems()) {
-            if (item.metricName() == null || item.normalizedValue() == null || !item.effective()) {
+            if (!item.belongsTo(snapshot.subject().fullCode())
+                    || item.metricName() == null || item.normalizedValue() == null || !item.effective()) {
                 continue;
             }
             inputs.merge(item.metricName(), item, this::preferredInput);

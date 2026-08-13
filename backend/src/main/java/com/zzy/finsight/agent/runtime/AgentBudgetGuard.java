@@ -23,7 +23,7 @@ public class AgentBudgetGuard {
     private final Duration toolTimeout;
 
     public AgentBudgetGuard(
-            @Value("${finsight.agent.max-turns:8}") int serverMaxTurns,
+            @Value("${finsight.agent.max-turns:12}") int serverMaxTurns,
             @Value("${finsight.agent.max-tool-calls:12}") int serverMaxToolCalls,
             @Value("${finsight.agent.max-replans:3}") int maxReplans,
             @Value("${finsight.agent.max-evidence-recoveries:2}") int maxEvidenceRecoveries,

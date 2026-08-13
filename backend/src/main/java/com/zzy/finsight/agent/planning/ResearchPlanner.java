@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.tool.ResearchToolRegistry;
+import com.zzy.finsight.agent.tool.CollectComparisonEvidenceTool;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.dto.agent.ResearchIntent;
@@ -25,7 +26,7 @@ import java.util.Set;
  */
 @Component
 public class ResearchPlanner {
-    public static final String PLANNER_VERSION = "research-planner-v4-intent-aware-routing";
+    public static final String PLANNER_VERSION = "research-planner-v5-comparison-aware-routing";
     private static final int MAX_STRUCTURE_ATTEMPTS = 2;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
@@ -84,6 +85,7 @@ public class ResearchPlanner {
             AgentAction action = generation.value();
             validateActionShape(action);
             validateEvidenceRecoveryAction(action, state, registry);
+            validateComparisonAction(action, state);
             return output(action, "NEXT_ACTION", generation);
         } catch (RuntimeException exception) {
             return degradedOutput(
@@ -315,6 +317,10 @@ public class ResearchPlanner {
         if (hypotheses.isEmpty()) {
             hypotheses.add("需要结合财务、行情和公开材料验证研究问题");
         }
+        if (!request.getComparisonTickers().isEmpty()) {
+            hypotheses.add("可比证券差异需要由分别归属的结构化证据和确定性指标验证");
+            evidence.add("可比证券独立快照、估值和增长率证据");
+        }
         return new ResearchPlan(
                 question,
                 hypotheses,
@@ -340,7 +346,15 @@ public class ResearchPlanner {
                 return AgentAction.call(tool, "根据研究问题补充对应证据");
             }
         }
+        if (!state.getRequest().getComparisonTickers().isEmpty()
+                && !state.getCompletedTools().contains(CollectComparisonEvidenceTool.TOOL_NAME)) {
+            return AgentAction.call(
+                    CollectComparisonEvidenceTool.TOOL_NAME,
+                    "采集可比证券独立证据后再计算确定性比较指标"
+            );
+        }
         long effectiveEvidence = state.getSnapshot() == null ? 0L : state.getSnapshot().evidenceItems().stream()
+                .filter(item -> item.belongsTo(state.getSnapshot().subject().fullCode()))
                 .filter(FinancialEvidenceItem::effective)
                 .count();
         if (effectiveEvidence < 3) {
@@ -514,6 +528,25 @@ public class ResearchPlanner {
                     && invocation.arguments().isEmpty()) {
                 throw new IllegalArgumentException("EVIDENCE_RECOVERY_ARGUMENTS_REQUIRED");
             }
+        }
+    }
+
+    /** 防止在可比证券证据尚未采集时提前计算指标或综合报告。 */
+    private void validateComparisonAction(AgentAction action, AgentState state) {
+        if (state.getRequest().getComparisonTickers().isEmpty()
+                || state.getCompletedTools().contains(CollectComparisonEvidenceTool.TOOL_NAME)) {
+            return;
+        }
+        if (action.type() == AgentActionType.SYNTHESIZE) {
+            throw new IllegalArgumentException("COMPARISON_EVIDENCE_REQUIRED");
+        }
+        if (action.type() == AgentActionType.STOP_INSUFFICIENT_EVIDENCE) {
+            throw new IllegalArgumentException("COMPARISON_EVIDENCE_ATTEMPT_REQUIRED");
+        }
+        boolean calculatesMetrics = action.toolCalls().stream()
+                .anyMatch(call -> "calculate_financial_metrics".equals(call.toolName()));
+        if (calculatesMetrics) {
+            throw new IllegalArgumentException("COMPARISON_EVIDENCE_BEFORE_METRICS_REQUIRED");
         }
     }
 

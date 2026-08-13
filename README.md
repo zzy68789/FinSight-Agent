@@ -11,6 +11,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **受约束 Research Agent**：`POST /api/research-runs` 幂等创建证券代码与自然语言问题对应的任务并立即返回 `taskId`，客户端再通过任务事件端点订阅 Planner、工具、观察、重规划、综合、门禁和停止事件；`POST /api/stock-reports` 仅作为兼容 SSE 入口转入同一 Runtime。
 - **A股/ETF 搜索与解析**：`GET /api/securities/search` 支持按代码或本地主档名称返回候选，`GET /api/securities/{ticker}/preview` 返回规范化代码、资产类型和名称确认状态；普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`，常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
 - **类型化研究意图**：Research Agent 请求支持综合研究、财务质量、估值风险、ETF 跟踪和事件影响；意图进入 Planner 与恢复/复用指纹，但不在 Runtime 中写死工具执行顺序，股票/ETF 不兼容意图会在入队前拒绝。
+- **可比证券研究**：标准/深度研究可选择最多 3 个同资产类型证券；后端规范化代码、排除主证券并分别采集独立快照和证据，Java 确定性计算 PE/PB/营收同比或 ETF 净值指标，报告引用明确标注证券归属，缺项显式输出 `DATA_MISSING`。
 - **增量证据账本**：Planner 可按问题选择公司主档、TuShare 财务、公开行情、用户上传报告和问题导向的公开网页检索工具；每次工具观察增量合并、校验和去重证据，不再无条件执行全部 Provider。
 - **ETF 深度快照**：ETF 聚合 TuShare `fund_daily`、`fund_basic`、`fund_nav`，保存 60 日 OHLC/成交量/成交额、基金资料、单位/累计净值、资产净值和同日折溢价；单接口失败按项降级。
 - **确定性指标计算**：`FinancialMetricEngine` 使用 Java `BigDecimal` 计算关键财务指标；缺输入标记 `MISSING_INPUT`，外部数据源失败标记 `DATA_MISSING`。
@@ -149,7 +150,7 @@ finsight:
     financial-provider-queue-capacity: 24
     financial-provider-timeout: PT15S
   agent:
-    max-turns: 8
+    max-turns: 12
     max-tool-calls: 12
     max-replans: 3
     max-evidence-recoveries: 2
@@ -166,9 +167,9 @@ finsight:
 
 Agent 和工具执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。单次工具和整体运行都有显式超时，不会无限占用线程。
 
-数据库由 Flyway 自动管理：空库依次执行 V1～V8；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox，V7 增加 outbox claim/重试/死信状态以及 Planner 动作与 turn 的唯一关联，V8 增加研究任务客户端幂等键及用户级唯一约束。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
+数据库由 Flyway 自动管理：空库依次执行 V1～V9；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox，V7 增加 outbox claim/重试/死信状态以及 Planner 动作与 turn 的唯一关联，V8 增加研究任务客户端幂等键及用户级唯一约束，V9 为证据账本增加证券归属和可比快照标识。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
 
-如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql`、`upgrade-agent-decision-outbox.sql`、`upgrade-agent-event-delivery.sql` 和 `upgrade-research-run-submission.sql`，保证数据库结构与代码一致。
+如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql`、`upgrade-agent-decision-outbox.sql`、`upgrade-agent-event-delivery.sql`、`upgrade-research-run-submission.sql` 和 `upgrade-comparison-security.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -293,6 +294,7 @@ Idempotency-Key: 7ab6a8a8-2e3c-4b9e-8f18-6d6d779a6b38
   "time_horizon": "2Y",
   "research_depth": "standard",
   "search_mode": "hybrid",
+  "comparison_tickers": ["000858.SZ", "600809.SH"],
   "budget": {
     "max_turns": 8,
     "max_tool_calls": 12,
@@ -324,6 +326,7 @@ Idempotency-Key: 7ab6a8a8-2e3c-4b9e-8f18-6d6d779a6b38
 - `as_of_date`、`time_horizon`：限定研究时点与观察区间。
 - `research_depth`：支持 `quick`、`standard`、`deep`，映射到服务端预算上限。
 - `search_mode`：支持 `document`、`hybrid`、`web`。
+- `comparison_tickers`：可选，最多 3 个；后端会规范化后缀、去重并拒绝主证券或不同资产类型。使用可比证券时研究深度至少为 `standard`。
 - `budget`：可选且只能收紧服务端预算。
 - `Idempotency-Key`：必填，8～64 位；同一用户使用同一个 key 和相同请求会返回原任务，使用同一个 key 提交不同请求返回 `409 Conflict`。
 
@@ -399,7 +402,7 @@ GET /api/admin/system/health
 - `agent_event_outbox`：带任务内单调序号的版本化 Agent 事件，以及 claim、重试、下次投递和死信状态。
 - `checkpoint`：带状态版本、轮次和请求上下文指纹的 AgentState 快照。
 - `stock_analysis_snapshot`：股票报告生成时的数据快照。
-- `stock_evidence_item`：金融证据账本。
+- `stock_evidence_item`：金融证据账本，包含主证券/可比证券归属与可比快照标识。
 - `stock_metric_result`：Java 指标引擎计算结果。
 - `stock_bad_case_feedback`：Bad Case 反馈和回放快照。
 - `app_user`：用户账号与角色。
@@ -414,7 +417,7 @@ cd backend
 mvn.cmd test
 ```
 
-测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V8，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测与 turn 关联、事件 outbox、任务创建幂等约束和报告租户隔离；未启动 Docker 时该用例会明确跳过。
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V9，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测与 turn 关联、事件 outbox、任务创建幂等约束、可比证据归属字段和报告租户隔离；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 

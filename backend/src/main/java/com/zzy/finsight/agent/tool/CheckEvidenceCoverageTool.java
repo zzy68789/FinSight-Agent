@@ -48,7 +48,10 @@ public class CheckEvidenceCoverageTool implements ResearchTool<NoToolArguments> 
     public ToolResult execute(ToolContext context, NoToolArguments arguments) {
         List<FinancialEvidenceItem> evidence = context.snapshot() == null
                 ? List.of() : context.snapshot().evidenceItems();
-        long effective = evidence.stream().filter(FinancialEvidenceItem::effective).count();
+        long effective = evidence.stream()
+                .filter(item -> context.subject() == null || item.belongsTo(context.subject().fullCode()))
+                .filter(FinancialEvidenceItem::effective)
+                .count();
         List<String> missing = new ArrayList<>();
         if (context.subject() == null) {
             missing.add("证券主体");
@@ -62,7 +65,17 @@ public class CheckEvidenceCoverageTool implements ResearchTool<NoToolArguments> 
         if (context.riskAssessment() == null) {
             missing.add("研究风险评估");
         }
-        int totalChecks = 4;
+        if (!context.request().comparisonTickers().isEmpty()) {
+            java.util.Set<String> snapshotTickers = context.snapshot() == null
+                    ? java.util.Set.of()
+                    : context.snapshot().comparisonSnapshots().stream()
+                    .map(item -> item.subject().fullCode())
+                    .collect(java.util.stream.Collectors.toSet());
+            if (!snapshotTickers.containsAll(context.request().comparisonTickers())) {
+                missing.add("可比证券独立快照");
+            }
+        }
+        int totalChecks = context.request().comparisonTickers().isEmpty() ? 4 : 5;
         BigDecimal coverage = BigDecimal.valueOf(totalChecks - missing.size())
                 .multiply(BigDecimal.valueOf(100))
                 .divide(BigDecimal.valueOf(totalChecks), 2, RoundingMode.HALF_UP);

@@ -22,7 +22,7 @@ import java.util.Set;
  */
 @Component
 public class FinancialEvidenceValidator {
-    public static final String POLICY_VERSION = "financial-evidence-policy-v2-source-arbitration";
+    public static final String POLICY_VERSION = "financial-evidence-policy-v3-subject-attribution";
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final Clock clock;
@@ -66,7 +66,8 @@ public class FinancialEvidenceValidator {
                 snapshot.retrievalResults(),
                 snapshot.marketSeries(),
                 snapshot.etfDeepData(),
-                snapshot.createdAt()
+                snapshot.createdAt(),
+                snapshot.comparisonSnapshots()
         );
     }
 
@@ -181,9 +182,10 @@ public class FinancialEvidenceValidator {
 
     private String evidenceKey(FinancialEvidenceItem item) {
         if ("NEWS_SUMMARY".equals(item.metricName()) && item.url() != null && !item.url().isBlank()) {
-            return "url|" + item.url().trim().toLowerCase(Locale.ROOT);
+            return safe(item.subjectCode()) + "|url|" + item.url().trim().toLowerCase(Locale.ROOT);
         }
         return String.join("|",
+                safe(item.subjectCode()),
                 safe(item.sourceType()),
                 safe(item.sourceName()),
                 safe(item.reportPeriod()),
@@ -222,7 +224,8 @@ public class FinancialEvidenceValidator {
     }
 
     private boolean sameSource(FinancialEvidenceItem left, FinancialEvidenceItem right) {
-        return safe(left.sourceType()).equals(safe(right.sourceType()))
+        return safe(left.subjectCode()).equalsIgnoreCase(safe(right.subjectCode()))
+                && safe(left.sourceType()).equals(safe(right.sourceType()))
                 && safe(left.sourceName()).equals(safe(right.sourceName()));
     }
 
@@ -244,7 +247,9 @@ public class FinancialEvidenceValidator {
                 item.excerpt(),
                 item.confidence(),
                 item.asOf(),
-                issueCode
+                issueCode,
+                item.subjectCode(),
+                item.comparisonSnapshotId()
         );
     }
 

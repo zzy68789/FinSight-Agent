@@ -5,6 +5,7 @@ import com.zzy.finsight.agent.planning.ResearchIntentPolicy;
 import com.zzy.finsight.agent.runtime.AgentTraceReader;
 import com.zzy.finsight.agent.runtime.DurableAgentRunner;
 import com.zzy.finsight.component.analysis.StockCodeResolver;
+import com.zzy.finsight.component.analysis.ComparisonTickerPolicy;
 import com.zzy.finsight.domain.stock.StockAssetType;
 import com.zzy.finsight.domain.stock.StockSubject;
 import com.zzy.finsight.domain.TaskExecutionRecord;
@@ -42,10 +43,11 @@ class ResearchAgentServiceImplTest {
     private final AgentEventStreamModule eventStreamModule = mock(AgentEventStreamModule.class);
     private final ExecutorService executorService = mock(ExecutorService.class);
     private final StockCodeResolver resolver = mock(StockCodeResolver.class);
+    private final ComparisonTickerPolicy comparisonTickerPolicy = mock(ComparisonTickerPolicy.class);
     private final ResearchIntentPolicy intentPolicy = mock(ResearchIntentPolicy.class);
     private final ResearchAgentServiceImpl service = new ResearchAgentServiceImpl(
             runner, taskMapper, requestCodec, traceReader, sseService, eventStreamModule,
-            executorService, resolver, intentPolicy
+            executorService, resolver, comparisonTickerPolicy, intentPolicy
     );
 
     @Test

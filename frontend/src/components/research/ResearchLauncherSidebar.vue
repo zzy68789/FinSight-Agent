@@ -104,6 +104,8 @@
         :time-horizon="timeHorizon"
         :research-depth="researchDepth"
         :search-mode="searchMode"
+        :primary-security="selectedSecurity"
+        :comparison-securities="comparisonSecurities"
         :uploaded-files="uploadedFiles"
         :is-dragging="isDragging"
         :is-document-ready="isDocumentReady"
@@ -112,6 +114,7 @@
         @update:time-horizon="$emit('update:timeHorizon', $event)"
         @update:research-depth="$emit('update:researchDepth', $event)"
         @update:search-mode="$emit('update:searchMode', $event)"
+        @update:comparison-securities="$emit('update:comparisonSecurities', $event)"
         @files-selected="$emit('files-selected', $event)"
         @drag-state-change="$emit('drag-state-change', $event)"
       />
@@ -146,6 +149,7 @@ const props = defineProps({
   timeHorizon: { type: String, required: true },
   researchDepth: { type: String, required: true },
   searchMode: { type: String, required: true },
+  comparisonSecurities: { type: Array, default: () => [] },
   uploadedFiles: { type: Array, default: () => [] },
   isDragging: { type: Boolean, default: false },
   isDocumentReady: { type: Boolean, default: true },
@@ -161,6 +165,7 @@ defineEmits([
   'update:timeHorizon',
   'update:researchDepth',
   'update:searchMode',
+  'update:comparisonSecurities',
   'select-security',
   'files-selected',
   'drag-state-change',

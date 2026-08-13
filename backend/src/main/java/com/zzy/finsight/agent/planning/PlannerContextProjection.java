@@ -12,6 +12,7 @@ import java.util.Map;
  * @param question 当前研究问题。
  * @param researchIntent 当前研究意图。
  * @param intentInstruction 当前研究意图对应的 Planner 重点。
+ * @param comparisonTickers 已确认的可比证券代码。
  * @param plan 当前计划的必要字段。
  * @param turnNo 当前轮次。
  * @param toolCallCount 已用工具次数。
@@ -29,6 +30,7 @@ public record PlannerContextProjection(
         String question,
         String researchIntent,
         String intentInstruction,
+        List<String> comparisonTickers,
         Map<String, Object> plan,
         int turnNo,
         int toolCallCount,
@@ -48,6 +50,7 @@ public record PlannerContextProjection(
         question = question == null ? "" : question;
         researchIntent = researchIntent == null ? "COMPREHENSIVE" : researchIntent;
         intentInstruction = intentInstruction == null ? "" : intentInstruction;
+        comparisonTickers = comparisonTickers == null ? List.of() : List.copyOf(comparisonTickers);
         plan = plan == null ? Map.of() : Map.copyOf(plan);
         completedTools = completedTools == null ? List.of() : List.copyOf(completedTools);
         recentToolCalls = recentToolCalls == null ? List.of() : List.copyOf(recentToolCalls);
@@ -72,11 +75,15 @@ public record PlannerContextProjection(
                 ))
                 .toList();
         long evidenceCount = state.getSnapshot() == null ? 0L
-                : state.getSnapshot().evidenceItems().stream().filter(FinancialEvidenceItem::effective).count();
+                : state.getSnapshot().evidenceItems().stream()
+                .filter(item -> item.belongsTo(state.getSnapshot().subject().fullCode()))
+                .filter(FinancialEvidenceItem::effective)
+                .count();
         return new PlannerContextProjection(
                 state.getRequest() == null ? "" : state.getRequest().getResearchQuestion(),
                 state.getRequest() == null ? "COMPREHENSIVE" : state.getRequest().getResearchIntent().name(),
                 state.getRequest() == null ? "" : state.getRequest().getResearchIntent().plannerInstruction(),
+                state.getRequest() == null ? List.of() : state.getRequest().getComparisonTickers(),
                 plan,
                 state.getTurnNo(),
                 state.getToolCallCount(),

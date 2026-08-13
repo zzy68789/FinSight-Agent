@@ -10,6 +10,7 @@
         </div>
         <div class="flex flex-wrap gap-2 text-[10px] font-semibold">
           <span v-if="runSnapshot?.ticker" class="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-slate-700">{{ runSnapshot.ticker }}</span>
+          <span v-if="runSnapshot?.comparisonTickers?.length" class="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">对比 {{ runSnapshot.comparisonTickers.length }}</span>
           <span class="rounded border border-slate-200 bg-white px-2 py-1 text-slate-600">{{ searchModeLabel }}</span>
           <span class="rounded border px-2 py-1" :class="isRunning ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-600'">{{ currentStepLabel }}</span>
         </div>

@@ -3,6 +3,7 @@ package com.zzy.finsight.agent.tool;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.zzy.finsight.domain.stock.BullBearResearchResult;
+import com.zzy.finsight.domain.stock.ComparisonSecuritySnapshot;
 import com.zzy.finsight.domain.stock.EtfDeepData;
 import com.zzy.finsight.domain.stock.FinancialEvidenceItem;
 import com.zzy.finsight.domain.stock.FinancialMetricResult;
@@ -22,6 +23,7 @@ import java.util.List;
         @JsonSubTypes.Type(value = ToolPayload.Empty.class, name = "empty"),
         @JsonSubTypes.Type(value = ToolPayload.Security.class, name = "security"),
         @JsonSubTypes.Type(value = ToolPayload.Evidence.class, name = "evidence"),
+        @JsonSubTypes.Type(value = ToolPayload.ComparisonEvidence.class, name = "comparison_evidence"),
         @JsonSubTypes.Type(value = ToolPayload.Metrics.class, name = "metrics"),
         @JsonSubTypes.Type(value = ToolPayload.Risk.class, name = "risk"),
         @JsonSubTypes.Type(value = ToolPayload.BullBear.class, name = "bull_bear"),
@@ -31,6 +33,7 @@ public sealed interface ToolPayload permits
         ToolPayload.Empty,
         ToolPayload.Security,
         ToolPayload.Evidence,
+        ToolPayload.ComparisonEvidence,
         ToolPayload.Metrics,
         ToolPayload.Risk,
         ToolPayload.BullBear,
@@ -89,6 +92,25 @@ public sealed interface ToolPayload permits
                     values.size(),
                     values.stream().filter(FinancialEvidenceItem::effective).count()
             );
+        }
+    }
+
+    /**
+     * @param evidence 已标注证券代码和可比快照标识的证据。
+     * @param snapshots 每个可比证券的独立快照索引。
+     */
+    record ComparisonEvidence(
+            List<FinancialEvidenceItem> evidence,
+            List<ComparisonSecuritySnapshot> snapshots
+    ) implements ToolPayload {
+        public ComparisonEvidence {
+            evidence = evidence == null ? List.of() : List.copyOf(evidence);
+            snapshots = snapshots == null ? List.of() : List.copyOf(snapshots);
+        }
+
+        /** 返回只包含归约后实际新增证据的负载。 */
+        public ComparisonEvidence withEvidence(List<FinancialEvidenceItem> added) {
+            return new ComparisonEvidence(added, snapshots);
         }
     }
 

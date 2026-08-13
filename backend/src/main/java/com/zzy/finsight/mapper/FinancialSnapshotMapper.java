@@ -238,12 +238,15 @@ public interface FinancialSnapshotMapper {
         command.put("confidence", item.confidence());
         command.put("asOfTime", item.asOf());
         command.put("issueCode", item.issueCode());
+        command.put("subjectCode", item.subjectCode());
+        command.put("comparisonSnapshotId", item.comparisonSnapshotId());
         command.put("createdAt", LocalDateTime.now());
         return command;
     }
 
     private static String evidenceKey(FinancialEvidenceItem item) {
         String canonical = String.join("|",
+                safe(item.subjectCode()), safe(item.comparisonSnapshotId()),
                 safe(item.sourceType()), safe(item.sourceName()), safe(item.url()),
                 item.pageNumber() == null ? "" : item.pageNumber().toString(),
                 safe(item.reportPeriod()), safe(item.metricName()),

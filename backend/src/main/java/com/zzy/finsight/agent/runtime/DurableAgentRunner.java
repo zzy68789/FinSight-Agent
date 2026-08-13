@@ -149,6 +149,7 @@ public class DurableAgentRunner {
                 request.getTimeHorizon(),
                 request.getResearchDepth(),
                 request.getSearchMode(),
+                String.join(",", request.getComparisonTickers()),
                 ResearchPlanner.PLANNER_VERSION,
                 ResearchAgentRuntime.TOOLSET_VERSION,
                 ResearchAgentRuntime.POLICY_VERSION

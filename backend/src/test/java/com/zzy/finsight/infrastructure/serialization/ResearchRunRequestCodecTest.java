@@ -5,6 +5,8 @@ import com.zzy.finsight.dto.agent.ResearchIntent;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ResearchRunRequestCodecTest {
@@ -31,5 +33,18 @@ class ResearchRunRequestCodecTest {
                 """);
 
         assertThat(restored.getResearchIntent()).isEqualTo(ResearchIntent.COMPREHENSIVE);
+        assertThat(restored.getComparisonTickers()).isEmpty();
+    }
+
+    @Test
+    void preservesTypedComparisonTickersAcrossTaskRecoveryPayload() {
+        ResearchRunRequest request = new ResearchRunRequest();
+        request.setTicker("600519.SH");
+        request.setResearchQuestion("比较估值与营收变化");
+        request.setComparisonTickers(List.of("000858.SZ", "600809.SH"));
+
+        ResearchRunRequest restored = codec.fromJson(codec.toJson(request));
+
+        assertThat(restored.getComparisonTickers()).containsExactly("000858.SZ", "600809.SH");
     }
 }

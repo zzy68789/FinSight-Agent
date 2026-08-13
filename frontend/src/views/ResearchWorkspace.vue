@@ -9,6 +9,7 @@
           v-model:time-horizon="researchTimeHorizon"
           v-model:research-depth="researchDepth"
           v-model:search-mode="searchMode"
+          v-model:comparison-securities="comparisonSecurities"
           :candidates="securityCandidates"
           :selected-security="selectedSecurity"
           :security-state="securitySearchState"
@@ -125,6 +126,7 @@ const researchQuestion = ref('');
 const researchAsOfDate = ref(new Date().toISOString().slice(0, 10));
 const researchDepth = ref('standard');
 const researchTimeHorizon = ref('2Y');
+const comparisonSecurities = ref([]);
 const {
   agentProjection,
   latestStockTaskId,
@@ -235,6 +237,7 @@ const scheduleSecuritySearch = queryValue => {
   const requestToken = securitySearchGate.issue();
   if (securitySearchTimer) clearTimeout(securitySearchTimer);
   selectedSecurity.value = null;
+  comparisonSecurities.value = [];
   securityCandidates.value = [];
   securitySearchError.value = '';
   securitySearchCompleted.value = false;
@@ -249,6 +252,11 @@ const scheduleSecuritySearch = queryValue => {
 };
 
 watch(subjectQuery, scheduleSecuritySearch, { immediate: true });
+watch(comparisonSecurities, securities => {
+  if (securities.length > 0 && researchDepth.value === 'quick') {
+    researchDepth.value = 'standard';
+  }
+});
 watch(() => props.refreshRevision, () => loadMissionRecords());
 
 onMounted(() => {
@@ -307,7 +315,8 @@ const startStockResearch = async () => {
     asOfDate: researchAsOfDate.value,
     researchDepth: researchDepth.value,
     timeHorizon: researchTimeHorizon.value,
-    searchMode: searchMode.value
+    searchMode: searchMode.value,
+    comparisonTickers: comparisonSecurities.value.map(item => item.fullCode)
   };
   stockReplay.value = null;
   stockTrace.value = null;
@@ -323,6 +332,7 @@ const startStockResearch = async () => {
     time_horizon: researchTimeHorizon.value,
     research_depth: researchDepth.value,
     search_mode: actualMode,
+    comparison_tickers: comparisonSecurities.value.map(item => item.fullCode),
     thread_id: props.threadId
   };
   const pendingSubmission = readPendingSubmission();

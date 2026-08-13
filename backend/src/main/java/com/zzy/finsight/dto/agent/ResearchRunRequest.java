@@ -4,8 +4,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 表示受约束投研 Agent 的运行请求。
@@ -44,6 +46,14 @@ public class ResearchRunRequest {
     /** 证据检索模式。 */
     @JsonProperty("search_mode")
     private String searchMode = "hybrid";
+
+    /** 最多三个已确认并规范化的同类可比证券代码。 */
+    @Size(max = 3)
+    @JsonProperty("comparison_tickers")
+    private List<@Pattern(
+            regexp = "\\d{6}(\\.(SH|SZ))?",
+            flags = Pattern.Flag.CASE_INSENSITIVE
+    ) String> comparisonTickers = List.of();
 
     /** 可选的客户端预算上限，只能收紧服务端预算。 */
     @Valid
@@ -119,6 +129,14 @@ public class ResearchRunRequest {
 
     public void setSearchMode(String searchMode) {
         this.searchMode = searchMode;
+    }
+
+    public List<String> getComparisonTickers() {
+        return comparisonTickers == null ? List.of() : List.copyOf(comparisonTickers);
+    }
+
+    public void setComparisonTickers(List<String> comparisonTickers) {
+        this.comparisonTickers = comparisonTickers == null ? List.of() : List.copyOf(comparisonTickers);
     }
 
     public ResearchBudgetRequest getBudget() {

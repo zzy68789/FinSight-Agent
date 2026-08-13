@@ -62,10 +62,17 @@ class MySqlPersistenceIntegrationTest {
     @Test
     void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '8'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '9'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
+        Integer comparisonEvidenceColumns = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'stock_evidence_item' "
+                        + "AND column_name IN ('subject_code', 'comparison_snapshot_id')",
+                Integer.class
+        );
+        assertThat(comparisonEvidenceColumns).isEqualTo(2);
 
         long taskId = taskMapper.createAgent(
                 7L,
