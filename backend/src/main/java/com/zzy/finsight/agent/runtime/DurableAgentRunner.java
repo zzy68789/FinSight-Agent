@@ -54,7 +54,14 @@ public class DurableAgentRunner {
 
     /** 创建并执行新的 Research Agent 任务。 */
     public long runNew(long ownerId, ResearchRunRequest request, AgentEventListener listener) {
-        String threadId = threadId(request);
+        long taskId = createNewTask(ownerId, request, null);
+        runExisting(ownerId, taskId, request.getThreadId(), request, listener);
+        return taskId;
+    }
+
+    /** 只创建持久化任务，事件订阅与异步执行可在任务回执返回后独立进行。 */
+    public long createNewTask(long ownerId, ResearchRunRequest request, String clientRequestId) {
+        String threadId = resolveThreadId(request);
         request.setThreadId(threadId);
         long taskId = taskMapper.createAgent(
                 ownerId,
@@ -64,10 +71,18 @@ public class DurableAgentRunner {
                 requestCodec.toJson(request),
                 ResearchPlanner.PLANNER_VERSION,
                 ResearchAgentRuntime.TOOLSET_VERSION,
-                ResearchAgentRuntime.POLICY_VERSION
+                ResearchAgentRuntime.POLICY_VERSION,
+                clientRequestId
         );
-        runExisting(ownerId, taskId, threadId, request, listener);
         return taskId;
+    }
+
+    /** 解析或生成稳定研究线程标识并写回请求。 */
+    public String resolveThreadId(ResearchRunRequest request) {
+        if (request.getThreadId() != null && !request.getThreadId().isBlank()) {
+            return request.getThreadId().trim();
+        }
+        return "agent-" + request.getTicker().toUpperCase(java.util.Locale.ROOT) + "-" + UUID.randomUUID();
     }
 
     /** 从最近完整 Agent turn 检查点恢复已有任务。 */
@@ -145,13 +160,6 @@ public class DurableAgentRunner {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前 JDK 不支持 SHA-256", exception);
         }
-    }
-
-    private String threadId(ResearchRunRequest request) {
-        if (request.getThreadId() != null && !request.getThreadId().isBlank()) {
-            return request.getThreadId().trim();
-        }
-        return "agent-" + request.getTicker().toUpperCase(java.util.Locale.ROOT) + "-" + UUID.randomUUID();
     }
 
     private String safe(String value) {

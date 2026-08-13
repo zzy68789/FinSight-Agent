@@ -1,6 +1,7 @@
 package com.zzy.finsight.service;
 
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.dto.agent.ResearchRunTraceResponse;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -8,6 +9,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * 定义 Research Agent 运行、重试和轨迹查询业务。
  */
 public interface ResearchAgentService {
+    /** 幂等创建异步 Research Agent 任务并立即返回持久化回执。 */
+    ResearchRunCreatedResponse create(long ownerId, ResearchRunRequest request, String clientRequestId);
+
     /** 异步启动 Research Agent 并通过 SSE 推送动态事件。 */
     void run(long ownerId, ResearchRunRequest request, SseEmitter emitter);
 

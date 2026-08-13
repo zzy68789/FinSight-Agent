@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS app_user (
 CREATE TABLE IF NOT EXISTS research_task (
   id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
   owner_id BIGINT NOT NULL DEFAULT 0 COMMENT '任务所属用户ID',
+  client_request_id VARCHAR(64) COMMENT '客户端任务创建幂等键',
   thread_id VARCHAR(64) NOT NULL COMMENT '会话线程ID',
   query LONGTEXT NOT NULL COMMENT '原始调研问题',
   search_mode VARCHAR(32) NOT NULL COMMENT '调研工作流使用的搜索模式',
@@ -44,7 +45,8 @@ CREATE TABLE IF NOT EXISTS research_task (
   INDEX idx_research_task_thread_id (thread_id),
   INDEX idx_research_task_recovery (status, heartbeat_at),
   INDEX idx_research_task_runtime_recovery (runtime_type, status, heartbeat_at),
-  INDEX idx_research_task_lease_fence (id, lease_owner, lease_epoch)
+  INDEX idx_research_task_lease_fence (id, lease_owner, lease_epoch),
+  UNIQUE KEY uk_research_task_owner_request (owner_id, client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_step_log (

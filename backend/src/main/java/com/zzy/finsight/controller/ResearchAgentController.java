@@ -3,6 +3,7 @@ package com.zzy.finsight.controller;
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.ApiResponse;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.dto.agent.ResearchRunTraceResponse;
 import com.zzy.finsight.service.ResearchAgentService;
 import jakarta.validation.Valid;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -31,12 +34,16 @@ public class ResearchAgentController {
         this.userContext = userContext;
     }
 
-    /** 创建 Research Agent 任务并通过 SSE 推送动态计划与工具事件。 */
+    /** 幂等创建 Research Agent 任务，客户端随后通过事件端点订阅运行轨迹。 */
     @PostMapping
-    public SseEmitter create(@Valid @RequestBody ResearchRunRequest request) {
-        SseEmitter emitter = new SseEmitter(0L);
-        researchAgentService.run(userContext.currentUserId(), request, emitter);
-        return emitter;
+    public ResponseEntity<ApiResponse<ResearchRunCreatedResponse>> create(
+            @Valid @RequestBody ResearchRunRequest request,
+            @RequestHeader("Idempotency-Key") String clientRequestId
+    ) {
+        ResearchRunCreatedResponse response = researchAgentService.create(
+                userContext.currentUserId(), request, clientRequestId
+        );
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success(response));
     }
 
     /** 重试指定的失败或证据不足 Agent 任务。 */

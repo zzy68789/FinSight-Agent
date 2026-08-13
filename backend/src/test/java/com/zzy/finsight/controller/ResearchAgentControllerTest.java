@@ -2,6 +2,7 @@ package com.zzy.finsight.controller;
 
 import com.zzy.finsight.auth.UserContext;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
+import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.service.ResearchAgentService;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @WebMvcTest(value = ResearchAgentController.class, properties = "finsight.auth.enabled=false")
 class ResearchAgentControllerTest {
@@ -38,8 +40,11 @@ class ResearchAgentControllerTest {
     @Test
     void createsResearchRunWithNaturalLanguageQuestion() throws Exception {
         when(userContext.currentUserId()).thenReturn(7L);
+        when(researchAgentService.create(any(Long.class), any(ResearchRunRequest.class), any(String.class)))
+                .thenReturn(new ResearchRunCreatedResponse(19L, "agent-thread", "CREATED", false));
 
         mockMvc.perform(post("/api/research-runs")
+                        .header("Idempotency-Key", "request-12345678")
                         .contentType("application/json")
                         .content("""
                                 {
@@ -53,12 +58,15 @@ class ResearchAgentControllerTest {
                                   "search_mode": "hybrid"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(request().asyncStarted());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.taskId").value(19L))
+                .andExpect(jsonPath("$.data.threadId").value("agent-thread"))
+                .andExpect(jsonPath("$.data.reused").value(false));
 
         ArgumentCaptor<ResearchRunRequest> captor = ArgumentCaptor.forClass(ResearchRunRequest.class);
-        verify(researchAgentService).run(
-                org.mockito.ArgumentMatchers.eq(7L), captor.capture(), any(SseEmitter.class)
+        verify(researchAgentService).create(
+                org.mockito.ArgumentMatchers.eq(7L), captor.capture(),
+                org.mockito.ArgumentMatchers.eq("request-12345678")
         );
         assertThat(captor.getValue().getResearchQuestion()).contains("毛利率");
         assertThat(captor.getValue().getResearchIntent().name()).isEqualTo("FINANCIAL_QUALITY");
@@ -68,12 +76,26 @@ class ResearchAgentControllerTest {
     @Test
     void rejectsUnknownResearchIntent() throws Exception {
         mockMvc.perform(post("/api/research-runs")
+                        .header("Idempotency-Key", "request-12345678")
                         .contentType("application/json")
                         .content("""
                                 {
                                   "ticker": "600519",
                                   "research_question": "分析盈利质量",
                                   "research_intent": "UNKNOWN_INTENT"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsResearchRunWithoutIdempotencyKey() throws Exception {
+        mockMvc.perform(post("/api/research-runs")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "ticker": "600519",
+                                  "research_question": "分析盈利质量"
                                 }
                                 """))
                 .andExpect(status().isBadRequest());

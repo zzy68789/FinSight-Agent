@@ -7,7 +7,9 @@ import com.zzy.finsight.agent.runtime.DurableAgentRunner;
 import com.zzy.finsight.component.analysis.StockCodeResolver;
 import com.zzy.finsight.domain.stock.StockAssetType;
 import com.zzy.finsight.domain.stock.StockSubject;
+import com.zzy.finsight.domain.TaskExecutionRecord;
 import com.zzy.finsight.dto.agent.ResearchIntent;
+import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.infrastructure.serialization.ResearchRunRequestCodec;
 import com.zzy.finsight.mapper.ResearchTaskMapper;
@@ -17,10 +19,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -65,6 +71,64 @@ class ResearchAgentServiceImplTest {
                 .hasMessageContaining("不适用");
 
         verifyNoInteractions(executorService);
+    }
+
+    @Test
+    void createsPersistentTaskBeforeSchedulingExecution() {
+        ResearchRunRequest request = request(ResearchIntent.FINANCIAL_QUALITY);
+        when(resolver.resolve("600519")).thenReturn(subject());
+        when(taskMapper.findExecutionByClientRequestId(7L, "request-12345678"))
+                .thenReturn(Optional.empty());
+        when(runner.resolveThreadId(request)).thenReturn("thread-1");
+        when(runner.createNewTask(7L, request, "request-12345678")).thenReturn(19L);
+
+        ResearchRunCreatedResponse response = service.create(7L, request, "request-12345678");
+
+        assertThat(response.taskId()).isEqualTo(19L);
+        assertThat(response.threadId()).isEqualTo("thread-1");
+        assertThat(response.reused()).isFalse();
+        verify(executorService).submit(any(Runnable.class));
+    }
+
+    @Test
+    void reusesTaskForSameClientRequestWithoutSchedulingAgain() {
+        ResearchRunRequest request = request(ResearchIntent.FINANCIAL_QUALITY);
+        when(resolver.resolve("600519")).thenReturn(subject());
+        TaskExecutionRecord existing = new TaskExecutionRecord(
+                19L, 7L, "thread-1", "RUNNING", "RESEARCH", 1,
+                "payload-1", "", LocalDateTime.now(), "runner", LocalDateTime.now().plusMinutes(1),
+                LocalDateTime.now()
+        );
+        when(taskMapper.findExecutionByClientRequestId(7L, "request-12345678"))
+                .thenReturn(Optional.of(existing));
+        when(requestCodec.toJson(any(ResearchRunRequest.class))).thenReturn("payload-1");
+
+        ResearchRunCreatedResponse response = service.create(7L, request, "request-12345678");
+
+        assertThat(response.taskId()).isEqualTo(19L);
+        assertThat(response.reused()).isTrue();
+        assertThat(request.getThreadId()).isEqualTo("thread-1");
+        verifyNoInteractions(executorService);
+        verify(runner, org.mockito.Mockito.never()).createNewTask(any(Long.class), any(), anyString());
+    }
+
+    @Test
+    void reschedulesIdempotentTaskLeftInCreatedState() {
+        ResearchRunRequest request = request(ResearchIntent.FINANCIAL_QUALITY);
+        when(resolver.resolve("600519")).thenReturn(subject());
+        TaskExecutionRecord existing = new TaskExecutionRecord(
+                20L, 7L, "thread-2", "CREATED", "CREATED", 0,
+                "payload-2", "", null, null, null, LocalDateTime.now()
+        );
+        when(taskMapper.findExecutionByClientRequestId(7L, "request-87654321"))
+                .thenReturn(Optional.of(existing));
+        when(requestCodec.toJson(any(ResearchRunRequest.class))).thenReturn("payload-2");
+
+        ResearchRunCreatedResponse response = service.create(7L, request, "request-87654321");
+
+        assertThat(response.taskId()).isEqualTo(20L);
+        assertThat(response.reused()).isTrue();
+        verify(executorService).submit(any(Runnable.class));
     }
 
     private ResearchRunRequest request(ResearchIntent intent) {

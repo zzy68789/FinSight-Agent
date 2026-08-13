@@ -33,12 +33,12 @@
 
     <insert id="insertTask" parameterType="map" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO research_task(
-          owner_id, thread_id, query, search_mode, runtime_type, status, revision_number,
+          owner_id, client_request_id, thread_id, query, search_mode, runtime_type, status, revision_number,
           stage, attempt_count, request_payload, planner_version, toolset_version, policy_version,
           created_at, updated_at
         )
         VALUES (
-          #{ownerId}, #{threadId}, #{query}, #{searchMode}, #{runtimeType}, 'CREATED', 0,
+          #{ownerId}, #{clientRequestId}, #{threadId}, #{query}, #{searchMode}, #{runtimeType}, 'CREATED', 0,
           'CREATED', 0, #{requestPayload}, #{plannerVersion}, #{toolsetVersion}, #{policyVersion},
           #{createdAt}, #{updatedAt}
         )
@@ -136,6 +136,13 @@
                last_error, heartbeat_at, lease_owner, lease_until, updated_at
         FROM research_task
         WHERE owner_id = #{ownerId} AND id = #{taskId}
+    </select>
+
+    <select id="findExecutionByClientRequestId" resultMap="executionResult">
+        SELECT id, owner_id, thread_id, status, stage, attempt_count, request_payload,
+               last_error, heartbeat_at, lease_owner, lease_until, updated_at
+        FROM research_task
+        WHERE owner_id = #{ownerId} AND client_request_id = #{clientRequestId}
     </select>
 
     <select id="findStaleAgentRunning" resultMap="executionResult">

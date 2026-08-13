@@ -28,8 +28,24 @@ public interface ResearchTaskMapper {
             String toolsetVersion,
             String policyVersion
     ) {
+        return createAgent(ownerId, threadId, query, searchMode, requestPayload,
+                plannerVersion, toolsetVersion, policyVersion, null);
+    }
+
+    /** 使用客户端幂等键创建由 Research Agent Runtime 执行的研究任务。 */
+    default long createAgent(
+            long ownerId,
+            String threadId,
+            String query,
+            String searchMode,
+            String requestPayload,
+            String plannerVersion,
+            String toolsetVersion,
+            String policyVersion,
+            String clientRequestId
+    ) {
         return createTask(ownerId, threadId, query, searchMode, requestPayload,
-                "RESEARCH_AGENT", plannerVersion, toolsetVersion, policyVersion);
+                "RESEARCH_AGENT", plannerVersion, toolsetVersion, policyVersion, clientRequestId);
     }
 
     private long createTask(
@@ -41,11 +57,13 @@ public interface ResearchTaskMapper {
             String runtimeType,
             String plannerVersion,
             String toolsetVersion,
-            String policyVersion
+            String policyVersion,
+            String clientRequestId
     ) {
         LocalDateTime now = LocalDateTime.now();
         Map<String, Object> command = new LinkedHashMap<>();
         command.put("ownerId", ownerId);
+        command.put("clientRequestId", clientRequestId);
         command.put("threadId", threadId);
         command.put("query", query);
         command.put("searchMode", searchMode);
@@ -226,6 +244,12 @@ public interface ResearchTaskMapper {
     Optional<TaskExecutionRecord> findExecution(
             @Param("ownerId") long ownerId,
             @Param("taskId") long taskId
+    );
+
+    /** 按用户与客户端幂等键查询已创建的权威任务。 */
+    Optional<TaskExecutionRecord> findExecutionByClientRequestId(
+            @Param("ownerId") long ownerId,
+            @Param("clientRequestId") String clientRequestId
     );
 
     List<TaskExecutionRecord> findStaleAgentRunning(

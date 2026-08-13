@@ -4,6 +4,7 @@ import com.zzy.finsight.agent.event.AgentEvent;
 import com.zzy.finsight.agent.memory.AgentState;
 import com.zzy.finsight.agent.planning.PlannerOutput;
 import com.zzy.finsight.agent.runtime.LeaseToken;
+import com.zzy.finsight.domain.TaskExecutionRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 在真实 MySQL 上验证 Agent 迁移、任务租约、轮次工具轨迹、检查点和报告租户隔离。
@@ -60,7 +62,7 @@ class MySqlPersistenceIntegrationTest {
     @Test
     void migratesAndPersistsAgentReliabilityContracts() {
         Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '7'",
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1 AND version = '8'",
                 Integer.class
         );
         assertThat(migrationCount).isEqualTo(1);
@@ -75,6 +77,18 @@ class MySqlPersistenceIntegrationTest {
                 "toolset-v1",
                 "policy-v1"
         );
+        long idempotentTaskId = taskMapper.createAgent(
+                7L, "mysql-idempotent-thread", "分析估值风险", "agent-hybrid",
+                "{\"ticker\":\"600519.SH\"}", "planner-v1", "toolset-v1", "policy-v1",
+                "mysql-request-12345678"
+        );
+        assertThat(taskMapper.findExecutionByClientRequestId(7L, "mysql-request-12345678"))
+                .get().extracting(TaskExecutionRecord::id).isEqualTo(idempotentTaskId);
+        assertThatThrownBy(() -> taskMapper.createAgent(
+                7L, "mysql-other-thread", "分析另一问题", "agent-hybrid",
+                "{\"ticker\":\"000001.SZ\"}", "planner-v1", "toolset-v1", "policy-v1",
+                "mysql-request-12345678"
+        )).isInstanceOf(RuntimeException.class);
         LocalDateTime leaseUntil = LocalDateTime.now().plusMinutes(5);
         LeaseToken lease = taskMapper.startAttemptToken(taskId, "runner-a", leaseUntil).orElseThrow();
         assertThat(lease.epoch()).isEqualTo(1L);

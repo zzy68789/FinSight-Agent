@@ -94,6 +94,17 @@ export function useAgentRunProjection() {
     applyAgentProjection(projection, false);
   };
 
+  /** 在任务创建回执到达但首个 Agent 事件尚未到达时绑定权威任务标识。 */
+  const bindAgentRun = (taskId, requestSummary = null) => {
+    const projection = {
+      ...agentProjection.value,
+      taskId: Number(taskId),
+      requestSummary: requestSummary || agentProjection.value.requestSummary,
+      logs: [...logs.value]
+    };
+    applyAgentProjection(projection, false);
+  };
+
   const pushAgentLog = (message) => logs.value.push(message);
   const markAgentRunDone = () => {
     currentStep.value = 'done';
@@ -121,6 +132,7 @@ export function useAgentRunProjection() {
     resetAgentRun,
     handleAgentEvent,
     applyAgentTrace,
+    bindAgentRun,
     pushAgentLog,
     markAgentRunDone
   };

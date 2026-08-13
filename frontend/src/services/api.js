@@ -12,16 +12,28 @@ function generateUUID() {
   });
 }
 
-// 会话级 ID：页面一刷新就重置，满足"单次会话记忆"需求
-const SESSION_THREAD_ID = generateUUID();
+export const THREAD_STORAGE_KEY = 'finsight_research_thread_id';
+const storedThreadId = localStorage.getItem(THREAD_STORAGE_KEY);
+const SESSION_THREAD_ID = storedThreadId || generateUUID();
+if (!storedThreadId) localStorage.setItem(THREAD_STORAGE_KEY, SESSION_THREAD_ID);
 
 export const currentThreadId = SESSION_THREAD_ID;
+
+/** 将后端确认的研究线程保存为刷新后的默认线程。 */
+export function persistCurrentThreadId(threadId) {
+  const normalized = String(threadId || '').trim();
+  if (normalized) localStorage.setItem(THREAD_STORAGE_KEY, normalized);
+  return normalized;
+}
 
 async function requestJson(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, withAuth(options));
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-      throw new Error(payload?.message || payload?.detail || `请求失败：${response.status}`);
+      const error = new Error(payload?.message || payload?.detail || `请求失败：${response.status}`);
+      error.status = response.status;
+      error.nonRetryable = response.status >= 400 && response.status < 500;
+      throw error;
   }
   if (payload && typeof payload === 'object' && 'code' in payload) {
       if (payload.code !== 0) {
@@ -230,15 +242,18 @@ export async function adminSystemHealth() {
   return requestJson('/admin/system/health');
 }
 
-async function streamSse(path, payload, onData, onDone, onError, reconnectPath) {
-  let taskId = null;
-  let lastSequence = 0;
+async function streamSse(path, payload, onData, onDone, onError, reconnectPath, resume = {}) {
+  let taskId = resume.taskId || null;
+  let lastSequence = Math.max(0, Number(resume.afterSequence || 0));
   let reconnectAttempts = 0;
-  let request = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  };
+  let request = taskId
+    ? { method: 'GET', headers: { 'Last-Event-ID': String(lastSequence) }, signal: resume.signal }
+    : {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: resume.signal
+      };
   try {
     while (true) {
       try {
@@ -262,6 +277,7 @@ async function streamSse(path, payload, onData, onDone, onError, reconnectPath) 
           return;
         }
       } catch (error) {
+        if (error.name === 'AbortError') throw error;
         if (error.nonRetryable || !taskId || !reconnectPath || reconnectAttempts >= 5) throw error;
       }
       if (!taskId || !reconnectPath || reconnectAttempts >= 5) {
@@ -272,10 +288,12 @@ async function streamSse(path, payload, onData, onDone, onError, reconnectPath) 
       path = reconnectPath(taskId);
       request = {
         method: 'GET',
-        headers: { 'Last-Event-ID': String(lastSequence) }
+        headers: { 'Last-Event-ID': String(lastSequence) },
+        signal: resume.signal
       };
     }
   } catch (error) {
+    if (error.name === 'AbortError') return;
     onError(error);
   }
 }
@@ -316,11 +334,43 @@ export async function streamStockReport(ticker, search_mode, report_period, onDa
   }, onData, onDone, onError);
 }
 
-export async function streamResearchRun(request, onData, onDone, onError, threadId = SESSION_THREAD_ID) {
-  return streamSse('/research-runs', {
+/** 幂等创建 Research Agent 任务并返回持久化回执。 */
+export async function createResearchRun(
+  request,
+  clientRequestId,
+  threadId = SESSION_THREAD_ID
+) {
+  return requestJson('/research-runs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': clientRequestId
+    },
+    body: JSON.stringify({
       ...request,
       thread_id: request.thread_id || threadId
-  }, onData, onDone, onError, taskId => `/research-runs/${taskId}/events`);
+    })
+  });
+}
+
+/** 从指定序号回放并持续订阅已经持久化的 Research Agent 任务。 */
+export async function subscribeResearchRun(
+  taskId,
+  onData,
+  onDone,
+  onError,
+  afterSequence = 0,
+  signal = null
+) {
+  return streamSse(
+    `/research-runs/${taskId}/events`,
+    null,
+    onData,
+    onDone,
+    onError,
+    id => `/research-runs/${id}/events`,
+    { taskId, afterSequence, signal }
+  );
 }
 
 export async function getResearchRunTrace(taskId) {

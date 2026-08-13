@@ -75,14 +75,29 @@ import {
   resolveResearchReadiness
 } from '../modules/researchLauncher.js';
 import {
+  advanceActiveResearchSequence,
+  clearActiveResearchRun,
+  clearPendingSubmission,
+  isTerminalResearchStatus,
+  latestResearchSequence,
+  readActiveResearchRun,
+  readPendingSubmission,
+  resolveSubmissionIntent,
+  saveActiveResearchRun,
+  savePendingSubmission
+} from '../modules/researchRunSession.js';
+import {
   clearContext,
+  createResearchRun,
+  getTask,
   getResearchRunTrace,
   getStockReplay,
   listReports,
   listTasks,
   saveStockFeedback,
   searchSecurities,
-  streamResearchRun,
+  subscribeResearchRun,
+  persistCurrentThreadId,
   uploadFiles
 } from '../services/api';
 
@@ -120,6 +135,7 @@ const {
   resetAgentRun,
   handleAgentEvent,
   applyAgentTrace,
+  bindAgentRun,
   pushAgentLog,
   markAgentRunDone
 } = useAgentRunProjection();
@@ -138,6 +154,8 @@ const missionRecordKeyword = ref('');
 const isMissionRecordsLoading = ref(false);
 const missionRecordsError = ref('');
 let securitySearchTimer = null;
+let subscriptionGeneration = 0;
+let activeSubscriptionController = null;
 const securitySearchGate = createLatestRequestGate();
 
 const researchReadiness = computed(() => resolveResearchReadiness({
@@ -233,10 +251,15 @@ const scheduleSecuritySearch = queryValue => {
 watch(subjectQuery, scheduleSecuritySearch, { immediate: true });
 watch(() => props.refreshRevision, () => loadMissionRecords());
 
-onMounted(() => loadMissionRecords());
+onMounted(() => {
+  loadMissionRecords();
+  restoreActiveResearchRun();
+});
 
 onBeforeUnmount(() => {
   securitySearchGate.invalidate();
+  subscriptionGeneration += 1;
+  activeSubscriptionController?.abort();
   if (securitySearchTimer) clearTimeout(securitySearchTimer);
 });
 
@@ -292,49 +315,131 @@ const startStockResearch = async () => {
     + '，问题：' + researchQuestion.value.trim());
 
   const actualMode = searchMode.value;
+  const researchRequest = {
+    ticker: security.fullCode,
+    research_intent: researchIntent.value,
+    research_question: researchQuestion.value.trim(),
+    as_of_date: researchAsOfDate.value,
+    time_horizon: researchTimeHorizon.value,
+    research_depth: researchDepth.value,
+    search_mode: actualMode,
+    thread_id: props.threadId
+  };
+  const pendingSubmission = readPendingSubmission();
+  const submissionIntent = resolveSubmissionIntent(researchRequest, pendingSubmission);
+  const retryingSameSubmission = pendingSubmission?.clientRequestId === submissionIntent.clientRequestId;
 
   try {
     if (uploadedFiles.value.length > 0) {
       logs.value.push('[系统] 已绑定 ' + uploadedFiles.value.length + ' 个解析完成的研究文档。');
-    } else {
+    } else if (!retryingSameSubmission) {
       logs.value.push('[系统] 正在清理上一轮知识库上下文...');
       await clearContext();
       logs.value.push('[系统] 上下文已清理，将使用公开数据源与降级缺失标记。');
+    } else {
+      logs.value.push('[恢复] 正在重试同一任务创建请求，不重复清理研究上下文。');
     }
 
-    streamResearchRun(
-      {
-        ticker: security.fullCode,
-        research_intent: researchIntent.value,
-        research_question: researchQuestion.value.trim(),
-        as_of_date: researchAsOfDate.value,
-        time_horizon: researchTimeHorizon.value,
-        research_depth: researchDepth.value,
-        search_mode: actualMode
-      },
-      handleStockEvent,
-      () => {
-        isLoading.value = false;
-        markAgentRunDone();
-        pushAgentLog('[完成] Research Agent 已结束运行。');
-        emit('completed');
-      },
-      (error) => {
-        isLoading.value = false;
-        logs.value.push('[错误] ' + error.message);
-      },
+    savePendingSubmission(submissionIntent);
+    const receipt = await createResearchRun(
+      researchRequest,
+      submissionIntent.clientRequestId,
       props.threadId
     );
+    clearPendingSubmission();
+    bindAgentRun(receipt.taskId, activeRunSnapshot.value);
+    persistCurrentThreadId(receipt.threadId);
+    saveActiveResearchRun({
+      taskId: receipt.taskId,
+      threadId: receipt.threadId,
+      lastSequence: 0,
+      requestSnapshot: activeRunSnapshot.value
+    });
+    pushAgentLog(receipt.reused
+      ? `[恢复] 已复用幂等任务 #${receipt.taskId}，正在加载已提交事件。`
+      : `[提交] 任务 #${receipt.taskId} 已持久化，正在订阅 Agent 事件。`);
+    if (isTerminalResearchStatus(receipt.status)) {
+      isLoading.value = false;
+      clearActiveResearchRun(receipt.taskId);
+      emit('warning', `任务 #${receipt.taskId} 未进入执行队列，请在任务中心查看失败原因。`);
+      loadMissionRecords();
+      return;
+    }
+    subscribeToResearchRun(receipt.taskId, 0);
   } catch (error) {
     isLoading.value = false;
+    if (error.status >= 400 && error.status < 500) clearPendingSubmission();
     logs.value.push('[错误] 初始化失败：' + error.message);
-    window.alert('系统错误：' + error.message);
+    emit('warning', '任务创建失败：' + error.message + '。表单内容已保留，可直接重试。');
   }
 };
 
 const handleStockEvent = (event) => {
   handleAgentEvent(event);
+  const taskId = event?.data?.taskId || latestStockTaskId.value;
+  const sequence = Number(event?.data?.sequence || 0);
+  if (taskId && sequence) advanceActiveResearchSequence(taskId, sequence);
   if ((event?.step || event?.type) === 'run_created') loadMissionRecords();
+};
+
+const subscribeToResearchRun = async (taskId, afterSequence = 0) => {
+  const generation = ++subscriptionGeneration;
+  activeSubscriptionController?.abort();
+  activeSubscriptionController = new AbortController();
+  await subscribeResearchRun(
+    taskId,
+    event => {
+      if (generation === subscriptionGeneration) handleStockEvent(event);
+    },
+    () => {
+      if (generation !== subscriptionGeneration) return;
+      isLoading.value = false;
+      clearActiveResearchRun(taskId);
+      markAgentRunDone();
+      pushAgentLog('[完成] Research Agent 已结束运行。');
+      emit('completed');
+      loadMissionRecords();
+    },
+    error => {
+      if (generation !== subscriptionGeneration) return;
+      isLoading.value = true;
+      logs.value.push('[连接] 事件订阅暂时中断：' + error.message);
+      emit('warning', '任务已经保存，但事件连接暂时中断。刷新页面后会从已提交序号继续恢复。');
+    },
+    afterSequence,
+    activeSubscriptionController.signal
+  );
+};
+
+const restoreActiveResearchRun = async () => {
+  const activeRun = readActiveResearchRun();
+  if (!activeRun) return;
+  try {
+    const [task, trace] = await Promise.all([
+      getTask(activeRun.taskId),
+      getResearchRunTrace(activeRun.taskId)
+    ]);
+    activeRunSnapshot.value = activeRun.requestSnapshot || null;
+    if (trace.events?.length) {
+      applyAgentTrace(trace.events, '[恢复] 已从持久化事件恢复刷新前的 Agent 运行。');
+    } else {
+      bindAgentRun(activeRun.taskId, activeRun.requestSnapshot || null);
+    }
+    const afterSequence = Math.max(activeRun.lastSequence, latestResearchSequence(trace.events));
+    saveActiveResearchRun({ ...activeRun, lastSequence: afterSequence });
+    if (isTerminalResearchStatus(task.status)) {
+      isLoading.value = false;
+      clearActiveResearchRun(activeRun.taskId);
+      markAgentRunDone();
+      return;
+    }
+    isLoading.value = true;
+    pushAgentLog(`[恢复] 从事件序号 #${afterSequence} 继续订阅任务 #${activeRun.taskId}。`);
+    subscribeToResearchRun(activeRun.taskId, afterSequence);
+  } catch (error) {
+    clearActiveResearchRun(activeRun.taskId);
+    emit('warning', '无法恢复上一次研究任务：' + error.message);
+  }
 };
 
 const submitStockFeedback = async (feedbackType, feedbackDetail = '') => {

@@ -8,7 +8,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 
 ## 功能特性
 
-- **受约束 Research Agent**：`POST /api/research-runs` 接收证券代码和自然语言研究问题，由 Planner 动态选择只读白名单工具，并通过 SSE 推送计划、工具调用、观察、重规划、综合、门禁和停止事件；`POST /api/stock-reports` 仅作为兼容入口转入同一 Runtime。
+- **受约束 Research Agent**：`POST /api/research-runs` 幂等创建证券代码与自然语言问题对应的任务并立即返回 `taskId`，客户端再通过任务事件端点订阅 Planner、工具、观察、重规划、综合、门禁和停止事件；`POST /api/stock-reports` 仅作为兼容 SSE 入口转入同一 Runtime。
 - **A股/ETF 搜索与解析**：`GET /api/securities/search` 支持按代码或本地主档名称返回候选，`GET /api/securities/{ticker}/preview` 返回规范化代码、资产类型和名称确认状态；普通 A 股支持 `6xxxxx -> .SH`、`0xxxxx / 2xxxxx / 3xxxxx -> .SZ`，常见 ETF 支持 `5xxxxx -> .SH`、`15xxxx / 16xxxx / 18xxxx -> .SZ`。
 - **类型化研究意图**：Research Agent 请求支持综合研究、财务质量、估值风险、ETF 跟踪和事件影响；意图进入 Planner 与恢复/复用指纹，但不在 Runtime 中写死工具执行顺序，股票/ETF 不兼容意图会在入队前拒绝。
 - **增量证据账本**：Planner 可按问题选择公司主档、TuShare 财务、公开行情、用户上传报告和问题导向的公开网页检索工具；每次工具观察增量合并、校验和去重证据，不再无条件执行全部 Provider。
@@ -18,6 +18,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **可恢复 Agent Runtime**：任务持久化请求、轮次、工具调用、预算消耗、停止原因、心跳、租约和 AgentState Checkpoint；SSE 客户端断开不影响后台执行，过期任务从最近完整轮次恢复，最多尝试 3 次。若崩溃前已打开但尚未提交下一轮，恢复会复用该 turn 的原始完整动作和 Planner 元数据，不重新生成可能改变工具参数的动作。
 - **反馈感知 Replan 与模型分层**：重规划直接读取最近观察、门禁问题、补证据尝试和证据增量；普通动作优先 FAST，建计划、重规划和复杂恢复使用 SMART，结构失败自动升级并持久化模型、Token、耗时和合法率。
 - **原子完成与可续传事件**：Planner 动作、工具结果、证据、turn、Checkpoint 和租约续期按轮次原子提交；PASS 报告、快照冻结、任务完成与版本化事件 outbox 在最终事务内一起提交。发布器通过数据库 claim、租约、退避和死信协调多实例，SSE 支持按 `Last-Event-ID` 回放缺口，实时流与历史 Trace 读取同一事件契约。
+- **幂等提交与刷新恢复**：任务创建使用 `Idempotency-Key` 和用户级数据库唯一约束；前端持久化 task/thread/最后 sequence，首次 SSE 连接失败或页面刷新后通过 Trace + `Last-Event-ID` 接续同一权威任务，不重新创建 Agent Run。
 - **类型化只读工具**：Planner 参数先按工具 schema 解码为强类型命令，工具只读取不可变上下文并返回类型化 `ToolPayload`，状态变更统一由 Runtime reducer 串行应用。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
 - **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点和 ETF ECharts 行情图。
@@ -165,9 +166,9 @@ finsight:
 
 Agent 和工具执行器都使用有界队列；队列满时拒绝新提交并记录 Micrometer 指标。单次工具和整体运行都有显式超时，不会无限占用线程。
 
-数据库由 Flyway 自动管理：空库依次执行 V1～V7；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox，V7 增加 outbox claim/重试/死信状态以及 Planner 动作与 turn 的唯一关联。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
+数据库由 Flyway 自动管理：空库依次执行 V1～V8；V4 新增 Agent 轮次、工具调用和 AgentState Checkpoint，V5 增加单调 `lease_epoch` fencing，V6 增加 Planner 决策遥测、任务事件序号和事件 outbox，V7 增加 outbox claim/重试/死信状态以及 Planner 动作与 turn 的唯一关联，V8 增加研究任务客户端幂等键及用户级唯一约束。已有旧库通过 `baseline-version=1` 接管后执行增量迁移，`schema.sql` 保留为当前完整结构参考。
 
-如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql`、`upgrade-agent-decision-outbox.sql` 和 `upgrade-agent-event-delivery.sql`，保证数据库结构与代码一致。
+如需临时关闭自动迁移，需按顺序执行历史手动升级脚本；Research Agent 库至少依次执行 `upgrade-research-agent.sql`、`upgrade-durable-agent-turn-commit.sql`、`upgrade-agent-decision-outbox.sql`、`upgrade-agent-event-delivery.sql` 和 `upgrade-research-run-submission.sql`，保证数据库结构与代码一致。
 
 ### 2. 启动后端
 
@@ -277,7 +278,7 @@ GET /api/securities/600519/preview
 ```http
 POST /api/research-runs
 Content-Type: application/json
-Accept: text/event-stream
+Idempotency-Key: 7ab6a8a8-2e3c-4b9e-8f18-6d6d779a6b38
 ```
 
 请求示例：
@@ -300,6 +301,21 @@ Accept: text/event-stream
 }
 ```
 
+成功时返回 HTTP `202 Accepted`：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "taskId": 19,
+    "threadId": "research-thread-id",
+    "status": "CREATED",
+    "reused": false
+  }
+}
+```
+
 字段说明：
 
 - `ticker`：普通 A 股或常见 ETF 的 6 位代码，也支持 `.SH` / `.SZ` 后缀。
@@ -309,6 +325,7 @@ Accept: text/event-stream
 - `research_depth`：支持 `quick`、`standard`、`deep`，映射到服务端预算上限。
 - `search_mode`：支持 `document`、`hybrid`、`web`。
 - `budget`：可选且只能收紧服务端预算。
+- `Idempotency-Key`：必填，8～64 位；同一用户使用同一个 key 和相同请求会返回原任务，使用同一个 key 提交不同请求返回 `409 Conflict`。
 
 Agent 重试与动态轨迹：
 
@@ -318,7 +335,7 @@ GET /api/research-runs/{taskId}/trace
 GET /api/research-runs/{taskId}/events?afterSequence={sequence}
 ```
 
-`events` 返回 `text/event-stream`，支持请求头 `Last-Event-ID: {sequence}`；服务端先回放该序号后的已提交事件，再接续实时流。前端主入口会在非终态连接意外中断时携带最后序号有限重连，重复事件仍由 `taskId + sequence` 幂等过滤。
+`events` 返回 `text/event-stream`，支持请求头 `Last-Event-ID: {sequence}`；服务端先回放该序号后的已提交事件，再接续实时流。前端在获得创建回执后才绑定 SSE，首次连接失败也已经持有 `taskId`；非终态断线会携带最后序号有限重连，页面刷新后再用 Trace 与本地任务指针恢复，重复事件仍由 `taskId + sequence` 幂等过滤。
 
 旧 `POST /api/stock-reports` 继续接受原请求并转入同一 Runtime。历史报告的 Bad Case、回放和旧轨迹接口继续保留：
 
@@ -397,7 +414,7 @@ cd backend
 mvn.cmd test
 ```
 
-测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V7，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测与 turn 关联、事件 outbox 和报告租户隔离；未启动 Docker 时该用例会明确跳过。
+测试套件包含 `MySqlPersistenceIntegrationTest`：Docker 可用时会启动 MySQL 8.4，真实执行 Flyway V1→V8，并验证 Agent turn、tool call、Checkpoint、任务租约、Planner 遥测与 turn 关联、事件 outbox、任务创建幂等约束和报告租户隔离；未启动 Docker 时该用例会明确跳过。
 
 确定性离线评测与显式基线更新：
 

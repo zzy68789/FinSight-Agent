@@ -179,7 +179,7 @@ import {
 const showWarning = ref(false);
 const warningMessage = ref('');
 const activeWorkspace = ref('run');
-const activeThreadId = ref(currentThreadId);
+const activeThreadId = ref(localStorage.getItem('finsight_research_thread_id') || currentThreadId);
 const dataRevision = ref(0);
 
 const authUser = ref(null);
@@ -219,6 +219,7 @@ const setWorkspace = (workspace) => {
 
 const setActiveThread = (threadId) => {
   activeThreadId.value = threadId || currentThreadId;
+  localStorage.setItem('finsight_research_thread_id', activeThreadId.value);
 };
 
 const handleResearchCompleted = () => {
