@@ -43,3 +43,13 @@ test('SSE 暂时断开时保留 canonical 非终态任务的运行身份', () =>
   assert.equal(view.status, 'RUNNING');
   assert.equal(view.taskId, 18);
 });
+
+test('Mission Control 将用户取消显示为独立终态', () => {
+  const cancelled = deriveMissionControlView(replayAgentEvents([
+    { step: 'run_stopped', data: { eventId: 'cancel', taskId: 21, status: 'CANCELLED', reason: 'USER_CANCELLED' } }
+  ]), false);
+
+  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.statusLabel, '任务已取消');
+  assert.match(cancelled.stopReason, /用户已取消/);
+});

@@ -204,7 +204,7 @@ public class ResearchAgentServiceImpl implements ResearchAgentService {
     public SseEmitter subscribe(long ownerId, long taskId, long afterSequence) {
         TaskExecutionRecord task = taskMapper.findExecution(ownerId, taskId)
                 .orElseThrow(() -> new IllegalArgumentException("未找到 Research Agent 任务"));
-        boolean terminal = Set.of("COMPLETED", "FAILED", "INSUFFICIENT_EVIDENCE")
+        boolean terminal = Set.of("COMPLETED", "FAILED", "INSUFFICIENT_EVIDENCE", "CANCELLED")
                 .contains(task.status());
         return eventStreamModule.subscribe(taskId, afterSequence, terminal);
     }

@@ -126,9 +126,23 @@ public class DurableAgentRunner {
         try {
             runtime.execute(ownerId, state, budgetGuard.resolve(request), lease.orElseThrow(), events);
         } catch (RuntimeException exception) {
-            turnCommitModule.finishTask(
-                    state, lease.orElseThrow(), "FAILED", "RUNTIME_ERROR", exception.getMessage()
-            );
+            if (isCancelled(ownerId, taskId)) {
+                runtimeStateService.markStatus(taskId, "CANCELLED");
+                safeDone(events);
+                return;
+            }
+            try {
+                turnCommitModule.finishTask(
+                        state, lease.orElseThrow(), "FAILED", "RUNTIME_ERROR", exception.getMessage()
+                );
+            } catch (IllegalStateException fenced) {
+                if (isCancelled(ownerId, taskId)) {
+                    runtimeStateService.markStatus(taskId, "CANCELLED");
+                    safeDone(events);
+                    return;
+                }
+                throw fenced;
+            }
             runtimeStateService.markStatus(taskId, "FAILED");
             stepLogMapper.saveError(taskId, "research_agent_runtime", exception);
             try {
@@ -136,6 +150,20 @@ public class DurableAgentRunner {
             } catch (RuntimeException ignored) {
                 // SSE 连接断开不改变任务失败状态。
             }
+        }
+    }
+
+    private boolean isCancelled(long ownerId, long taskId) {
+        return taskMapper.findExecution(ownerId, taskId)
+                .map(task -> "CANCELLED".equals(task.status()))
+                .orElse(false);
+    }
+
+    private void safeDone(AgentEventListener events) {
+        try {
+            events.onDone();
+        } catch (RuntimeException ignored) {
+            // 客户端断开不改变已经持久化的取消状态。
         }
     }
 

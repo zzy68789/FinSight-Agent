@@ -29,4 +29,23 @@ class InMemoryVectorDocumentStoreTenantIsolationTest {
         assertThat(store.query(userA, "alpha", 5)).isEmpty();
         assertThat(store.query(userB, "beta", 5)).extracting(RagDocument::source).containsExactly("b.pdf");
     }
+
+    @Test
+    void deleteSourceKeepsOtherSourcesAndOtherKnowledgeSpaces() {
+        InMemoryVectorDocumentStore store = new InMemoryVectorDocumentStore(text -> List.of(1.0d, 0.5d));
+        RagKnowledgeSpace userA = RagKnowledgeSpace.forOwner(7L);
+        RagKnowledgeSpace userB = RagKnowledgeSpace.forOwner(8L);
+        store.add(userA, List.of(
+                new RagDocumentChunk("same.pdf", 0, "old content"),
+                new RagDocumentChunk("other.pdf", 0, "other content")
+        ));
+        store.add(userB, List.of(new RagDocumentChunk("same.pdf", 0, "tenant content")));
+
+        store.deleteSource(userA, "same.pdf");
+
+        assertThat(store.query(userA, "content", 5)).extracting(RagDocument::source)
+                .containsExactly("other.pdf");
+        assertThat(store.query(userB, "content", 5)).extracting(RagDocument::source)
+                .containsExactly("same.pdf");
+    }
 }

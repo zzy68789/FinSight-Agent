@@ -107,7 +107,7 @@
           </dl>
 
           <div v-if="mission.stopReason" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-            <p class="text-xs font-bold text-amber-900">任务未发布报告</p>
+            <p class="text-xs font-bold text-amber-900">{{ mission.status === 'CANCELLED' ? '任务已取消' : '任务未发布报告' }}</p>
             <p class="mt-1 text-xs leading-5 text-amber-800">{{ mission.stopReason }}</p>
           </div>
 
@@ -208,28 +208,30 @@ const mission = computed(() => deriveMissionControlView(props.projection, props.
 const activeRequest = computed(() => props.runSnapshot || mission.value.requestSummary || {});
 const gateStatusLabel = computed(() => {
   if (mission.value.status === 'COMPLETED') return 'PASS';
+  if (mission.value.status === 'CANCELLED') return 'CANCELLED';
   if (mission.value.status === 'STOPPED') return 'STOPPED';
   return mission.value.qualityGateDecision?.status || '等待门禁';
 });
-const gateStatusClass = computed(() => gateStatusLabel.value === 'PASS' ? 'text-emerald-700' : gateStatusLabel.value === 'STOPPED' ? 'text-amber-700' : 'text-slate-500');
+const gateStatusClass = computed(() => gateStatusLabel.value === 'PASS' ? 'text-emerald-700' : ['STOPPED', 'CANCELLED'].includes(gateStatusLabel.value) ? 'text-amber-700' : 'text-slate-500');
 const statusBadgeClass = computed(() => ({
   IDLE: 'border-slate-700 bg-slate-900 text-slate-300',
   RUNNING: 'border-amber-300/40 bg-amber-300/10 text-amber-100',
   COMPLETED: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
-  STOPPED: 'border-amber-400/40 bg-amber-400/10 text-amber-200'
+  STOPPED: 'border-amber-400/40 bg-amber-400/10 text-amber-200',
+  CANCELLED: 'border-slate-500/50 bg-slate-500/10 text-slate-200'
 })[mission.value.status]);
 const statusDotClass = computed(() => ({
-  IDLE: 'bg-slate-500', RUNNING: 'bg-amber-300', COMPLETED: 'bg-emerald-400', STOPPED: 'bg-amber-400'
+  IDLE: 'bg-slate-500', RUNNING: 'bg-amber-300', COMPLETED: 'bg-emerald-400', STOPPED: 'bg-amber-400', CANCELLED: 'bg-slate-400'
 })[mission.value.status]);
 
 const eventTypeLabel = type => agentEventTypeLabel(type);
 const intentLabel = value => ({ COMPREHENSIVE: '综合研究', FINANCIAL_QUALITY: '财务质量', VALUATION_RISK: '估值风险', ETF_TRACKING: 'ETF 跟踪', EVENT_IMPACT: '事件影响' })[value] || value;
 const toolLabel = name => name || '等待工具调用';
 const taskStatusLabel = status => ({ CREATED: '待执行', RUNNING: '运行中' })[status] || status;
-const statusLabel = status => ({ RUNNING: '运行中', SUCCESS: '成功', PASS: '通过', DEGRADED: '需处理', FAILED: '失败', CREATED: '待执行' })[status] || status || '等待';
+const statusLabel = status => ({ RUNNING: '运行中', SUCCESS: '成功', PASS: '通过', DEGRADED: '需处理', FAILED: '失败', CREATED: '待执行', CANCELLED: '已取消' })[status] || status || '等待';
 const statusTextClass = status => ['SUCCESS', 'PASS', 'COMPLETED'].includes(status)
   ? 'text-emerald-700'
   : ['FAILED', 'ERROR'].includes(status) ? 'text-rose-700'
-    : ['DEGRADED', 'STOPPED'].includes(status) ? 'text-amber-700' : 'text-blue-700';
+    : ['DEGRADED', 'STOPPED', 'CANCELLED'].includes(status) ? 'text-amber-700' : 'text-blue-700';
 
 </script>

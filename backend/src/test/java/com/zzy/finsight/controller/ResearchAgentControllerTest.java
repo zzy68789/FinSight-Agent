@@ -5,6 +5,7 @@ import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.service.AuthService;
 import com.zzy.finsight.service.ResearchAgentService;
+import com.zzy.finsight.service.ResearchRunCancellationService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,9 @@ class ResearchAgentControllerTest {
 
     @MockitoBean
     ResearchAgentService researchAgentService;
+
+    @MockitoBean
+    ResearchRunCancellationService cancellationService;
 
     @MockitoBean
     UserContext userContext;
@@ -113,5 +117,15 @@ class ResearchAgentControllerTest {
                 .andExpect(request().asyncStarted());
 
         verify(researchAgentService).subscribe(7L, 19L, 8L);
+    }
+
+    @Test
+    void cancelsOwnedResearchRun() throws Exception {
+        when(userContext.currentUserId()).thenReturn(7L);
+
+        mockMvc.perform(post("/api/research-runs/19/cancel"))
+                .andExpect(status().isOk());
+
+        verify(cancellationService).cancel(7L, 19L);
     }
 }

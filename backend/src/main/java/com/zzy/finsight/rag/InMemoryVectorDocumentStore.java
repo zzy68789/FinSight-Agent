@@ -27,6 +27,12 @@ public class InMemoryVectorDocumentStore implements VectorDocumentStore {
     }
 
     @Override
+    public void deleteSource(RagKnowledgeSpace space, String source) {
+        chunks.entrySet().removeIf(entry -> entry.getKey().space().equals(space)
+                && entry.getValue().documentChunk().source().equals(source));
+    }
+
+    @Override
     public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
         if (query == null || query.isBlank() || topK <= 0 || chunks.isEmpty()) {
             return List.of();

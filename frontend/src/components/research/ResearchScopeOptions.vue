@@ -72,13 +72,16 @@
         <div class="mb-2 flex items-center justify-between gap-3">
           <div>
             <p class="text-xs font-semibold text-slate-700">补充研究文档</p>
-            <p class="mt-0.5 text-[11px] text-slate-500">可选，最多 5 个 PDF</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">可选，最多 5 个 PDF；上传后追加到个人知识库</p>
           </div>
-          <span v-if="uploadedFiles.length" class="flex items-center gap-1 text-[11px] font-semibold" :class="isDocumentReady ? 'text-emerald-700' : 'text-amber-700'">
-            <CheckCircle2Icon v-if="isDocumentReady" class="h-3.5 w-3.5" aria-hidden="true" />
-            <Loader2Icon v-else class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            {{ isDocumentReady ? '已解析' : '解析中' }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span v-if="uploadedFiles.length" class="flex items-center gap-1 text-[11px] font-semibold" :class="isDocumentReady ? 'text-emerald-700' : 'text-amber-700'">
+              <CheckCircle2Icon v-if="isDocumentReady" class="h-3.5 w-3.5" aria-hidden="true" />
+              <Loader2Icon v-else class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              {{ isDocumentReady ? '已解析' : '解析中' }}
+            </span>
+            <button type="button" class="text-[11px] font-semibold text-rose-700 hover:underline disabled:opacity-40" :disabled="disabled || !isDocumentReady" @click="$emit('clear-knowledge-base')">清空知识库</button>
+          </div>
         </div>
         <label
           for="research-pdf-upload"
@@ -145,6 +148,7 @@ const emit = defineEmits([
   'update:searchMode',
   'update:comparisonSecurities',
   'files-selected',
+  'clear-knowledge-base',
   'drag-state-change'
 ]);
 

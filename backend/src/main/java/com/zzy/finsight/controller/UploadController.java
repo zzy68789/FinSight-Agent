@@ -28,13 +28,13 @@ public class UploadController {
         this.userContext = userContext;
     }
 
-    /** 上传 PDF 文档并建立 RAG 索引。 */
+    /** 上传 PDF 文档并追加到当前用户的 RAG 索引。 */
     @PostMapping("/upload")
     public UploadResponse upload(@RequestParam("files") List<MultipartFile> files) {
         if (files.size() > 5) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "一次最多只能上传 5 个文件");
         }
         int chunksStored = ragService.process(userContext.currentUserId(), files);
-        return new UploadResponse("success", files.size(), chunksStored, "知识库构建成功");
+        return new UploadResponse("success", files.size(), chunksStored, "文档已追加到知识库");
     }
 }

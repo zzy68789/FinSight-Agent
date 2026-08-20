@@ -21,6 +21,7 @@
           :readiness="researchReadiness"
           @select-security="selectSecurity"
           @files-selected="processFiles"
+          @clear-knowledge-base="clearKnowledgeBase"
           @drag-state-change="isDragging = $event"
           @submit="startStockResearch"
         />
@@ -28,6 +29,18 @@
       </aside>
 
       <section class="space-y-6 lg:col-span-8">
+        <div v-if="connectionInterrupted" class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <div>
+            <p class="text-sm font-semibold">任务仍在后台执行，但实时事件连接已中断</p>
+            <p class="mt-1 text-xs text-amber-800">{{ connectionError || '可以从最后一个已提交事件继续连接，已生成的任务不会丢失。' }}</p>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <button type="button" class="min-h-9 rounded-md bg-amber-900 px-3 text-xs font-semibold text-white hover:bg-amber-950" @click="reconnectActiveResearchRun">重新连接</button>
+            <button type="button" class="min-h-9 rounded-md border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-900 hover:bg-amber-100" @click="emit('open-tasks')">查看任务中心</button>
+            <button v-if="latestStockTaskId" type="button" class="min-h-9 rounded-md border border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50" @click="cancelActiveResearchRun">取消任务</button>
+          </div>
+        </div>
+
         <ResearchMissionControl
           :projection="agentProjection"
           :is-running="isLoading"
@@ -90,6 +103,7 @@ import {
   savePendingSubmission
 } from '../modules/researchRunSession.js';
 import {
+  cancelResearchRun,
   clearContext,
   createResearchRun,
   getTask,
@@ -115,7 +129,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['warning', 'completed']);
+const emit = defineEmits(['warning', 'completed', 'open-tasks']);
 
 const subjectQuery = ref('');
 const selectedSecurity = ref(null);
@@ -157,6 +171,8 @@ const missionReports = ref([]);
 const missionRecordKeyword = ref('');
 const isMissionRecordsLoading = ref(false);
 const missionRecordsError = ref('');
+const connectionInterrupted = ref(false);
+const connectionError = ref('');
 let securitySearchTimer = null;
 let subscriptionGeneration = 0;
 let activeSubscriptionController = null;
@@ -195,12 +211,24 @@ const processFiles = async (files) => {
   try {
     const result = await uploadFiles(uploadedFiles.value);
     isDocumentReady.value = true;
-    logs.value.push('[系统] 知识库已构建，已索引 ' + result.chunks_stored + ' 个文本块。');
+    logs.value.push('[系统] 文档已追加到个人知识库，本次索引 ' + result.chunks_stored + ' 个文本块。');
   } catch (error) {
     isDocumentReady.value = true;
     logs.value.push('[错误] 上传失败：' + error.message);
     window.alert('上传失败：' + error.message);
     uploadedFiles.value = [];
+  }
+};
+
+const clearKnowledgeBase = async () => {
+  if (!window.confirm('确认清空当前账号的个人知识库？已保存的报告不会删除。')) return;
+  try {
+    await clearContext();
+    uploadedFiles.value = [];
+    isDocumentReady.value = true;
+    logs.value.push('[知识库] 已按用户操作清空个人知识库。');
+  } catch (error) {
+    emit('warning', '清空知识库失败：' + error.message);
   }
 };
 
@@ -308,6 +336,8 @@ const startStockResearch = async () => {
   const security = selectedSecurity.value;
 
   isLoading.value = true;
+  connectionInterrupted.value = false;
+  connectionError.value = '';
   activeRunSnapshot.value = {
     ticker: security.fullCode,
     companyName: security.companyName || '',
@@ -344,12 +374,10 @@ const startStockResearch = async () => {
   try {
     if (uploadedFiles.value.length > 0) {
       logs.value.push('[系统] 已绑定 ' + uploadedFiles.value.length + ' 个解析完成的研究文档。');
-    } else if (!retryingSameSubmission) {
-      logs.value.push('[系统] 正在清理上一轮知识库上下文...');
-      await clearContext();
-      logs.value.push('[系统] 上下文已清理，将使用公开数据源与降级缺失标记。');
     } else {
-      logs.value.push('[恢复] 正在重试同一任务创建请求，不重复清理研究上下文。');
+      logs.value.push(retryingSameSubmission
+        ? '[恢复] 正在重试同一任务创建请求，保留个人知识库上下文。'
+        : '[系统] 未选择新文档，保留个人知识库并结合公开数据源研究。');
     }
 
     savePendingSubmission(submissionIntent);
@@ -398,6 +426,8 @@ const subscribeToResearchRun = async (taskId, afterSequence = 0) => {
   const generation = ++subscriptionGeneration;
   activeSubscriptionController?.abort();
   activeSubscriptionController = new AbortController();
+  connectionInterrupted.value = false;
+  connectionError.value = '';
   await subscribeResearchRun(
     taskId,
     event => {
@@ -406,6 +436,7 @@ const subscribeToResearchRun = async (taskId, afterSequence = 0) => {
     () => {
       if (generation !== subscriptionGeneration) return;
       isLoading.value = false;
+      connectionInterrupted.value = false;
       clearActiveResearchRun(taskId);
       markAgentRunDone();
       pushAgentLog('[完成] Research Agent 已结束运行。');
@@ -415,8 +446,10 @@ const subscribeToResearchRun = async (taskId, afterSequence = 0) => {
     error => {
       if (generation !== subscriptionGeneration) return;
       isLoading.value = true;
+      connectionInterrupted.value = true;
+      connectionError.value = error.message;
       logs.value.push('[连接] 事件订阅暂时中断：' + error.message);
-      emit('warning', '任务已经保存，但事件连接暂时中断。刷新页面后会从已提交序号继续恢复。');
+      emit('warning', '任务已经保存，但事件连接暂时中断。可直接点击“重新连接”继续恢复。');
     },
     afterSequence,
     activeSubscriptionController.signal
@@ -449,8 +482,51 @@ const restoreActiveResearchRun = async () => {
     pushAgentLog(`[恢复] 从事件序号 #${afterSequence} 继续订阅任务 #${activeRun.taskId}。`);
     subscribeToResearchRun(activeRun.taskId, afterSequence);
   } catch (error) {
-    clearActiveResearchRun(activeRun.taskId);
-    emit('warning', '无法恢复上一次研究任务：' + error.message);
+    bindAgentRun(activeRun.taskId, activeRun.requestSnapshot || null);
+    isLoading.value = true;
+    connectionInterrupted.value = true;
+    connectionError.value = error.message;
+    emit('warning', '暂时无法恢复上一次研究任务，任务指针已保留，可稍后重新连接。');
+  }
+};
+
+const reconnectActiveResearchRun = async () => {
+  const activeRun = readActiveResearchRun();
+  if (!activeRun) {
+    connectionInterrupted.value = false;
+    emit('warning', '没有可恢复的活动任务，请到任务中心查看最新状态。');
+    return;
+  }
+  pushAgentLog(`[连接] 正在从事件序号 #${activeRun.lastSequence} 重新连接任务 #${activeRun.taskId}。`);
+  await restoreActiveResearchRun();
+};
+
+const cancelActiveResearchRun = async () => {
+  if (!latestStockTaskId.value || !window.confirm('确认取消当前研究任务？')) return;
+  const taskId = latestStockTaskId.value;
+  try {
+    await cancelResearchRun(taskId);
+    subscriptionGeneration += 1;
+    activeSubscriptionController?.abort();
+    handleAgentEvent({
+      step: 'run_stopped',
+      data: {
+        eventId: `user-cancelled-${taskId}`,
+        taskId,
+        status: 'CANCELLED',
+        reason: 'USER_CANCELLED'
+      }
+    });
+    clearActiveResearchRun(taskId);
+    isLoading.value = false;
+    connectionInterrupted.value = false;
+    connectionError.value = '';
+    markAgentRunDone();
+    pushAgentLog('[取消] 当前研究任务已取消，旧执行租约已失效。');
+    emit('completed');
+    loadMissionRecords();
+  } catch (error) {
+    emit('warning', '取消任务失败：' + error.message);
   }
 };
 

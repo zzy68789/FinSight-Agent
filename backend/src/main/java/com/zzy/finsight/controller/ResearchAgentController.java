@@ -6,6 +6,7 @@ import com.zzy.finsight.dto.agent.ResearchRunRequest;
 import com.zzy.finsight.dto.agent.ResearchRunCreatedResponse;
 import com.zzy.finsight.dto.agent.ResearchRunTraceResponse;
 import com.zzy.finsight.service.ResearchAgentService;
+import com.zzy.finsight.service.ResearchRunCancellationService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,10 +28,16 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/api/research-runs")
 public class ResearchAgentController {
     private final ResearchAgentService researchAgentService;
+    private final ResearchRunCancellationService cancellationService;
     private final UserContext userContext;
 
-    public ResearchAgentController(ResearchAgentService researchAgentService, UserContext userContext) {
+    public ResearchAgentController(
+            ResearchAgentService researchAgentService,
+            ResearchRunCancellationService cancellationService,
+            UserContext userContext
+    ) {
         this.researchAgentService = researchAgentService;
+        this.cancellationService = cancellationService;
         this.userContext = userContext;
     }
 
@@ -50,6 +57,13 @@ public class ResearchAgentController {
     @PostMapping("/{taskId}/retry")
     public ApiResponse<Void> retry(@PathVariable long taskId) {
         researchAgentService.retry(userContext.currentUserId(), taskId);
+        return ApiResponse.success(null);
+    }
+
+    /** 取消指定的待执行或运行中 Agent 任务。 */
+    @PostMapping("/{taskId}/cancel")
+    public ApiResponse<Void> cancel(@PathVariable long taskId) {
+        cancellationService.cancel(userContext.currentUserId(), taskId);
         return ApiResponse.success(null);
     }
 

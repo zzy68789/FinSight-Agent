@@ -127,6 +127,34 @@ class ChromaVectorDocumentStoreTest {
         server.verify();
     }
 
+    @Test
+    void deleteSourceUsesKnowledgeSpaceAndSourceFilter() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ChromaVectorDocumentStore store = new ChromaVectorDocumentStore(
+                builder,
+                new ObjectMapper(),
+                new StubEmbeddingClient(),
+                "http://localhost:8000",
+                "default_tenant",
+                "default_database",
+                "finsight_docs",
+                ""
+        );
+        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections"))
+                .andRespond(withSuccess("{\"id\":\"collection-id\"}", MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/collection-id/delete"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"$and\"")))
+                .andExpect(content().string(containsString("\"knowledge_space\":\"user-7\"")))
+                .andExpect(content().string(containsString("\"source\":\"agent.pdf\"")))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        store.deleteSource(SPACE, "agent.pdf");
+
+        server.verify();
+    }
+
     private static class StubEmbeddingClient implements EmbeddingClient {
         @Override
         public List<Double> embed(String text) {

@@ -20,9 +20,10 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **反馈感知 Replan 与模型分层**：重规划直接读取最近观察、门禁问题、补证据尝试和证据增量；普通动作优先 FAST，建计划、重规划和复杂恢复使用 SMART，结构失败自动升级并持久化模型、Token、耗时和合法率。
 - **原子完成与可续传事件**：Planner 动作、工具结果、证据、turn、Checkpoint 和租约续期按轮次原子提交；PASS 报告、快照冻结、任务完成与版本化事件 outbox 在最终事务内一起提交。发布器通过数据库 claim、租约、退避和死信协调多实例，SSE 支持按 `Last-Event-ID` 回放缺口，实时流与历史 Trace 读取同一事件契约。
 - **幂等提交与刷新恢复**：任务创建使用 `Idempotency-Key` 和用户级数据库唯一约束；前端持久化 task/thread/最后 sequence，首次 SSE 连接失败或页面刷新后通过 Trace + `Last-Event-ID` 接续同一权威任务，不重新创建 Agent Run。
+- **可恢复断线与安全取消**：有限自动重连耗尽后可在页面从最后 sequence 手动重连或进入任务中心；取消会原子写入 `CANCELLED`、递增租约代次并提交终止 outbox，旧执行者不能再覆盖任务或发布报告。
 - **类型化只读工具**：Planner 参数先按工具 schema 解码为强类型命令，工具只读取不可变上下文并返回类型化 `ToolPayload`，状态变更统一由 Runtime reducer 串行应用。
 - **可信度轨迹**：报告页展示 BM25/向量检索分数、证据有效率、阶段耗时、评审结果、快照哈希和缓存命中来源。
-- **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点、ETF ECharts 行情图和当前版本统一导出菜单。
+- **独立研究页**：`/reports/:reportId` 汇合报告版本、任务回放与证据账本，支持逐行版本对比、证据筛选、正文 `[E#]` 锚点、ETF ECharts 行情图和当前版本统一导出菜单；三个报告入口共用禁用原始 HTML、限制链接协议的安全 Markdown 渲染器。
 - **证据约束多空工具**：`BullBearCaseBuilder` 由 `build_bull_bear_cases` 工具调用，基于同一确定性指标/风险快照输出正反条件，每条事实论据绑定证据编号，并继续接受引用、合规和自动评测门控。
 - **风险评分**：`FinancialRiskScorer` 按基本面、技术面、情绪面、消息面和市场环境输出五维风险评分、风险等级和缺失证据 warning。
 - **引用与合规审查**：`CitationReviewer` 除检查证据数量、报告期和就近引用外，还会抽取正文中的百分比、倍数和金额并逐项对齐确定性指标/冻结证据；`FinancialComplianceReviewer` 检查免责声明、保证收益、内幕信息等风险表达。
@@ -30,7 +31,7 @@ FinSight Agent 是金融投研专用系统，基于 **Spring Boot 3.4.3 + Java 1
 - **Bad Case 反馈与回放**：支持数字错、引用错、逻辑错、信息过期等反馈类型，并可回放 snapshot + evidence + metric。
 - **单一发布与导出链路**：综合阶段正文只作为内部草稿，只有引用、合规和评测门禁通过且最终事务提交后，`run_completed` 才发布带 `reportId` 的在线报告；当前 Run、独立研究页和报告库统一从同一持久化版本派生 Markdown/PDF/Word，导出不再次调用 LLM，也不修改报告或任务状态。
 - **报告库管理**：支持 PASS 报告列表、版本查看、收藏、软删除和加入 RAG；报告库保留 PDF、Word、Markdown 三种快捷导出。
-- **用户隔离知识库**：PDF 上传、报告加入 RAG、BM25/Chroma 检索和知识库清理均绑定当前登录用户，不跨用户共享文档。
+- **用户隔离知识库**：PDF 上传按批次追加到当前用户知识空间，同名文件会先移除旧分片再整体替换；报告加入 RAG、BM25/Chroma 检索和显式清理均绑定当前登录用户，不跨用户共享文档，也不会在创建新任务时静默清空。
 - **本地可演示降级**：未配置 LLM、Tavily、TuShare、Redis 或 ChromaDB 时，仍可通过本地 fallback 跑通核心流程。
 
 ## 当前重构状态
@@ -209,11 +210,13 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-前端默认请求：
+前端使用同源 API：
 
 ```text
-http://localhost:8000/api
+/api
 ```
+
+开发服务器会把 `/api` 代理到 `http://localhost:8000`；生产部署也需要由同一域名的反向代理把 `/api` 转发到后端。
 
 ## 环境变量
 
@@ -254,7 +257,7 @@ Field: files
 - 最多 5 个文件
 - 单文件最大 20 MB
 - 总请求最大 50 MB
-- 上传会重建当前登录用户的知识空间，不影响其他用户。
+- 上传会追加到当前登录用户的知识空间；同名文件会整体替换，不影响其他用户，也不会隐式删除其他资料。
 
 ### 清空知识库
 
@@ -335,11 +338,20 @@ Agent 重试与动态轨迹：
 
 ```http
 POST /api/research-runs/{taskId}/retry
+POST /api/research-runs/{taskId}/cancel
 GET /api/research-runs/{taskId}/trace
 GET /api/research-runs/{taskId}/events?afterSequence={sequence}
 ```
 
-`events` 返回 `text/event-stream`，支持请求头 `Last-Event-ID: {sequence}`；服务端先回放该序号后的已提交事件，再接续实时流。前端在获得创建回执后才绑定 SSE，首次连接失败也已经持有 `taskId`；非终态断线会携带最后序号有限重连，页面刷新后再用 Trace 与本地任务指针恢复，重复事件仍由 `taskId + sequence` 幂等过滤。
+`events` 返回 `text/event-stream`，支持请求头 `Last-Event-ID: {sequence}`；服务端先回放该序号后的已提交事件，再接续实时流。前端在获得创建回执后才绑定 SSE，首次连接失败也已经持有 `taskId`；非终态断线会携带最后序号有限重连，页面还提供显式重连和任务中心入口。页面刷新后再用 Trace 与本地任务指针恢复，重复事件仍由 `taskId + sequence` 幂等过滤。`cancel` 仅允许任务所有者取消 `CREATED/RUNNING/RETRYING` 任务，重复取消幂等，已结束任务返回冲突。
+
+### 用户可见系统状态
+
+```http
+GET /api/system/health
+```
+
+普通登录用户可读取 MySQL、Redis 的连通性状态，以及 ChromaDB、LLM、Tavily、TuShare 的安全配置判定；接口不返回地址、密钥或其他敏感配置。管理员原有 `/api/admin/system/health` 继续保留。
 
 旧 `POST /api/stock-reports` 继续接受原请求并转入同一 Runtime。历史报告的 Bad Case、回放和旧轨迹接口继续保留：
 

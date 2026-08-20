@@ -185,6 +185,19 @@ public interface ResearchTaskMapper {
             @Param("now") LocalDateTime now
     );
 
+    /** 原子取消用户拥有的非终态任务，并递增租约代次阻止旧执行者继续提交。 */
+    int cancelAgentTask(
+            @Param("ownerId") long ownerId,
+            @Param("taskId") long taskId,
+            @Param("now") LocalDateTime now
+    );
+
+    /** 查询用户任务已经分配的最新事件序号。 */
+    Optional<Long> findEventSequence(
+            @Param("ownerId") long ownerId,
+            @Param("taskId") long taskId
+    );
+
     Optional<Long> findActiveLeaseEpoch(
             @Param("taskId") long taskId,
             @Param("leaseOwner") String leaseOwner

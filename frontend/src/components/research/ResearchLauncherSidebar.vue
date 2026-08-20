@@ -116,6 +116,7 @@
         @update:search-mode="$emit('update:searchMode', $event)"
         @update:comparison-securities="$emit('update:comparisonSecurities', $event)"
         @files-selected="$emit('files-selected', $event)"
+        @clear-knowledge-base="$emit('clear-knowledge-base')"
         @drag-state-change="$emit('drag-state-change', $event)"
       />
 
@@ -168,6 +169,7 @@ defineEmits([
   'update:comparisonSecurities',
   'select-security',
   'files-selected',
+  'clear-knowledge-base',
   'drag-state-change',
   'submit'
 ]);

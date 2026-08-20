@@ -92,6 +92,10 @@ class HybridRagRetrieverTest {
         }
 
         @Override
+        public void deleteSource(RagKnowledgeSpace space, String source) {
+        }
+
+        @Override
         public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
             return queryResults.stream().limit(topK).toList();
         }

@@ -94,10 +94,9 @@ import {
   ScaleIcon,
   ShieldCheckIcon
 } from 'lucide-vue-next';
-import MarkdownIt from 'markdown-it';
-import mk from 'markdown-it-katex';
 import ReportExportMenu from '../report/ReportExportMenu.vue';
 import { agentEventTypeLabel } from '../../modules/agentEventProjection.js';
+import { createReportMarkdown } from '../../modules/reportMarkdown.js';
 
 const props = defineProps({
   reportContent: { type: String, default: '' },
@@ -111,8 +110,7 @@ const props = defineProps({
 
 defineEmits(['select-example', 'export-error']);
 
-const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
-md.use(mk);
+const md = createReportMarkdown();
 
 const capabilities = [
   { title: '财务表现', description: '追踪盈利质量、现金流和偿债能力。', icon: ChartNoAxesCombinedIcon },

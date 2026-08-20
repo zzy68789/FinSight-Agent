@@ -116,6 +116,22 @@
           AND lease_owner = #{leaseOwner} AND lease_epoch = #{leaseEpoch}
     </update>
 
+    <update id="cancelAgentTask">
+        UPDATE research_task
+        SET status = 'CANCELLED', stage = 'CANCELLED', stop_reason = 'USER_CANCELLED',
+            last_error = NULL, heartbeat_at = #{now}, completed_at = #{now},
+            lease_owner = NULL, lease_until = NULL, lease_epoch = lease_epoch + 1,
+            event_sequence = event_sequence + 1, updated_at = #{now}
+        WHERE id = #{taskId} AND owner_id = #{ownerId}
+          AND status IN ('CREATED', 'RUNNING', 'RETRYING')
+    </update>
+
+    <select id="findEventSequence" resultType="long">
+        SELECT event_sequence
+        FROM research_task
+        WHERE id = #{taskId} AND owner_id = #{ownerId}
+    </select>
+
     <update id="updateRetrying">
         UPDATE research_task
         SET status = 'RETRYING', stage = 'RETRYING', lease_owner = NULL, lease_until = NULL, updated_at = #{now}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   advanceActiveResearchSequence,
   clearActiveResearchRun,
+  isTerminalResearchStatus,
   latestResearchSequence,
   readActiveResearchRun,
   resolveSubmissionIntent,
@@ -38,6 +39,11 @@ test('历史事件序号兼容版本化事件与 SSE 包装', () => {
     { payload: { sequence: 7 } },
     { data: { sequence: 5 } }
   ]), 7);
+});
+
+test('用户取消状态会终止刷新恢复和事件订阅', () => {
+  assert.equal(isTerminalResearchStatus('CANCELLED'), true);
+  assert.equal(isTerminalResearchStatus('RUNNING'), false);
 });
 
 function memoryStorage() {

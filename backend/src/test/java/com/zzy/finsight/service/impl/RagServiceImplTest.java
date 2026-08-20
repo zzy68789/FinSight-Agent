@@ -40,7 +40,8 @@ class RagServiceImplTest {
         int stored = ragService.process(7L, List.of(file));
 
         assertThat(stored).isEqualTo(3);
-        verify(vectorDocumentStore).clear(RagKnowledgeSpace.forOwner(7L));
+        verify(vectorDocumentStore, never()).clear(any());
+        verify(vectorDocumentStore).deleteSource(RagKnowledgeSpace.forOwner(7L), "agent.pdf");
         verify(vectorDocumentStore).add(eq(RagKnowledgeSpace.forOwner(7L)), eq(List.of(
                 new RagDocumentChunk("agent.pdf", 0, "agent workfl"),
                 new RagDocumentChunk("agent.pdf", 1, "flow needs v"),

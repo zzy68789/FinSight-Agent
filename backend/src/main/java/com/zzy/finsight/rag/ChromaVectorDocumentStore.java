@@ -71,6 +71,32 @@ public class ChromaVectorDocumentStore implements VectorDocumentStore {
     }
 
     @Override
+    public void deleteSource(RagKnowledgeSpace space, String source) {
+        if (source == null || source.isBlank()) {
+            return;
+        }
+        fallbackStore.deleteSource(space, source);
+        if (!chromaAvailable) {
+            return;
+        }
+        try {
+            String targetCollectionId = ensureCollection();
+            restClient.post()
+                    .uri(collectionRecordsPath(targetCollectionId) + "/delete")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(this::setToken)
+                    .body(Map.of("where", Map.of("$and", List.of(
+                            Map.of("knowledge_space", space.id()),
+                            Map.of("source", source)
+                    ))))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            markChromaUnavailable();
+        }
+    }
+
+    @Override
     public List<RagDocument> query(RagKnowledgeSpace space, String query, int topK) {
         if (query == null || query.isBlank() || topK <= 0) {
             return List.of();

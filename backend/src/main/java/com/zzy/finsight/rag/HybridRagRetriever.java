@@ -48,6 +48,18 @@ public class HybridRagRetriever {
         vectorDocumentStore.add(space, chunks);
     }
 
+    /** 删除同一来源的旧分片，用于同名文档整体替换。 */
+    public void deleteSource(RagKnowledgeSpace space, String source) {
+        if (source == null || source.isBlank()) {
+            return;
+        }
+        Map<String, RagDocumentChunk> chunks = lexicalChunksBySpace.get(space);
+        if (chunks != null) {
+            chunks.entrySet().removeIf(entry -> source.equals(entry.getValue().source()));
+        }
+        vectorDocumentStore.deleteSource(space, source);
+    }
+
     /** 在指定空间内执行混合检索。 */
     public List<RagDocument> retrieve(RagKnowledgeSpace space, String query, int topK) {
         return retrieveWithTrace(space, query, topK).documents();

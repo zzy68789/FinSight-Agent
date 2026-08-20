@@ -48,6 +48,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { summarizeResearchEvidence } from '../../modules/researchRunInspector.js';
+import { safeReportLink } from '../../modules/reportMarkdown.js';
 import QualityStat from './QualityStat.vue';
 
 const props = defineProps({
@@ -82,8 +83,5 @@ const issueLabel = issueCode => ({
   MISSING_INPUT: '输入缺失',
   EVIDENCE_CONFLICT: '证据冲突'
 })[issueCode] || issueCode;
-const safeUrl = value => {
-  const url = String(value || '').trim();
-  return /^https?:\/\//i.test(url) ? url : '';
-};
+const safeUrl = safeReportLink;
 </script>

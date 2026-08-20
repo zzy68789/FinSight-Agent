@@ -74,7 +74,7 @@ export function latestResearchSequence(events = []) {
 
 /** 判断数据库任务是否已经进入终态。 */
 export function isTerminalResearchStatus(status) {
-  return ['COMPLETED', 'FAILED', 'INSUFFICIENT_EVIDENCE'].includes(String(status || '').toUpperCase());
+  return ['COMPLETED', 'FAILED', 'INSUFFICIENT_EVIDENCE', 'CANCELLED'].includes(String(status || '').toUpperCase());
 }
 
 function readJson(storage, key) {

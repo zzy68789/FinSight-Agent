@@ -3,7 +3,7 @@
 import { consumeSseChunk } from '../modules/sseEventStream.js';
 import { parseReportExportFilename } from '../modules/reportExport.js';
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = '/api';
 let authToken = localStorage.getItem('finsight_token') || '';
 
 function generateUUID() {
@@ -245,6 +245,11 @@ export async function adminSystemHealth() {
   return requestJson('/admin/system/health');
 }
 
+/** 查询当前用户可见的数据库与外部依赖就绪状态。 */
+export async function getSystemHealth() {
+  return requestJson('/system/health');
+}
+
 async function streamSse(path, payload, onData, onDone, onError, reconnectPath, resume = {}) {
   let taskId = resume.taskId || null;
   let lastSequence = Math.max(0, Number(resume.afterSequence || 0));
@@ -382,6 +387,11 @@ export async function getResearchRunTrace(taskId) {
 
 export async function retryResearchRun(taskId) {
   return requestJson(`/research-runs/${taskId}/retry`, { method: 'POST' });
+}
+
+/** 取消尚未结束的 Research Agent 任务。 */
+export async function cancelResearchRun(taskId) {
+  return requestJson(`/research-runs/${taskId}/cancel`, { method: 'POST' });
 }
 
 export async function saveStockFeedback(taskId, feedbackType, detail = '') {

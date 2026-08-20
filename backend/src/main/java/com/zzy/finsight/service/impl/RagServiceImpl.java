@@ -15,8 +15,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 负责 RAG 文档入库、检索和向量存储降级的业务实现。
@@ -45,14 +47,18 @@ public class RagServiceImpl implements RagService {
     @Override
     public int process(long ownerId, List<MultipartFile> files) {
         RagKnowledgeSpace space = RagKnowledgeSpace.forOwner(ownerId);
-        clear(ownerId);
         int stored = 0;
         List<RagDocumentChunk> chunks = new ArrayList<>();
+        Set<String> replacedSources = new LinkedHashSet<>();
         for (MultipartFile file : files) {
             List<RagDocumentChunk> fileChunks = processOne(file);
             chunks.addAll(fileChunks);
             stored += fileChunks.size();
+            if (!fileChunks.isEmpty()) {
+                replacedSources.add(fileChunks.get(0).source());
+            }
         }
+        replacedSources.forEach(source -> hybridRagRetriever.deleteSource(space, source));
         hybridRagRetriever.index(space, chunks);
         return stored;
     }

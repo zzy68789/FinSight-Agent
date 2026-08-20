@@ -10,6 +10,8 @@ export function statusLabel(status) {
     RUNNING: '运行中',
     COMPLETED: '已完成',
     FAILED: '失败',
+    CANCELLED: '已取消',
+    INSUFFICIENT_EVIDENCE: '证据不足',
     SUCCESS: '成功',
     PASS: '通过',
     FAIL: '未通过',
@@ -88,6 +90,9 @@ export function statusStyles(status) {
   }
   if (value === 'FAILED' || value === 'FAIL') {
     return 'bg-rose-50 text-rose-700 ring-rose-200';
+  }
+  if (value === 'CANCELLED' || value === 'INSUFFICIENT_EVIDENCE') {
+    return 'bg-amber-50 text-amber-800 ring-amber-200';
   }
   if (value === 'RUNNING') return 'bg-blue-50 text-blue-700 ring-blue-200';
   return 'bg-slate-100 text-slate-600 ring-slate-200';

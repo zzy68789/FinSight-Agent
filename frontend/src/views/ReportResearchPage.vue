@@ -208,7 +208,7 @@
                 <div><dt>期间</dt><dd>{{ entry.item.reportPeriod || '—' }}</dd></div>
                 <div><dt>置信</dt><dd>{{ formatConfidence(entry.item.confidence) }}</dd></div>
               </dl>
-              <a v-if="entry.item.url" :href="entry.item.url" target="_blank" rel="noopener noreferrer">
+              <a v-if="safeReportLink(entry.item.url)" :href="safeReportLink(entry.item.url)" target="_blank" rel="noopener noreferrer">
                 查看原始来源 <ExternalLinkIcon :size="12" aria-hidden="true" />
               </a>
             </li>
@@ -233,10 +233,9 @@ import {
   TrendingDownIcon,
   TrendingUpIcon
 } from 'lucide-vue-next';
-import MarkdownIt from 'markdown-it';
-import mk from 'markdown-it-katex';
 import MarketSeriesChart from '../components/MarketSeriesChart.vue';
 import ReportExportMenu from '../components/report/ReportExportMenu.vue';
+import { createReportMarkdown, safeReportLink } from '../modules/reportMarkdown.js';
 import {
   getCurrentUser,
   getReport,
@@ -259,17 +258,7 @@ const showComparison = ref(false);
 const evidenceKeyword = ref('');
 const activeSource = ref('');
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
-md.use(mk);
-const defaultLinkOpen = md.renderer.rules.link_open || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
-md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
-  const href = tokens[idx].attrGet('href') || '';
-  if (!href.startsWith('#')) {
-    tokens[idx].attrSet('target', '_blank');
-    tokens[idx].attrSet('rel', 'noopener noreferrer');
-  }
-  return defaultLinkOpen(tokens, idx, options, env, self);
-};
+const md = createReportMarkdown();
 
 const safeJson = (value, fallback = null) => {
   if (value && typeof value === 'object') return value;

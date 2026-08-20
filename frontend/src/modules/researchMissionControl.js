@@ -13,20 +13,25 @@ export function deriveMissionControlView(projection = {}, isRunning = false) {
   const events = Array.isArray(projection.events) ? projection.events : [];
   const currentStep = projection.currentStep || 'idle';
   const stopped = currentStep === 'run_stopped';
+  const latestEvent = events.at(-1) || null;
+  const cancelled = stopped && (
+    latestEvent?.status === 'CANCELLED' || projection.stopReason === 'USER_CANCELLED'
+  );
   const completed = TERMINAL_COMPLETED.has(currentStep)
     || (!isRunning && projection.stopReason === 'COMPLETED');
   const hasActiveCanonicalRun = Boolean(projection.taskId)
     && currentStep !== 'idle'
     && !stopped
     && !completed;
-  const status = stopped
-    ? 'STOPPED'
+  const status = cancelled
+    ? 'CANCELLED'
+    : stopped
+      ? 'STOPPED'
     : completed
       ? 'COMPLETED'
       : isRunning || hasActiveCanonicalRun ? 'RUNNING' : 'IDLE';
   const evidence = Array.isArray(projection.evidence) ? projection.evidence : [];
   const effectiveEvidenceCount = evidence.filter(item => !String(item?.issueCode || '').trim()).length;
-  const latestEvent = events.at(-1) || null;
 
   return {
     status,
@@ -44,7 +49,9 @@ export function deriveMissionControlView(projection = {}, isRunning = false) {
     replanCount: Number(projection.replanCount || 0),
     evidenceRecoveryCount: Number(projection.evidenceRecoveryCount || 0),
     qualityGateDecision: projection.qualityGateDecision || null,
-    stopReason: stopped ? projection.stopReason || latestEvent?.reason || latestEvent?.summary || '' : '',
+    stopReason: cancelled
+      ? '用户已取消任务，未发布新的研究报告。'
+      : stopped ? projection.stopReason || latestEvent?.reason || latestEvent?.summary || '' : '',
     runStats: projection.runStats || null,
     latestEvent,
     stages: buildStageRail(currentStep, projection.completedSteps || [])
@@ -57,7 +64,8 @@ export function missionStatusLabel(status) {
     IDLE: '等待研究任务',
     RUNNING: 'Agent 运行中',
     COMPLETED: '报告已发布',
-    STOPPED: '任务受控停止'
+    STOPPED: '任务受控停止',
+    CANCELLED: '任务已取消'
   })[status] || status;
 }
 

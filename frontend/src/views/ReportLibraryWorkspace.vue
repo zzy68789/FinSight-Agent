@@ -52,7 +52,7 @@
                 </span>
               </div>
               <div class="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
-                <span class="truncate">{{ report.threadId }}</span>
+                <span class="truncate">会话 {{ shortThreadId(report.threadId) }}</span>
                 <StarIcon v-if="report.favorite" class="h-4 w-4 shrink-0 fill-amber-400 text-amber-500" aria-hidden="true" />
               </div>
               <p class="mt-1 text-xs text-slate-500">{{ formatDate(report.createdAt) }}</p>
@@ -132,8 +132,6 @@ import {
   StarIcon,
   Trash2Icon
 } from 'lucide-vue-next';
-import MarkdownIt from 'markdown-it';
-import mk from 'markdown-it-katex';
 import {
   currentThreadId,
   deleteReport as deleteReportApi,
@@ -146,6 +144,7 @@ import {
 } from '../services/api';
 import { formatDate, statusLabel, statusStyles } from '../modules/presentation';
 import { saveReportArtifact } from '../modules/reportExport.js';
+import { createReportMarkdown } from '../modules/reportMarkdown.js';
 
 const props = defineProps({
   threadId: {
@@ -160,12 +159,7 @@ const props = defineProps({
 
 const emit = defineEmits(['thread-change', 'warning']);
 
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true
-});
-md.use(mk);
+const md = createReportMarkdown();
 
 const activeThreadId = computed(() => props.threadId);
 const reports = ref([]);
@@ -175,6 +169,10 @@ const reportError = ref('');
 const reportScope = ref('thread');
 const reportKeyword = ref('');
 const favoriteOnly = ref(false);
+const shortThreadId = value => {
+  const threadId = String(value || '—');
+  return threadId.length > 14 ? `${threadId.slice(0, 8)}…${threadId.slice(-4)}` : threadId;
+};
 
 const switchReportScope = async (scope) => {
   reportScope.value = scope;

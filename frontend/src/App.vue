@@ -89,7 +89,7 @@
 
       <section class="auth-card w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/70">
         <div class="h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-blue-700"></div>
-        <div class="p-6">
+        <form class="p-6" @submit.prevent="submitAuth">
           <div class="mb-6">
             <h2 class="text-lg font-semibold text-blue-950">{{ authMode === 'login' ? '登录工作区' : '创建账号' }}</h2>
             <p class="mt-1 text-sm text-slate-500">登录后隔离研究任务、报告版本和管理权限。</p>
@@ -98,28 +98,28 @@
           <div class="space-y-4">
             <label class="block">
               <span class="text-sm font-medium text-slate-700">用户名</span>
-              <input v-model="authForm.username" type="text" class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
+              <input v-model="authForm.username" name="username" type="text" autocomplete="username" required class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
             </label>
             <label v-if="authMode === 'register'" class="block">
               <span class="text-sm font-medium text-slate-700">邮箱</span>
-              <input v-model="authForm.email" type="email" class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
+              <input v-model="authForm.email" name="email" type="email" autocomplete="email" required class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
             </label>
             <label class="block">
               <span class="text-sm font-medium text-slate-700">密码</span>
-              <input v-model="authForm.password" type="password" class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
+              <input v-model="authForm.password" name="password" type="password" :autocomplete="authMode === 'login' ? 'current-password' : 'new-password'" minlength="6" required class="mt-1 min-h-10 w-full rounded-lg border border-blue-100 px-3 text-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />
             </label>
           </div>
 
           <p v-if="authError" class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ authError }}</p>
 
-          <button type="button" class="mt-5 flex min-h-11 w-full items-center justify-center rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:bg-slate-300" :disabled="isAuthLoading" @click="submitAuth">
+          <button type="submit" class="mt-5 flex min-h-11 w-full items-center justify-center rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:bg-slate-300" :disabled="isAuthLoading">
             {{ isAuthLoading ? '处理中' : (authMode === 'login' ? '登录' : '注册') }}
           </button>
 
           <button type="button" class="mt-4 w-full text-center text-sm font-semibold text-blue-700 hover:text-blue-900" @click="authMode = authMode === 'login' ? 'register' : 'login'">
             {{ authMode === 'login' ? '创建新账号' : '已有账号，去登录' }}
           </button>
-        </div>
+        </form>
       </section>
     </main>
 
@@ -130,6 +130,7 @@
         :refresh-revision="dataRevision"
         @completed="handleResearchCompleted"
         @warning="triggerWarning"
+        @open-tasks="setWorkspace('tasks')"
       />
       <TaskWorkspace
         v-else-if="activeWorkspace === 'tasks'"
@@ -153,7 +154,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import {
   AlertTriangleIcon,
   ClipboardListIcon,
@@ -163,11 +164,6 @@ import {
   ShieldCheckIcon,
   XIcon
 } from 'lucide-vue-next';
-import AdminWorkspace from './views/AdminWorkspace.vue';
-import ReportLibraryWorkspace from './views/ReportLibraryWorkspace.vue';
-import ResearchWorkspace from './views/ResearchWorkspace.vue';
-import SettingsWorkspace from './views/SettingsWorkspace.vue';
-import TaskWorkspace from './views/TaskWorkspace.vue';
 import {
   currentThreadId,
   getCurrentUser,
@@ -175,6 +171,12 @@ import {
   register as authRegister,
   setAuthToken
 } from './services/api';
+
+const AdminWorkspace = defineAsyncComponent(() => import('./views/AdminWorkspace.vue'));
+const ReportLibraryWorkspace = defineAsyncComponent(() => import('./views/ReportLibraryWorkspace.vue'));
+const ResearchWorkspace = defineAsyncComponent(() => import('./views/ResearchWorkspace.vue'));
+const SettingsWorkspace = defineAsyncComponent(() => import('./views/SettingsWorkspace.vue'));
+const TaskWorkspace = defineAsyncComponent(() => import('./views/TaskWorkspace.vue'));
 
 const showWarning = ref(false);
 const warningMessage = ref('');

@@ -9,6 +9,9 @@ public interface VectorDocumentStore {
     /** 向指定知识空间批量写入文档分片。 */
     void add(RagKnowledgeSpace space, List<RagDocumentChunk> chunks);
 
+    /** 删除指定知识空间中属于同一来源的全部旧分片。 */
+    void deleteSource(RagKnowledgeSpace space, String source);
+
     /** 在指定知识空间内按相似度查询最相关文档。 */
     List<RagDocument> query(RagKnowledgeSpace space, String query, int topK);
 
